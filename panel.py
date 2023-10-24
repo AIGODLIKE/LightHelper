@@ -27,10 +27,10 @@ def draw_light_link(object, layout, use_pin=False):
     if use_pin:
         row.prop(bpy.context.scene, 'light_linking_pin', text='', icon='PINNED')
 
-    col.prop(light_linking, 'receiver_collection', text='')
+    # col.prop(light_linking, 'receiver_collection', text='')
 
     if not light_linking.receiver_collection:
-        row.operator('object.light_linking_receiver_collection_new', text='', icon='ADD')
+        col.operator('object.light_linking_receiver_collection_new', text='', icon='ADD')
         return
 
     row = col.row(align=True)
@@ -62,7 +62,7 @@ class LLT_PT_panel(bpy.types.Panel):
 
         if context.scene.light_linking_ui == 'SCENE':
             for obj in context.scene.objects:
-                if obj.type == 'LIGHT':
+                if obj.type == 'LIGHT' or obj.light_linking.receiver_collection is not None:
                     draw_light_link(obj, layout)
 
         elif context.scene.light_linking_ui == 'OBJECT':
@@ -75,6 +75,7 @@ class LLT_PT_panel(bpy.types.Panel):
                     layout.label(text="No object selected")
                 elif context.object.type != 'LIGHT':
                     layout.label(text="Selected object is not a light")
+                    layout.operator('object.light_linking_receiver_collection_new', text='As light', icon='ADD')
                     return
 
                 draw_light_link(context.object, layout, use_pin=True)

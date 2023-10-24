@@ -15,6 +15,7 @@ def handle_all_lights(null):
 
 
 def register():
+    # noinspection PyTypeChecker
     bpy.types.Object.light_linking_state = bpy.props.EnumProperty(
         items=[
             ("EXCLUDE", "Exclude", ""),
