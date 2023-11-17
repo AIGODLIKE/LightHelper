@@ -1,4 +1,5 @@
 import bpy
+from .ops import get_lights_from_receiver_obj
 
 
 def get_light_icon(light):
@@ -64,12 +65,13 @@ class LLT_PT_panel(bpy.types.Panel):
         layout = self.layout
         layout.prop(context.scene, 'light_linking_ui', expand=True)
 
-        if context.scene.light_linking_ui == 'SCENE':
-            for obj in context.scene.objects:
-                if obj.type == 'LIGHT' or obj.light_linking.receiver_collection is not None:
-                    draw_light_link(obj, layout)
-
-        elif context.scene.light_linking_ui == 'OBJECT':
+        # if context.scene.light_linking_ui == 'SCENE':
+        #     for obj in context.scene.objects:
+        #         if obj.type == 'LIGHT' or obj.light_linking.receiver_collection is not None:
+        #             draw_light_link(obj, layout)
+        #
+        # elif context.scene.light_linking_ui == 'OBJECT':
+        if context.scene.light_linking_ui == 'LIGHT':
             if context.scene.light_linking_pin:
                 obj = context.scene.light_linking_pin_object
                 if not obj: return
@@ -83,6 +85,16 @@ class LLT_PT_panel(bpy.types.Panel):
                     return
 
                 draw_light_link(context.object, layout, use_pin=True)
+        elif context.scene.light_linking_ui == 'OBJECT':
+            lights = get_lights_from_receiver_obj(context.object)
+            layout.label(text='仅显示排除灯光')
+            for (light, state) in lights:
+                if state != 'EXCLUDE': continue
+                row = layout.row(align=True)
+                row.label(text=f"'{light.name}'", icon=get_light_icon(light))
+                op = row.operator('llp.remove_light_linking', text='', icon="REMOVE")
+                op.obj = context.object.name
+                op.light = light.name
 
 
 def update_pin_object(self, context):
@@ -98,12 +110,12 @@ def update_pin_object(self, context):
 def register():
     bpy.types.Scene.light_linking_ui = bpy.props.EnumProperty(
         items=[
-            ('OBJECT', 'Object', ''),
-            ('SCENE', 'Scene', '')
+            ('LIGHT', 'Light', ''),
+            ('OBJECT', 'Object', '')
         ]
     )
     bpy.types.Scene.light_linking_pin_object = bpy.props.PointerProperty(
-        poll=lambda self, obj: obj.type == 'LIGHT', type=bpy.types.Object,
+        poll=lambda self, obj: obj.type in {'LIGHT', 'MESH'}, type=bpy.types.Object,
     )
 
     bpy.types.Scene.light_linking_pin = bpy.props.BoolProperty(name='Pin', update=update_pin_object)
