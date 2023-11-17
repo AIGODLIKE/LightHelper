@@ -35,8 +35,12 @@ def draw_light_link(object, layout, use_pin=False):
 
     row = col.row(align=True)
     row.prop(object, 'light_linking_state', expand=True)
+    row.prop(bpy.context.scene,'force_light_linking_state',icon ='FILE_REFRESH',toggle=True,text = '')
+
 
     if not object.show_light_linking_collection: return
+
+    col.separator()
 
     row = col.row(align=True)
     row.template_light_linking_collection(row, light_linking, "receiver_collection")

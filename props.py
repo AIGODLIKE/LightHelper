@@ -2,6 +2,7 @@ import bpy
 from bpy.app.handlers import persistent
 
 def update_lightlinking_state(self, context):
+    if not context.scene.force_light_linking_state:return
     coll = self.light_linking.receiver_collection
     for obj in coll.collection_objects:
         obj.light_linking.link_state = self.light_linking_state
@@ -24,9 +25,13 @@ def register():
         update=update_lightlinking_state,
         default="INCLUDE"
     )
+    bpy.types.Scene.force_light_linking_state = bpy.props.BoolProperty(
+        name = 'Update',
+        default=True)
 
     bpy.types.Object.show_light_linking_collection = bpy.props.BoolProperty(
         default=True)
+
 
     bpy.app.handlers.depsgraph_update_pre.append(handle_all_lights)
 

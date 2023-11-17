@@ -1,5 +1,5 @@
 bl_info = {
-    "name": "",
+    "name": "LightLinkingPanel",
     "author": "AIGODLIKE社区,Atticus",
     "blender": (4, 0, 0),
     "version": (0, 1),
