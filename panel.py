@@ -1,5 +1,6 @@
 import bpy
 from .ops import get_lights_from_receiver_obj
+from .utils import get_all_light_effect_obj_state, StateType, StateValue
 
 
 def get_light_icon(light):
@@ -36,8 +37,7 @@ def draw_light_link(object, layout, use_pin=False):
 
     row = col.row(align=True)
     row.prop(object, 'light_linking_state', expand=True)
-    row.prop(bpy.context.scene,'force_light_linking_state',icon ='FILE_REFRESH',toggle=True,text = '')
-
+    row.prop(bpy.context.scene, 'force_light_linking_state', icon='FILE_REFRESH', toggle=True, text='')
 
     if not object.show_light_linking_collection: return
 
@@ -61,40 +61,91 @@ class LLT_PT_panel(bpy.types.Panel):
     def poll(cls, context):
         return context.scene.render.engine == 'CYCLES'
 
+    def draw_light(self, context, layout):
+        if context.scene.light_linking_pin:
+            obj = context.scene.light_linking_pin_object
+            if not obj: return
+            draw_light_link(obj, layout, use_pin=True)
+        else:
+            if not context.object:
+                layout.label(text="No object selected")
+            elif context.object.type != 'LIGHT':
+                layout.label(text="Selected object is not a light")
+                layout.operator('object.light_linking_receiver_collection_new', text='As light', icon='ADD')
+                return
+
+            draw_light_link(context.object, layout, use_pin=True)
+
+    def draw_object(self, context, layout):
+        lights = get_lights_from_receiver_obj(context.object)
+        layout.label(text='仅显示排除灯光')
+        for (light, state) in lights:
+            if state != 'EXCLUDE': continue
+            row = layout.row(align=True)
+            row.label(text=f"'{light.name}'", icon=get_light_icon(light))
+            op = row.operator('llp.remove_light_linking', text='', icon="REMOVE")
+            op.obj = context.object.name
+            op.light = light.name
+
+    def draw_light_objs_control(self, context, layout):
+        col = layout.column()
+        if not context.object: return
+
+        toggle_op_id = 'llp.toggle_light_linking'
+        add_op_id = 'llp.add_light_linking'
+
+        obj_state_dict = get_all_light_effect_obj_state(context.object)
+
+        if len(obj_state_dict) == 0:
+            col.label(text='No Effect Object')
+            return
+
+        for obj in obj_state_dict.keys():
+            label = f"'{obj.name}'"
+            row = col.row(align=True)
+
+            row.label(text=label, icon='OBJECT_DATA')
+
+            state_info = obj_state_dict[obj]
+            # print(state_info)
+            if receive_value := state_info.get(StateType.RECEIVER):  # exist in receiver collection
+                icon = 'OUTLINER_OB_LIGHT' if receive_value == StateValue.INCLUDE else 'OUTLINER_DATA_LIGHT'
+                text = 'Include' if receive_value == StateValue.INCLUDE else 'Exclude'
+                op = row.operator(toggle_op_id, text=text, icon=icon)
+                op.state_type = StateType.RECEIVER.value
+                op.obj = obj.name
+                op.light = context.object.name
+            else:
+                op = row.operator(add_op_id, text='Add', icon='OUTLINER_OB_LIGHT')
+                op.state_type = StateType.RECEIVER.value
+                op.obj = obj.name
+                op.light = context.object.name
+
+            if block_value := state_info.get(StateType.BLOCKER):  # exist in exclude collection
+                icon = 'SHADING_SOLID' if block_value == StateValue.INCLUDE else 'SHADING_RENDERED'
+                text = 'Include' if block_value == StateValue.INCLUDE else 'Exclude'
+                op = row.operator(toggle_op_id, text=text, icon=icon)
+                op.state_type = StateType.BLOCKER.value
+                op.obj = obj.name
+                op.light = context.object.name
+            else:
+                op = row.operator(add_op_id, text='Add', icon='SHADING_SOLID')
+                op.state_type = StateType.BLOCKER.value
+                op.obj = obj.name
+                op.light = context.object.name
+
     def draw(self, context):
         layout = self.layout
         layout.prop(context.scene, 'light_linking_ui', expand=True)
 
-        # if context.scene.light_linking_ui == 'SCENE':
-        #     for obj in context.scene.objects:
-        #         if obj.type == 'LIGHT' or obj.light_linking.receiver_collection is not None:
-        #             draw_light_link(obj, layout)
-        #
-        # elif context.scene.light_linking_ui == 'OBJECT':
-        if context.scene.light_linking_ui == 'LIGHT':
-            if context.scene.light_linking_pin:
-                obj = context.scene.light_linking_pin_object
-                if not obj: return
-                draw_light_link(obj, layout, use_pin=True)
-            else:
-                if not context.object:
-                    layout.label(text="No object selected")
-                elif context.object.type != 'LIGHT':
-                    layout.label(text="Selected object is not a light")
-                    layout.operator('object.light_linking_receiver_collection_new', text='As light', icon='ADD')
-                    return
+        if context.scene.light_linking_ui == 'LIGHT_EX':
+            self.draw_light_objs_control(context, layout)
 
-                draw_light_link(context.object, layout, use_pin=True)
+        elif context.scene.light_linking_ui == 'LIGHT':
+            self.draw_light(context, layout)
+
         elif context.scene.light_linking_ui == 'OBJECT':
-            lights = get_lights_from_receiver_obj(context.object)
-            layout.label(text='仅显示排除灯光')
-            for (light, state) in lights:
-                if state != 'EXCLUDE': continue
-                row = layout.row(align=True)
-                row.label(text=f"'{light.name}'", icon=get_light_icon(light))
-                op = row.operator('llp.remove_light_linking', text='', icon="REMOVE")
-                op.obj = context.object.name
-                op.light = light.name
+            self.draw_object(context, layout)
 
 
 def update_pin_object(self, context):
@@ -111,6 +162,7 @@ def register():
     bpy.types.Scene.light_linking_ui = bpy.props.EnumProperty(
         items=[
             ('LIGHT', 'Light', ''),
+            ('LIGHT_EX', 'Advanced', ''),
             ('OBJECT', 'Object', '')
         ]
     )

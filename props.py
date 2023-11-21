@@ -28,7 +28,7 @@ def register():
     )
     bpy.types.Scene.force_light_linking_state = bpy.props.BoolProperty(
         name = 'Update',
-        default=True)
+        default=False)
 
     bpy.types.Object.show_light_linking_collection = bpy.props.BoolProperty(
         default=True)
