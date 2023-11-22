@@ -90,13 +90,22 @@ class LLT_PT_panel(bpy.types.Panel):
             op.light = light.name
 
     def draw_light_objs_control(self, context, layout):
+        if context.scene.light_linking_pin:
+            light_obj = context.scene.light_linking_pin_object
+        else:
+            light_obj = context.object
+        if not light_obj: return
+
         col = layout.column()
-        if not context.object: return
+        row = col.row(align=True)
+        row.label(text=f"{light_obj.name}", icon=get_light_icon(light_obj))
+        row.separator()
+        row.prop(bpy.context.scene, 'light_linking_pin', text='', icon='PINNED')
 
         toggle_op_id = 'llp.toggle_light_linking'
         add_op_id = 'llp.add_light_linking'
 
-        obj_state_dict = get_all_light_effect_obj_state(context.object)
+        obj_state_dict = get_all_light_effect_obj_state(light_obj)
 
         if len(obj_state_dict) == 0:
             col.label(text='No Effect Object')
@@ -116,12 +125,12 @@ class LLT_PT_panel(bpy.types.Panel):
                 op = row.operator(toggle_op_id, text=p_(text), icon=icon)
                 op.coll_type = CollectionType.RECEIVER.value
                 op.obj = obj.name
-                op.light = context.object.name
+                op.light = light_obj.name
             else:
                 op = row.operator(add_op_id, text='Add', icon='ADD')
                 op.coll_type = CollectionType.RECEIVER.value
                 op.obj = obj.name
-                op.light = context.object.name
+                op.light = light_obj.name
 
             if block_value := state_info.get(CollectionType.BLOCKER):  # exist in exclude collection
                 icon = 'SHADING_SOLID' if block_value == StateValue.INCLUDE else 'SHADING_RENDERED'
@@ -129,12 +138,12 @@ class LLT_PT_panel(bpy.types.Panel):
                 op = row.operator(toggle_op_id, text=p_(text), icon=icon)
                 op.coll_type = CollectionType.BLOCKER.value
                 op.obj = obj.name
-                op.light = context.object.name
+                op.light = light_obj.name
             else:
                 op = row.operator(add_op_id, text='Add', icon='ADD')
                 op.coll_type = CollectionType.BLOCKER.value
                 op.obj = obj.name
-                op.light = context.object.name
+                op.light = light_obj.name
 
     def draw(self, context):
         layout = self.layout
