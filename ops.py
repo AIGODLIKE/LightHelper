@@ -15,6 +15,14 @@ def get_lights_from_receiver_obj(obj):
     # return light_state
 
 
+def enum_coll_type(self, context):
+    items = []
+    for i in CollectionType:
+        items.append((i.value, p_(i.value.title()), ''))
+
+    return items
+
+
 class LLP_OT_remove_light_linking(bpy.types.Operator):
     bl_idname = 'llp.remove_light_linking'
     bl_label = "Remove"
@@ -22,20 +30,31 @@ class LLP_OT_remove_light_linking(bpy.types.Operator):
     obj: bpy.props.StringProperty()
     light: bpy.props.StringProperty()
 
+    coll_type: bpy.props.EnumProperty(
+        items=enum_coll_type, options={'SKIP_SAVE'}
+    )
+
+    remove_all: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
+
     def execute(self, context):
         obj = bpy.data.objects.get(self.obj)
         light = bpy.data.objects.get(self.light)
-        coll = light.light_linking.receiver_collection
-        coll.objects.unlink(obj)
+
+        if not self.remove_all:
+            if self.coll_type == CollectionType.RECEIVER.value:
+                coll = light.light_linking.receiver_collection
+            else:
+                coll = light.light_linking.blocker_collection
+            if coll and obj in coll.objects:
+                coll.objects.unlink(obj)
+        else:
+            coll = light.light_linking.receiver_collection
+            if coll and obj in coll.objects:
+                coll.objects.unlink(obj)
+            coll = light.light_linking.blocker_collection
+            if coll and obj in coll.objects:
+                coll.objects.unlink(obj)
         return {"FINISHED"}
-
-
-def enum_coll_type(self, context):
-    items = []
-    for i in CollectionType:
-        items.append((i.value, p_(i.value.title()), ''))
-
-    return items
 
 
 class LLP_OT_add_light_linking(bpy.types.Operator):

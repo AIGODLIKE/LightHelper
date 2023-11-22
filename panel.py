@@ -83,11 +83,14 @@ class LLT_PT_panel(bpy.types.Panel):
         layout.label(text='仅显示排除灯光')
         for (light, state) in lights:
             if state != 'EXCLUDE': continue
+
             row = layout.row(align=True)
             row.label(text=f"'{light.name}'", icon=get_light_icon(light))
             op = row.operator('llp.remove_light_linking', text='', icon="REMOVE")
+
             op.obj = context.object.name
             op.light = light.name
+            op.coll_type = CollectionType.RECEIVER.value
 
     def draw_light_objs_control(self, context, layout):
         if context.scene.light_linking_pin:
@@ -144,6 +147,12 @@ class LLT_PT_panel(bpy.types.Panel):
                 op.coll_type = CollectionType.BLOCKER.value
                 op.obj = obj.name
                 op.light = light_obj.name
+            # remove button
+            row.separator()
+            op = row.operator('llp.remove_light_linking', text='', icon="X")
+            op.obj = obj.name
+            op.light = light_obj.name
+            op.remove_all = True
 
     def draw(self, context):
         layout = self.layout
