@@ -1,4 +1,6 @@
 import bpy
+from bpy.app.translations import pgettext_iface as p_
+
 from .ops import get_lights_from_receiver_obj
 from .utils import get_all_light_effect_obj_state, CollectionType, StateValue
 
@@ -111,12 +113,12 @@ class LLT_PT_panel(bpy.types.Panel):
             if receive_value := state_info.get(CollectionType.RECEIVER):  # exist in receiver collection
                 icon = 'OUTLINER_OB_LIGHT' if receive_value == StateValue.INCLUDE else 'OUTLINER_DATA_LIGHT'
                 text = 'Include' if receive_value == StateValue.INCLUDE else 'Exclude'
-                op = row.operator(toggle_op_id, text=text, icon=icon)
+                op = row.operator(toggle_op_id, text=p_(text), icon=icon)
                 op.coll_type = CollectionType.RECEIVER.value
                 op.obj = obj.name
                 op.light = context.object.name
             else:
-                op = row.operator(add_op_id, text='Add', icon='OUTLINER_OB_LIGHT')
+                op = row.operator(add_op_id, text='Add', icon='ADD')
                 op.coll_type = CollectionType.RECEIVER.value
                 op.obj = obj.name
                 op.light = context.object.name
@@ -124,12 +126,12 @@ class LLT_PT_panel(bpy.types.Panel):
             if block_value := state_info.get(CollectionType.BLOCKER):  # exist in exclude collection
                 icon = 'SHADING_SOLID' if block_value == StateValue.INCLUDE else 'SHADING_RENDERED'
                 text = 'Include' if block_value == StateValue.INCLUDE else 'Exclude'
-                op = row.operator(toggle_op_id, text=text, icon=icon)
+                op = row.operator(toggle_op_id, text=p_(text), icon=icon)
                 op.coll_type = CollectionType.BLOCKER.value
                 op.obj = obj.name
                 op.light = context.object.name
             else:
-                op = row.operator(add_op_id, text='Add', icon='SHADING_SOLID')
+                op = row.operator(add_op_id, text='Add', icon='ADD')
                 op.coll_type = CollectionType.BLOCKER.value
                 op.obj = obj.name
                 op.light = context.object.name
@@ -161,9 +163,9 @@ def update_pin_object(self, context):
 def register():
     bpy.types.Scene.light_linking_ui = bpy.props.EnumProperty(
         items=[
-            ('LIGHT', 'Light', ''),
+            ('LIGHT', 'Simple', ''),
             ('LIGHT_EX', 'Advanced', ''),
-            ('OBJECT', 'Object', '')
+            # ('OBJECT', 'Object', '')
         ]
     )
     bpy.types.Scene.light_linking_pin_object = bpy.props.PointerProperty(
