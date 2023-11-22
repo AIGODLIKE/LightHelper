@@ -45,14 +45,14 @@ class LLP_OT_remove_light_linking(bpy.types.Operator):
                 coll = light.light_linking.receiver_collection
             else:
                 coll = light.light_linking.blocker_collection
-            if coll and obj in coll.objects:
+            if coll and obj.name in coll.objects:
                 coll.objects.unlink(obj)
         else:
             coll = light.light_linking.receiver_collection
-            if coll and obj in coll.objects:
+            if coll and obj.name in coll.objects:
                 coll.objects.unlink(obj)
             coll = light.light_linking.blocker_collection
-            if coll and obj in coll.objects:
+            if coll and obj.name in coll.objects:
                 coll.objects.unlink(obj)
         return {"FINISHED"}
 
