@@ -1,6 +1,6 @@
 import bpy
 from .ops import get_lights_from_receiver_obj
-from .utils import get_all_light_effect_obj_state, StateType, StateValue
+from .utils import get_all_light_effect_obj_state, CollectionType, StateValue
 
 
 def get_light_icon(light):
@@ -108,29 +108,29 @@ class LLT_PT_panel(bpy.types.Panel):
 
             state_info = obj_state_dict[obj]
             # print(state_info)
-            if receive_value := state_info.get(StateType.RECEIVER):  # exist in receiver collection
+            if receive_value := state_info.get(CollectionType.RECEIVER):  # exist in receiver collection
                 icon = 'OUTLINER_OB_LIGHT' if receive_value == StateValue.INCLUDE else 'OUTLINER_DATA_LIGHT'
                 text = 'Include' if receive_value == StateValue.INCLUDE else 'Exclude'
                 op = row.operator(toggle_op_id, text=text, icon=icon)
-                op.state_type = StateType.RECEIVER.value
+                op.coll_type = CollectionType.RECEIVER.value
                 op.obj = obj.name
                 op.light = context.object.name
             else:
                 op = row.operator(add_op_id, text='Add', icon='OUTLINER_OB_LIGHT')
-                op.state_type = StateType.RECEIVER.value
+                op.coll_type = CollectionType.RECEIVER.value
                 op.obj = obj.name
                 op.light = context.object.name
 
-            if block_value := state_info.get(StateType.BLOCKER):  # exist in exclude collection
+            if block_value := state_info.get(CollectionType.BLOCKER):  # exist in exclude collection
                 icon = 'SHADING_SOLID' if block_value == StateValue.INCLUDE else 'SHADING_RENDERED'
                 text = 'Include' if block_value == StateValue.INCLUDE else 'Exclude'
                 op = row.operator(toggle_op_id, text=text, icon=icon)
-                op.state_type = StateType.BLOCKER.value
+                op.coll_type = CollectionType.BLOCKER.value
                 op.obj = obj.name
                 op.light = context.object.name
             else:
                 op = row.operator(add_op_id, text='Add', icon='SHADING_SOLID')
-                op.state_type = StateType.BLOCKER.value
+                op.coll_type = CollectionType.BLOCKER.value
                 op.obj = obj.name
                 op.light = context.object.name
 

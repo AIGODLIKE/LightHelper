@@ -1,7 +1,7 @@
 import bpy
 from bpy.app.translations import pgettext_iface as p_
 
-from .utils import get_light_effect_obj_state, set_light_effect_obj_state, StateType, StateValue
+from .utils import get_light_effect_obj_state, set_light_effect_obj_state, CollectionType, StateValue
 
 
 def get_lights_from_receiver_obj(obj):
@@ -30,9 +30,9 @@ class LLP_OT_remove_light_linking(bpy.types.Operator):
         return {"FINISHED"}
 
 
-def enum_state_type(self, context):
+def enum_coll_type(self, context):
     items = []
-    for i in StateType:
+    for i in CollectionType:
         items.append((i.value, p_(i.value.title()), ''))
 
     return items
@@ -45,8 +45,8 @@ class LLP_OT_add_light_linking(bpy.types.Operator):
     obj: bpy.props.StringProperty()
     light: bpy.props.StringProperty()
 
-    state_type: bpy.props.EnumProperty(
-        items=enum_state_type, options={'SKIP_SAVE'}
+    coll_type: bpy.props.EnumProperty(
+        items=enum_coll_type, options={'SKIP_SAVE'}
     )
 
     def execute(self, context):
@@ -56,12 +56,12 @@ class LLP_OT_add_light_linking(bpy.types.Operator):
 
         coll = None
 
-        if self.state_type == StateType.RECEIVER.value:
+        if self.coll_type == CollectionType.RECEIVER.value:
             coll = light.light_linking.receiver_collection
             if not coll:
                 coll = bpy.data.collections.new("Light Linking for " + light.name)
                 light.light_linking.receiver_collection = coll
-        elif self.state_type == StateType.BLOCKER.value:
+        elif self.coll_type == CollectionType.BLOCKER.value:
             coll = light.light_linking.blocker_collection
             if not coll:
                 coll = bpy.data.collections.new("Shadow Linking for " + light.name)
@@ -80,8 +80,8 @@ class LLP_OT_toggle_light_linking(bpy.types.Operator):
     obj: bpy.props.StringProperty()
     light: bpy.props.StringProperty()
 
-    state_type: bpy.props.EnumProperty(
-        items=enum_state_type, options={'SKIP_SAVE'}
+    coll_type: bpy.props.EnumProperty(
+        items=enum_coll_type, options={'SKIP_SAVE'}
     )
 
     def execute(self, context):
@@ -92,16 +92,16 @@ class LLP_OT_toggle_light_linking(bpy.types.Operator):
         state_get = get_light_effect_obj_state(light, obj)
         # check if state value exists, if is None, means that the object is not in the collection
         # if exists, set the other value of the state value
-        state_type = StateType.RECEIVER if self.state_type == StateType.RECEIVER.value else StateType.BLOCKER
+        coll_type = CollectionType.RECEIVER if self.coll_type == CollectionType.RECEIVER.value else CollectionType.BLOCKER
 
-        if state_value := state_get.get(state_type):  # exist
+        if state_value := state_get.get(coll_type):  # exist
             # toggle state value
             # print(state_value)
             if state_value == StateValue.INCLUDE:
                 value_set = StateValue.EXCLUDE
             else:
                 value_set = StateValue.INCLUDE
-            set_light_effect_obj_state(light, obj, (state_type, value_set))
+            set_light_effect_obj_state(light, obj, (coll_type, value_set))
 
         return {"FINISHED"}
 
