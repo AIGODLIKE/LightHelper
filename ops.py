@@ -28,8 +28,9 @@ class LLP_OT_remove_light_linking(bpy.types.Operator):
     bl_idname = 'llp.remove_light_linking'
     bl_label = "Remove"
 
-    obj: bpy.props.StringProperty()
-    light: bpy.props.StringProperty()
+    obj: bpy.props.StringProperty(options={'SKIP_SAVE'})
+    coll: bpy.props.StringProperty(options={'SKIP_SAVE'})
+    light: bpy.props.StringProperty(options={'SKIP_SAVE'})
 
     coll_type: bpy.props.EnumProperty(
         items=enum_coll_type, options={'SKIP_SAVE'}
@@ -39,22 +40,35 @@ class LLP_OT_remove_light_linking(bpy.types.Operator):
 
     def execute(self, context):
         obj = bpy.data.objects.get(self.obj)
+        coll_item = bpy.data.collections.get(self.coll)
         light = bpy.data.objects.get(self.light)
+
+        if obj is None:
+            item = coll_item
+        else:
+            item = obj
+
+        def remove_item_from_coll(coll: bpy.types.Collection, item: bpy.types.Object | bpy.types.Collection):
+            if isinstance(item, bpy.types.Object):
+                if item.name in coll.objects:
+                    coll.objects.unlink(obj)
+            elif isinstance(item, bpy.types.Collection):
+                if item.name in coll.children:
+                    coll.children.unlink(item)
 
         if not self.remove_all:
             if self.coll_type == CollectionType.RECEIVER.value:
                 coll = light.light_linking.receiver_collection
             else:
                 coll = light.light_linking.blocker_collection
-            if coll and obj.name in coll.objects:
-                coll.objects.unlink(obj)
+            if not coll: return {"CANCELLED"}
+            remove_item_from_coll(coll, item)
         else:
-            coll = light.light_linking.receiver_collection
-            if coll and obj.name in coll.objects:
-                coll.objects.unlink(obj)
-            coll = light.light_linking.blocker_collection
-            if coll and obj.name in coll.objects:
-                coll.objects.unlink(obj)
+            if coll := light.light_linking.receiver_collection:
+                remove_item_from_coll(coll, item)
+            if coll := light.light_linking.receiver_collection:
+                remove_item_from_coll(coll, item)
+
         return {"FINISHED"}
 
 
@@ -62,8 +76,8 @@ class LLP_OT_add_light_linking(bpy.types.Operator):
     bl_idname = 'llp.add_light_linking'
     bl_label = "Add"
 
-    obj: bpy.props.StringProperty()
-    light: bpy.props.StringProperty()
+    obj: bpy.props.StringProperty(options={'SKIP_SAVE'})
+    light: bpy.props.StringProperty(options={'SKIP_SAVE'})
 
     coll_type: bpy.props.EnumProperty(
         items=enum_coll_type, options={'SKIP_SAVE'}
@@ -91,15 +105,9 @@ class LLP_OT_add_light_linking(bpy.types.Operator):
             if coll and obj:
                 coll.objects.link(obj)
         else:
-
-            coll = light.light_linking.receiver_collection
-            if not coll:
-                coll = bpy.data.collections.new("Light Linking for " + light.name)
-                light.light_linking.receiver_collection = coll
-            coll = light.light_linking.blocker_collection
-            if not coll:
-                coll = bpy.data.collections.new("Shadow Linking for " + light.name)
-                light.light_linking.blocker_collection = coll
+            from .utils import ensure_linking_coll
+            ensure_linking_coll(CollectionType.RECEIVER, light)
+            ensure_linking_coll(CollectionType.BLOCKER, light)
 
         return {"FINISHED"}
 
@@ -108,9 +116,9 @@ class LLP_OT_toggle_light_linking(bpy.types.Operator):
     bl_idname = 'llp.toggle_light_linking'
     bl_label = "Toggle"
 
-    obj: bpy.props.StringProperty()
-    coll: bpy.props.StringProperty()
-    light: bpy.props.StringProperty()
+    obj: bpy.props.StringProperty(options={'SKIP_SAVE'})
+    coll: bpy.props.StringProperty(options={'SKIP_SAVE'})
+    light: bpy.props.StringProperty(options={'SKIP_SAVE'})
 
     coll_type: bpy.props.EnumProperty(
         items=enum_coll_type, options={'SKIP_SAVE'}

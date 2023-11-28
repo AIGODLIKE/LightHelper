@@ -2,7 +2,8 @@ import bpy
 from bpy.app.translations import pgettext_iface as p_
 
 from .ops import get_lights_from_receiver_obj
-from .utils import get_all_light_effect_items_state, CollectionType, StateValue, get_linking_coll
+from .utils import get_all_light_effect_items_state, get_linking_coll
+from .utils import CollectionType, StateValue, SAFE_OBJ_NAME
 
 
 def get_light_icon(light):
@@ -136,7 +137,9 @@ class LLT_PT_panel(bpy.types.Panel):
         coll_receiver = get_linking_coll(light_obj, CollectionType.RECEIVER)
         coll_blocker = get_linking_coll(light_obj, CollectionType.BLOCKER)
 
-        if not coll_receiver and not coll_blocker:
+        if (not coll_receiver and not coll_blocker) or (
+                SAFE_OBJ_NAME not in coll_receiver.objects) or (
+                SAFE_OBJ_NAME not in coll_blocker.objects):
             op = col.operator(add_op_id, text='Init', icon='ADD')
             op.add_all = True
             op.light = light_obj.name
@@ -144,14 +147,18 @@ class LLT_PT_panel(bpy.types.Panel):
 
         obj_state_dict = get_all_light_effect_items_state(light_obj)
 
-        if len(obj_state_dict) == 0:
+        safe_obj = bpy.data.objects.get(SAFE_OBJ_NAME)
+        if len(obj_state_dict) == 1 and safe_obj in obj_state_dict.keys():
             col.label(text='No Effect Object')
             return
 
         col.separator()
 
         for item in obj_state_dict.keys():
-            row = col.row(align=True)
+            if item.name == SAFE_OBJ_NAME: continue  # skip safe obj
+            row = col.row(align=False)
+            row.scale_x = 1.1
+            row.scale_y = 1.1
             row.label(text=item.name, icon=get_item_icon(item))
 
             state_info = obj_state_dict[item]
@@ -186,7 +193,10 @@ class LLT_PT_panel(bpy.types.Panel):
 
             row.separator()
             op = row.operator('llp.remove_light_linking', text='', icon="X")
-            op.obj = item.name
+            if isinstance(item, bpy.types.Object):
+                op.obj = item.name
+            else:
+                op.coll = item.name
             op.light = light_obj.name
             op.remove_all = True
 

@@ -3,6 +3,8 @@ from dataclasses import dataclass
 
 from enum import Enum, auto, unique
 
+SAFE_OBJ_NAME = 'LLP_SAFE_OBJ'
+
 
 @unique
 class StateValue(Enum):
@@ -18,26 +20,36 @@ class CollectionType(Enum):
     BLOCKER = 'blocker'
 
 
-def ensure_linking_coll(type: CollectionType, obj_name: str, make_safe_obj: bool = True):
+def ensure_linking_coll(type: CollectionType, light: bpy.types.Object, make_safe_obj: bool = True):
     """ensure the collection exists
     """
 
-    SAFE_OBJ_NAME = 'LLP_SAFE_OBJ'
-
     prefix = 'Light Linking for ' if type == CollectionType.RECEIVER else 'Shadow Linking for '
-    coll_name = prefix + obj_name
+    coll_name = prefix + light.name
 
-    coll = bpy.data.collections.get(coll_name)
-    if coll is None:
-        coll = bpy.data.collections.new(coll_name)
+    if type == CollectionType.RECEIVER:
+        if light.light_linking.receiver_collection is None:
+            coll = bpy.data.collections.new(coll_name)
+            light.light_linking.receiver_collection = coll
+        else:
+            coll = light.light_linking.receiver_collection
+    else:
+        if light.light_linking.blocker_collection is None:
+            coll = bpy.data.collections.new(coll_name)
+            light.light_linking.blocker_collection = coll
+
+        else:
+            coll = light.light_linking.blocker_collection
     # make an empty mesh obj in this collection to avoid the annoying logic inverse between the exclude and include
     if make_safe_obj:
         empty_mesh = bpy.data.meshes.get(SAFE_OBJ_NAME)
         if empty_mesh is None:
             empty_mesh = bpy.data.meshes.new(SAFE_OBJ_NAME)
-        obj = bpy.data.objects.get(coll_name)
+        obj = bpy.data.objects.get(SAFE_OBJ_NAME)
         if obj is None:
-            obj = bpy.data.objects.new(coll_name, empty_mesh)
+            obj = bpy.data.objects.new(SAFE_OBJ_NAME, empty_mesh)
+            coll.objects.link(obj)
+        if obj.name not in coll.objects:
             coll.objects.link(obj)
 
     return coll
@@ -216,6 +228,7 @@ def set_light_effect_obj_state(light: bpy.types.Object, obj: bpy.types.Object,
         set_obj_state_from_coll(get_linking_coll(light, CollectionType.BLOCKER), state[1])
 
     return
+
 
 def set_light_effect_coll_state(light: bpy.types.Object, coll: bpy.types.Collection,
                                 state: tuple[CollectionType, StateValue]) -> None:
