@@ -66,7 +66,7 @@ class LLP_OT_remove_light_linking(bpy.types.Operator):
         else:
             if coll := light.light_linking.receiver_collection:
                 remove_item_from_coll(coll, item)
-            if coll := light.light_linking.receiver_collection:
+            if coll := light.light_linking.blocker_collection:
                 remove_item_from_coll(coll, item)
 
         return {"FINISHED"}
