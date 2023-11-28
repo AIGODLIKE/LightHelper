@@ -2,11 +2,12 @@ import bpy
 from bpy.app.translations import pgettext_iface as p_
 
 from .ops import get_lights_from_receiver_obj
-from .utils import get_all_light_effect_items_state, CollectionType, StateValue
+from .utils import get_all_light_effect_items_state, CollectionType, StateValue, get_linking_coll
 
 
 def get_light_icon(light):
     data = light.data
+
     if hasattr(data, 'type'):
         if data.type == 'AREA':
             return 'LIGHT_AREA'
@@ -17,7 +18,16 @@ def get_light_icon(light):
         elif data.type == 'SUN':
             return 'LIGHT_SUN'
 
-    return 'LIGHT'
+    return 'OBJECT_DATA'
+
+
+def get_item_icon(item: bpy.types.Object | bpy.types.Collection):
+    if isinstance(item, bpy.types.Object):
+        return 'OBJECT_DATA'
+    elif isinstance(item, bpy.types.Collection):
+        return 'OUTLINER_COLLECTION'
+    else:
+        return 'QUESTION'
 
 
 def draw_light_link(object, layout, use_pin=False):
@@ -123,17 +133,28 @@ class LLT_PT_panel(bpy.types.Panel):
         toggle_op_id = 'llp.toggle_light_linking'
         add_op_id = 'llp.add_light_linking'
 
+        coll_receiver = get_linking_coll(light_obj, CollectionType.RECEIVER)
+        coll_blocker = get_linking_coll(light_obj, CollectionType.BLOCKER)
+
+        if not coll_receiver and not coll_blocker:
+            op = col.operator(add_op_id, text='Init', icon='ADD')
+            op.add_all = True
+            op.light = light_obj.name
+            return
+
         obj_state_dict = get_all_light_effect_items_state(light_obj)
 
         if len(obj_state_dict) == 0:
             col.label(text='No Effect Object')
             return
 
-        for obj in obj_state_dict.keys():
-            row = col.row(align=True)
-            row.label(text=obj.name, icon='OBJECT_DATA')
+        col.separator()
 
-            state_info = obj_state_dict[obj]
+        for item in obj_state_dict.keys():
+            row = col.row(align=True)
+            row.label(text=item.name, icon=get_item_icon(item))
+
+            state_info = obj_state_dict[item]
             # print(state_info)
             if receive_value := state_info.get(CollectionType.RECEIVER):  # exist in receiver collection
                 icon = 'OUTLINER_OB_LIGHT' if receive_value == StateValue.INCLUDE else 'OUTLINER_DATA_LIGHT'
@@ -143,14 +164,11 @@ class LLT_PT_panel(bpy.types.Panel):
                 sub.alert = toggle
                 op = sub.operator(toggle_op_id, text='', icon=icon)
                 op.coll_type = CollectionType.RECEIVER.value
-                op.obj = obj.name
                 op.light = light_obj.name
-            # ensure must have
-            # else:
-            #     op = row.operator(add_op_id, text='Add', icon='ADD')
-            #     op.coll_type = CollectionType.RECEIVER.value
-            #     op.obj = obj.name
-            #     op.light = light_obj.name
+                if isinstance(item, bpy.types.Object):
+                    op.obj = item.name
+                else:
+                    op.coll = item.name
 
             if block_value := state_info.get(CollectionType.BLOCKER):  # exist in exclude collection
                 icon = 'SHADING_SOLID' if block_value == StateValue.INCLUDE else 'SHADING_RENDERED'
@@ -160,20 +178,15 @@ class LLT_PT_panel(bpy.types.Panel):
                 sub.alert = toggle
                 op = sub.operator(toggle_op_id, text='', icon=icon)
                 op.coll_type = CollectionType.BLOCKER.value
-                op.obj = obj.name
                 op.light = light_obj.name
-
-            # ensure must have
-            # else:
-            #     op = row.operator(add_op_id, text='Add', icon='ADD')
-            #     op.coll_type = CollectionType.BLOCKER.value
-            #     op.obj = obj.name
-            #     op.light = light_obj.name
-            # remove button
+                if isinstance(item, bpy.types.Object):
+                    op.obj = item.name
+                else:
+                    op.coll = item.name
 
             row.separator()
             op = row.operator('llp.remove_light_linking', text='', icon="X")
-            op.obj = obj.name
+            op.obj = item.name
             op.light = light_obj.name
             op.remove_all = True
 
