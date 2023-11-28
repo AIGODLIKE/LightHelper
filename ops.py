@@ -154,6 +154,26 @@ class LLP_OT_toggle_light_linking(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class LLP_OT_link_selected_objs(bpy.types.Operator):
+    bl_idname = 'llp.link_selected_objs'
+    bl_label = "Link Selected Objects"
+
+    light: bpy.props.StringProperty(options={'SKIP_SAVE'})
+
+    def execute(self, context):
+        light = bpy.data.objects.get(self.light)
+        coll1 = light.light_linking.receiver_collection
+        coll2 = light.light_linking.blocker_collection
+        for obj in context.selected_objects:
+            if obj == light: continue
+            if coll1 and obj.name not in coll1.objects:
+                coll1.objects.link(obj)
+            if coll2 and obj.name not in coll2.objects:
+                coll2.objects.link(obj)
+
+        return {"FINISHED"}
+
+
 class LLP_OT_select_item(bpy.types.Operator):
     bl_idname = 'llp.select_item'
     bl_label = "Select"
@@ -208,6 +228,7 @@ def register():
     bpy.utils.register_class(LLP_OT_add_light_linking)
     bpy.utils.register_class(LLP_OT_toggle_light_linking)
     bpy.utils.register_class(LLP_OT_select_item)
+    bpy.utils.register_class(LLP_OT_link_selected_objs)
 
 
 def unregister():
@@ -215,3 +236,4 @@ def unregister():
     bpy.utils.unregister_class(LLP_OT_add_light_linking)
     bpy.utils.unregister_class(LLP_OT_toggle_light_linking)
     bpy.utils.unregister_class(LLP_OT_select_item)
+    bpy.utils.unregister_class(LLP_OT_link_selected_objs)

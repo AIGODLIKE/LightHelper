@@ -136,6 +136,7 @@ class LLT_PT_panel(bpy.types.Panel):
         toggle_op_id = 'llp.toggle_light_linking'
         add_op_id = 'llp.add_light_linking'
         remove_op_id = 'llp.remove_light_linking'
+        link_op_id = 'llp.link_selected_objs'
 
         coll_receiver = get_linking_coll(light_obj, CollectionType.RECEIVER)
         coll_blocker = get_linking_coll(light_obj, CollectionType.BLOCKER)
@@ -152,7 +153,8 @@ class LLT_PT_panel(bpy.types.Panel):
 
         safe_obj = bpy.data.objects.get(SAFE_OBJ_NAME)
         if len(obj_state_dict) == 1 and safe_obj in obj_state_dict.keys():
-            col.label(text='No Effect Object')
+            op = col.operator(link_op_id, text='Selected Objects', icon='LINKED')
+            op.light = light_obj.name
             return
 
         col.separator()
@@ -206,6 +208,11 @@ class LLT_PT_panel(bpy.types.Panel):
                 op.coll = item.name
             op.light = light_obj.name
             op.remove_all = True
+
+        # extra op
+        col.separator()
+        op = col.operator(link_op_id, text='Selected Objects', icon='LINKED')
+        op.light = light_obj.name
 
 
 def update_pin_object(self, context):
