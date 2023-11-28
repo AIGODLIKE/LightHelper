@@ -154,13 +154,64 @@ class LLP_OT_toggle_light_linking(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class LLP_OT_select_item(bpy.types.Operator):
+    bl_idname = 'llp.select_item'
+    bl_label = "Select"
+    # bl_options = {'REGISTER', 'UNDO'}
+
+    obj: bpy.props.StringProperty(options={'SKIP_SAVE'})
+    coll: bpy.props.StringProperty(options={'SKIP_SAVE'})
+
+    def execute(self, context):
+        obj = bpy.data.objects.get(self.obj)
+        coll = bpy.data.collections.get(self.coll)
+        if not obj and not coll: return {"CANCELLED"}
+
+        if obj:
+            area_3d = self.get_area('VIEW_3D')
+            if not area_3d: return {"CANCELLED"}
+            self.select_obj_in_view3d(obj)
+        elif coll:
+            area_outliner = self.get_area('OUTLINER')
+            if not area_outliner: return {"CANCELLED"}
+
+            with context.temp_override(area=area_outliner, id=coll):
+                self.select_coll_in_outliner(coll)
+
+        return {"FINISHED"}
+
+    def get_area(self, area_type: str):
+        areas = []
+        for area in bpy.context.screen.areas:
+            if area.type == area_type:
+                areas.append(area)
+        # get biggest area
+        if len(areas) > 0:
+            area = max(areas, key=lambda area: area.width * area.height)
+            return area
+        return None
+
+    def select_obj_in_view3d(self, obj: bpy.types.Object):
+        # deselect all
+        bpy.ops.object.select_all(action='DESELECT')
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+
+    def select_coll_in_outliner(self, coll: bpy.types.Collection):
+        # TODO select collection in outliner
+        bpy.ops.object.select_all(action='DESELECT')
+        bpy.ops.outliner.item_activate(deselect_all=True)
+
+
 def register():
     bpy.utils.register_class(LLP_OT_remove_light_linking)
     bpy.utils.register_class(LLP_OT_add_light_linking)
     bpy.utils.register_class(LLP_OT_toggle_light_linking)
+    bpy.utils.register_class(LLP_OT_select_item)
 
 
 def unregister():
     bpy.utils.unregister_class(LLP_OT_remove_light_linking)
     bpy.utils.unregister_class(LLP_OT_add_light_linking)
     bpy.utils.unregister_class(LLP_OT_toggle_light_linking)
+    bpy.utils.unregister_class(LLP_OT_select_item)

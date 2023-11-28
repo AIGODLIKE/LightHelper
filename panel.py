@@ -126,13 +126,16 @@ class LLT_PT_panel(bpy.types.Panel):
         if not light_obj: return
 
         col = layout.column()
+        # top line
         row = col.row(align=True)
         row.label(text=f"{light_obj.name}", icon=get_light_icon(light_obj))
         row.separator()
         row.prop(bpy.context.scene, 'light_linking_pin', text='', icon='PINNED')
 
+        select_op_id = 'llp.select_item'
         toggle_op_id = 'llp.toggle_light_linking'
         add_op_id = 'llp.add_light_linking'
+        remove_op_id = 'llp.remove_light_linking'
 
         coll_receiver = get_linking_coll(light_obj, CollectionType.RECEIVER)
         coll_blocker = get_linking_coll(light_obj, CollectionType.BLOCKER)
@@ -159,7 +162,11 @@ class LLT_PT_panel(bpy.types.Panel):
             row = col.row(align=False)
             row.scale_x = 1.1
             row.scale_y = 1.1
-            row.label(text=item.name, icon=get_item_icon(item))
+            op = row.operator(select_op_id, text=item.name, icon=get_item_icon(item), emboss=False)
+            if isinstance(item, bpy.types.Object):
+                op.obj = item.name
+            else:
+                op.coll = item.name
 
             state_info = obj_state_dict[item]
             # print(state_info)
@@ -192,7 +199,7 @@ class LLT_PT_panel(bpy.types.Panel):
                     op.coll = item.name
 
             row.separator()
-            op = row.operator('llp.remove_light_linking', text='', icon="X")
+            op = row.operator(remove_op_id, text='', icon="X")
             if isinstance(item, bpy.types.Object):
                 op.obj = item.name
             else:
