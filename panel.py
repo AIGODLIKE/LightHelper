@@ -1,23 +1,27 @@
 import bpy
 from bpy.app.translations import pgettext_iface as p_
 
-from .ops import get_lights_from_receiver_obj
 from .utils import get_all_light_effect_items_state, get_linking_coll
 from .utils import CollectionType, StateValue, SAFE_OBJ_NAME
+from .utils import get_lights_from_effect_obj
+
+select_op_id = 'llp.select_item'
+toggle_op_id = 'llp.toggle_light_linking'
+add_op_id = 'llp.add_light_linking'
+remove_op_id = 'llp.remove_light_linking'
+link_op_id = 'llp.link_selected_objs'
 
 
 def get_light_icon(light):
     data = light.data
-
+    type_icon = {
+        'AREA': 'LIGHT_AREA',
+        'POINT': 'LIGHT_POINT',
+        'SPOT': 'LIGHT_SPOT',
+        'SUN': 'LIGHT_SUN',
+    }
     if hasattr(data, 'type'):
-        if data.type == 'AREA':
-            return 'LIGHT_AREA'
-        elif data.type == 'POINT':
-            return 'LIGHT_POINT'
-        elif data.type == 'SPOT':
-            return 'LIGHT_SPOT'
-        elif data.type == 'SUN':
-            return 'LIGHT_SUN'
+        return type_icon.get(data.type, 'OBJECT_DATA')
 
     return 'OBJECT_DATA'
 
@@ -29,6 +33,59 @@ def get_item_icon(item: bpy.types.Object | bpy.types.Collection):
         return 'OUTLINER_COLLECTION'
     else:
         return 'QUESTION'
+
+
+def draw_select_btn(layout, item):
+    op = layout.operator(select_op_id, text=item.name, icon=get_item_icon(item), emboss=False)
+    if isinstance(item, bpy.types.Object):
+        op.obj = item.name
+    else:
+        op.coll = item.name
+
+
+def draw_toggle_btn(layout: bpy.types.Layout,
+                    state_info: dict,
+                    light_obj: bpy.types.Object,
+                    item: bpy.types.Object | bpy.types.Collection):
+    """Draw toggle button for receiver / blocker collection"""
+    if receive_value := state_info.get(CollectionType.RECEIVER):  # exist in receiver collection
+        icon = 'OUTLINER_OB_LIGHT' if receive_value == StateValue.INCLUDE else 'OUTLINER_DATA_LIGHT'
+        # text = 'Include' if receive_value == StateValue.INCLUDE else 'Exclude'
+        toggle = True if receive_value == StateValue.INCLUDE else False
+        sub = layout.row(align=True)
+        sub.alert = toggle
+        op = sub.operator(toggle_op_id, text='', icon=icon)
+        op.coll_type = CollectionType.RECEIVER.value
+        op.light = light_obj.name
+        if isinstance(item, bpy.types.Object):
+            op.obj = item.name
+        else:
+            op.coll = item.name
+
+    if block_value := state_info.get(CollectionType.BLOCKER):  # exist in exclude collection
+        icon = 'SHADING_SOLID' if block_value == StateValue.INCLUDE else 'SHADING_RENDERED'
+        # text = 'Include' if block_value == StateValue.INCLUDE else 'Exclude'
+        toggle = True if block_value == StateValue.INCLUDE else False
+        sub = layout.row(align=True)
+        sub.alert = toggle
+        op = sub.operator(toggle_op_id, text='', icon=icon)
+        op.coll_type = CollectionType.BLOCKER.value
+        op.light = light_obj.name
+        if isinstance(item, bpy.types.Object):
+            op.obj = item.name
+        else:
+            op.coll = item.name
+
+
+def draw_remove_button(layout: bpy.types.Layout, light_obj: bpy.types.Object,
+                       item: bpy.types.Object | bpy.types.Collection):
+    op = layout.operator(remove_op_id, text='', icon="X")
+    if isinstance(item, bpy.types.Object):
+        op.obj = item.name
+    else:
+        op.coll = item.name
+    op.light = light_obj.name
+    op.remove_all = True
 
 
 def draw_light_link(object, layout, use_pin=False):
@@ -104,19 +161,16 @@ class LLT_PT_panel(bpy.types.Panel):
     #
     #         draw_light_link(context.object, layout, use_pin=True)
     #
-    # def draw_object(self, context, layout):
-    #     lights = get_lights_from_receiver_obj(context.object)
-    #     layout.label(text='仅显示排除灯光')
-    #     for (light, state) in lights:
-    #         if state != 'EXCLUDE': continue
-    #
-    #         row = layout.row(align=True)
-    #         row.label(text=f"'{light.name}'", icon=get_light_icon(light))
-    #         op = row.operator('llp.remove_light_linking', text='', icon="REMOVE")
-    #
-    #         op.obj = context.object.name
-    #         op.light = light.name
-    #         op.coll_type = CollectionType.RECEIVER.value
+    def draw_object(self, context, layout):
+        col = layout.column()
+        item = context.object
+        obj_state_dict = get_lights_from_effect_obj(context.object)
+        for (light_obj, state_info) in obj_state_dict:
+            row = col.row()
+            draw_select_btn(row, light_obj)
+            draw_toggle_btn(row, state_info, light_obj, item)
+            row.separator()
+            draw_remove_button(row, light_obj, item)
 
     def draw_light_objs_control(self, context, layout):
         if context.scene.light_linking_pin:
@@ -132,15 +186,10 @@ class LLT_PT_panel(bpy.types.Panel):
         row.separator()
         row.prop(bpy.context.scene, 'light_linking_pin', text='', icon='PINNED')
 
-        select_op_id = 'llp.select_item'
-        toggle_op_id = 'llp.toggle_light_linking'
-        add_op_id = 'llp.add_light_linking'
-        remove_op_id = 'llp.remove_light_linking'
-        link_op_id = 'llp.link_selected_objs'
-
         coll_receiver = get_linking_coll(light_obj, CollectionType.RECEIVER)
         coll_blocker = get_linking_coll(light_obj, CollectionType.BLOCKER)
 
+        # return if no receiver/blocker collection (exclude the safe obj)
         if (not coll_receiver and not coll_blocker) or (
                 SAFE_OBJ_NAME not in coll_receiver.objects) or (
                 SAFE_OBJ_NAME not in coll_blocker.objects):
@@ -159,55 +208,16 @@ class LLT_PT_panel(bpy.types.Panel):
 
         col.separator()
 
-        for item in obj_state_dict.keys():
+        for (item, state_info) in obj_state_dict.items():
             if item.name == SAFE_OBJ_NAME: continue  # skip safe obj
             row = col.row(align=False)
             row.scale_x = 1.1
             row.scale_y = 1.1
-            op = row.operator(select_op_id, text=item.name, icon=get_item_icon(item), emboss=False)
-            if isinstance(item, bpy.types.Object):
-                op.obj = item.name
-            else:
-                op.coll = item.name
 
-            state_info = obj_state_dict[item]
-            # print(state_info)
-            if receive_value := state_info.get(CollectionType.RECEIVER):  # exist in receiver collection
-                icon = 'OUTLINER_OB_LIGHT' if receive_value == StateValue.INCLUDE else 'OUTLINER_DATA_LIGHT'
-                # text = 'Include' if receive_value == StateValue.INCLUDE else 'Exclude'
-                toggle = True if receive_value == StateValue.INCLUDE else False
-                sub = row.row(align=True)
-                sub.alert = toggle
-                op = sub.operator(toggle_op_id, text='', icon=icon)
-                op.coll_type = CollectionType.RECEIVER.value
-                op.light = light_obj.name
-                if isinstance(item, bpy.types.Object):
-                    op.obj = item.name
-                else:
-                    op.coll = item.name
-
-            if block_value := state_info.get(CollectionType.BLOCKER):  # exist in exclude collection
-                icon = 'SHADING_SOLID' if block_value == StateValue.INCLUDE else 'SHADING_RENDERED'
-                # text = 'Include' if block_value == StateValue.INCLUDE else 'Exclude'
-                toggle = True if block_value == StateValue.INCLUDE else False
-                sub = row.row(align=True)
-                sub.alert = toggle
-                op = sub.operator(toggle_op_id, text='', icon=icon)
-                op.coll_type = CollectionType.BLOCKER.value
-                op.light = light_obj.name
-                if isinstance(item, bpy.types.Object):
-                    op.obj = item.name
-                else:
-                    op.coll = item.name
-
+            draw_select_btn(layout, item)
+            draw_toggle_btn(row, state_info, light_obj, item)
             row.separator()
-            op = row.operator(remove_op_id, text='', icon="X")
-            if isinstance(item, bpy.types.Object):
-                op.obj = item.name
-            else:
-                op.coll = item.name
-            op.light = light_obj.name
-            op.remove_all = True
+            draw_remove_button(row, light_obj, item)
 
         # extra op
         col.separator()
@@ -228,9 +238,9 @@ def update_pin_object(self, context):
 def register():
     bpy.types.Scene.light_linking_ui = bpy.props.EnumProperty(
         items=[
-            ('LIGHT', 'Simple', ''),
-            ('LIGHT_EX', 'Advanced', ''),
-            # ('OBJECT', 'Object', '')
+            # ('LIGHT', 'Simple', ''),
+            # ('LIGHT_EX', 'Advanced', ''),
+            ('OBJECT', 'Object', '')
         ]
     )
     bpy.types.Scene.light_linking_pin_object = bpy.props.PointerProperty(

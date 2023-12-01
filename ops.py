@@ -5,13 +5,7 @@ from .utils import get_light_effect_obj_state, get_light_effect_coll_state
 from .utils import set_light_effect_obj_state, set_light_effect_coll_state, CollectionType, StateValue
 
 
-def get_lights_from_receiver_obj(obj):
-    # light_state = {}
-    for o in iter(bpy.context.scene.objects):
-        if coll := o.light_linking.receiver_collection:
-            for i, obj in enumerate(coll.objects):
-                # light_state[o] = coll.collection_objects[i].light_linking.link_state
-                yield (o, coll.collection_objects[i].light_linking.link_state)
+
 
     # return light_state
 
