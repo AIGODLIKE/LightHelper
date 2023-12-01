@@ -234,7 +234,7 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
     def draw_header(self, context):
         layout = self.layout
         row = layout.row(align=True)
-        row.label(text="Light Linking")
+        row.label(text="Object Linking")
         tips = row.operator(question_op_id, text='', icon='QUESTION', emboss=False)
         tips.data = p_(
             """Object Linking Panel
