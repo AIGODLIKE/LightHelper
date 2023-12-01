@@ -226,7 +226,7 @@ class LLT_OT_obj_control_panel(bpy.types.Panel):
             item = context.object
         if not item: return
         if item.type == 'LIGHT':
-            layout.label(text="Light can't be effect object")
+            layout.label(text="Light can't be an effected object")
             return
 
         col = layout.column()
@@ -238,7 +238,7 @@ class LLT_OT_obj_control_panel(bpy.types.Panel):
 
         obj_state_dict = get_lights_from_effect_obj(item)
         if len(obj_state_dict) == 0:
-            col.label(text=p_("No light", "No light"), icon='LIGHT')
+            col.label(text='No light effecting this object', icon='LIGHT')
             return
         for (light_obj, state_info) in obj_state_dict.items():
             row = col.row()

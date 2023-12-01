@@ -5,9 +5,7 @@ from .utils import get_light_effect_obj_state, get_light_effect_coll_state
 from .utils import set_light_effect_obj_state, set_light_effect_coll_state, CollectionType, StateValue
 
 
-
-
-    # return light_state
+# return light_state
 
 
 def enum_coll_type(self, context):
@@ -117,6 +115,15 @@ class LLP_OT_toggle_light_linking(bpy.types.Operator):
     coll_type: bpy.props.EnumProperty(
         items=enum_coll_type, options={'SKIP_SAVE'}
     )
+    # display
+    value_set: bpy.props.StringProperty(options={'SKIP_SAVE'})
+
+    @classmethod
+    def description(cls, context, properties):
+        if properties.coll_type == CollectionType.RECEIVER.value:
+            return "Toggle Light"
+        else:
+            return "Toggle Shadow"
 
     def execute(self, context):
         obj = bpy.data.objects.get(self.obj)

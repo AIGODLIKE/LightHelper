@@ -13,19 +13,21 @@ bl_info = {
 
 __ADDON_NAME__ = __name__
 
-from . import panel, props, ops
+from . import panel, props, ops, translation
 
 
 def register():
     props.register()
     ops.register()
     panel.register()
+    translation.register()
 
 
 def unregister():
     panel.unregister()
     props.unregister()
     ops.unregister()
+    translation.unregister()
 
 
 if __name__ == '__main__':
