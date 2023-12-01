@@ -206,6 +206,37 @@ def get_all_light_effect_items_state(light: bpy.types.Object) -> dict[
     return items_state
 
 
+def get_lights_from_effect_obj(obj:bpy.types.Object)-> dict:
+    """get all the lights that affect the object and their receiver and blocker state"""
+    # get obj parent collection first
+
+    colls = obj.users_collection
+
+    light_state = {}
+
+    for o in iter(bpy.context.scene.objects):
+        if not hasattr(o, 'light_linking'): continue
+        if not o.light_linking.receiver_collection and not o.light_linking.blocker_collection: continue
+
+        receiver_coll = o.light_linking.receiver_collection
+        blocker_coll = o.light_linking.blocker_collection
+
+        if receiver_coll in colls or blocker_coll in colls:
+            light_state[o] = {
+                CollectionType.RECEIVER: None,
+                CollectionType.BLOCKER: None
+            }
+            if receiver_coll:
+                for i, obj in enumerate(receiver_coll.objects):
+                    light_state[o][
+                        CollectionType.RECEIVER] = receiver_coll.collection_objects[i].light_linking.link_state
+            if blocker_coll:
+                for i, obj in enumerate(blocker_coll.objects):
+                    light_state[o][
+                        CollectionType.BLOCKER] = blocker_coll.collection_objects[i].light_linking.link_state
+
+    return light_state
+
 def set_light_effect_obj_state(light: bpy.types.Object, obj: bpy.types.Object,
                                state: tuple[CollectionType, StateValue]) -> None:
     """set the light effect state of the object from the light,in the receiver or the block collection
