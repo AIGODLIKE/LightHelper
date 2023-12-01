@@ -16,6 +16,21 @@ def enum_coll_type(self, context):
     return items
 
 
+class LLP_OT_question(bpy.types.Operator):
+    bl_idname = 'llp.question'
+    bl_label = ""
+    bl_options = {'INTERNAL'}
+
+    data: bpy.props.StringProperty(options={'SKIP_SAVE'})
+
+    @classmethod
+    def description(cls, context, properties):
+        return properties.data
+
+    def execute(self, context):
+        return {"FINISHED"}
+
+
 class LLP_OT_remove_light_linking(bpy.types.Operator):
     bl_idname = 'llp.remove_light_linking'
     bl_label = "Remove"
@@ -230,6 +245,7 @@ def register():
     bpy.utils.register_class(LLP_OT_toggle_light_linking)
     bpy.utils.register_class(LLP_OT_select_item)
     bpy.utils.register_class(LLP_OT_link_selected_objs)
+    bpy.utils.register_class(LLP_OT_question)
 
 
 def unregister():
@@ -238,3 +254,4 @@ def unregister():
     bpy.utils.unregister_class(LLP_OT_toggle_light_linking)
     bpy.utils.unregister_class(LLP_OT_select_item)
     bpy.utils.unregister_class(LLP_OT_link_selected_objs)
+    bpy.utils.unregister_class(LLP_OT_question)

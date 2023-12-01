@@ -10,6 +10,7 @@ toggle_op_id = 'llp.toggle_light_linking'
 add_op_id = 'llp.add_light_linking'
 remove_op_id = 'llp.remove_light_linking'
 link_op_id = 'llp.link_selected_objs'
+question_op_id = 'llp.question'
 
 
 def get_light_icon(light):
@@ -121,15 +122,29 @@ def draw_light_link(object, layout, use_pin=False):
 
 
 class LLT_PT_light_control_panel(bpy.types.Panel):
-    bl_label = "Light Linking"
+    bl_label = ""
     bl_idname = "LLT_PT_light_control_panel"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "LH"
+    bl_options = {'HEADER_LAYOUT_EXPAND'}
 
     @classmethod
     def poll(cls, context):
         return context.scene.render.engine == 'CYCLES'
+
+    def draw_header(self, context):
+        layout = self.layout
+        row = layout.row(align=True)
+        row.label(text="Light Linking")
+        tips = row.operator(question_op_id, text='', icon='QUESTION', emboss=False)
+        tips.data = p_(
+            """Light Linking Panel
+This Panel Lists all the objects that are affected by the selected/pinned light.
+Provides buttons to toggle the light effecting state of the objects."""
+        )
+
+        row.separator()
 
     def draw(self, context):
         layout = self.layout
@@ -181,7 +196,7 @@ class LLT_PT_light_control_panel(bpy.types.Panel):
 
         safe_obj = bpy.data.objects.get(SAFE_OBJ_NAME)
         if len(obj_state_dict) == 1 and safe_obj in obj_state_dict.keys():
-            op = col.operator(link_op_id, text='Selected Objects', icon='LINKED')
+            op = col.operator(link_op_id, icon='LINKED')
             op.light = light_obj.name
             return
 
@@ -200,20 +215,33 @@ class LLT_PT_light_control_panel(bpy.types.Panel):
 
         # extra op
         col.separator()
-        op = col.operator(link_op_id, text='Selected Objects', icon='LINKED')
+        op = col.operator(link_op_id, icon='LINKED')
         op.light = light_obj.name
 
 
-class LLT_OT_obj_control_panel(bpy.types.Panel):
-    bl_label = "Object Linking"
+class LLT_PT_obj_control_panel(bpy.types.Panel):
+    bl_label = ""
     bl_idname = "LLT_OT_obj_control_panel"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "LH"
+    bl_options = {'HEADER_LAYOUT_EXPAND'}
 
     @classmethod
     def poll(cls, context):
         return context.scene.render.engine == 'CYCLES'
+
+    def draw_header(self, context):
+        layout = self.layout
+        row = layout.row(align=True)
+        row.label(text="Light Linking")
+        tips = row.operator(question_op_id, text='', icon='QUESTION', emboss=False)
+        tips.data = p_(
+            """Object Linking Panel
+This Panel Lists all the lights that affected the selected/pinned object.
+Provides buttons to toggle the light effecting state of the objects."""
+        )
+        row.separator()
 
     def draw(self, context):
         layout = self.layout
@@ -259,11 +287,11 @@ def update_pin_object(self, context):
 
 
 def update_pin_object2(self, context):
-    if context.scene.object_linking_pin_object is True:
+    if context.scene.object_linking_pin is True:
         if context.object and context.object.select_get():
             context.scene.object_linking_pin_object = context.object
         else:
-            context.scene.object_linking_pin_object = False
+            context.scene.object_linking_pin = False
     else:
         context.scene.object_linking_pin_object = None
 
@@ -280,14 +308,14 @@ def register():
         poll=lambda self, obj: obj.type in {'LIGHT', 'MESH'}, type=bpy.types.Object,
     )
     bpy.types.Scene.object_linking_pin_object = bpy.props.PointerProperty(
-        poll=lambda self, obj: obj.type not in {'LIGHT'}, type=bpy.types.Object,
+        poll=lambda self, obj: obj.type in {'MESH'}, type=bpy.types.Object,
     )
 
     bpy.types.Scene.light_linking_pin = bpy.props.BoolProperty(name='Pin', update=update_pin_object)
     bpy.types.Scene.object_linking_pin = bpy.props.BoolProperty(name='Pin', update=update_pin_object2)
 
     bpy.utils.register_class(LLT_PT_light_control_panel)
-    bpy.utils.register_class(LLT_OT_obj_control_panel)
+    bpy.utils.register_class(LLT_PT_obj_control_panel)
 
 
 def unregister():
@@ -296,4 +324,4 @@ def unregister():
     del bpy.types.Scene.light_linking_pin
 
     bpy.utils.unregister_class(LLT_PT_light_control_panel)
-    bpy.utils.unregister_class(LLT_OT_obj_control_panel)
+    bpy.utils.unregister_class(LLT_PT_obj_control_panel)
