@@ -43,7 +43,7 @@ def draw_select_btn(layout, item):
         op.coll = item.name
 
 
-def draw_toggle_btn(layout: bpy.types.Layout,
+def draw_toggle_btn(layout,
                     state_info: dict,
                     light_obj: bpy.types.Object,
                     item: bpy.types.Object | bpy.types.Collection):
@@ -77,7 +77,8 @@ def draw_toggle_btn(layout: bpy.types.Layout,
             op.coll = item.name
 
 
-def draw_remove_button(layout: bpy.types.Layout, light_obj: bpy.types.Object,
+def draw_remove_button(layout,
+                       light_obj: bpy.types.Object,
                        item: bpy.types.Object | bpy.types.Collection):
     op = layout.operator(remove_op_id, text='', icon="X")
     if isinstance(item, bpy.types.Object):
@@ -119,14 +120,12 @@ def draw_light_link(object, layout, use_pin=False):
     row.operator('object.light_linking_unlink_from_collection', text='', icon='REMOVE')
 
 
-class LLT_PT_panel(bpy.types.Panel):
+class LLT_PT_light_control_panel(bpy.types.Panel):
     bl_label = "Light Linking"
-    bl_idname = "LLT_PT_panel"
+    bl_idname = "LLT_PT_light_control_panel"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = "Light Linking"
-
-    # bl_options = {'DEFAULT_CLOSED'}
+    bl_category = "LH"
 
     @classmethod
     def poll(cls, context):
@@ -134,17 +133,7 @@ class LLT_PT_panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        # layout.prop(context.scene, 'light_linking_ui', expand=True)
-
         self.draw_light_objs_control(context, layout)
-        # if context.scene.light_linking_ui == 'LIGHT_EX':
-        #     self.draw_light_objs_control(context, layout)
-        #
-        # elif context.scene.light_linking_ui == 'LIGHT':
-        #     self.draw_light(context, layout)
-        #
-        # elif context.scene.light_linking_ui == 'OBJECT':
-        #     self.draw_object(context, layout)
 
     # def draw_light(self, context, layout):
     #     if context.scene.light_linking_pin:
@@ -161,16 +150,6 @@ class LLT_PT_panel(bpy.types.Panel):
     #
     #         draw_light_link(context.object, layout, use_pin=True)
     #
-    def draw_object(self, context, layout):
-        col = layout.column()
-        item = context.object
-        obj_state_dict = get_lights_from_effect_obj(context.object)
-        for (light_obj, state_info) in obj_state_dict:
-            row = col.row()
-            draw_select_btn(row, light_obj)
-            draw_toggle_btn(row, state_info, light_obj, item)
-            row.separator()
-            draw_remove_button(row, light_obj, item)
 
     def draw_light_objs_control(self, context, layout):
         if context.scene.light_linking_pin:
@@ -214,7 +193,7 @@ class LLT_PT_panel(bpy.types.Panel):
             row.scale_x = 1.1
             row.scale_y = 1.1
 
-            draw_select_btn(layout, item)
+            draw_select_btn(row, item)
             draw_toggle_btn(row, state_info, light_obj, item)
             row.separator()
             draw_remove_button(row, light_obj, item)
@@ -223,6 +202,36 @@ class LLT_PT_panel(bpy.types.Panel):
         col.separator()
         op = col.operator(link_op_id, text='Selected Objects', icon='LINKED')
         op.light = light_obj.name
+
+
+class LLT_OT_obj_control_panel(bpy.types.Panel):
+    bl_label = "Object Linking"
+    bl_idname = "LLT_OT_obj_control_panel"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "LH"
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene.render.engine == 'CYCLES'
+
+    def draw(self, context):
+        layout = self.layout
+        self.draw_object(context, layout)
+
+    def draw_object(self, context, layout):
+        col = layout.column()
+        item = context.object
+        obj_state_dict = get_lights_from_effect_obj(context.object)
+        if len(obj_state_dict) == 0:
+            col.label(text=p_("No light", "No light"), icon='LIGHT')
+            return
+        for (light_obj, state_info) in obj_state_dict.items():
+            row = col.row()
+            draw_select_btn(row, light_obj)
+            draw_toggle_btn(row, state_info, light_obj, item)
+            row.separator()
+            draw_remove_button(row, light_obj, item)
 
 
 def update_pin_object(self, context):
@@ -249,7 +258,8 @@ def register():
 
     bpy.types.Scene.light_linking_pin = bpy.props.BoolProperty(name='Pin', update=update_pin_object)
 
-    bpy.utils.register_class(LLT_PT_panel)
+    bpy.utils.register_class(LLT_PT_light_control_panel)
+    bpy.utils.register_class(LLT_OT_obj_control_panel)
 
 
 def unregister():
@@ -257,4 +267,5 @@ def unregister():
     del bpy.types.Scene.light_linking_pin_object
     del bpy.types.Scene.light_linking_pin
 
-    bpy.utils.unregister_class(LLT_PT_panel)
+    bpy.utils.unregister_class(LLT_PT_light_control_panel)
+    bpy.utils.unregister_class(LLT_OT_obj_control_panel)
