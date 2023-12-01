@@ -1,8 +1,8 @@
 bl_info = {
-    "name": "LightLinkingPanel",
+    "name": "LightHelper",
     "author": "AIGODLIKE社区,Atticus",
     "blender": (4, 0, 0),
-    "version": (0, 1),
+    "version": (0, 2),
     "category": "AIGODLIKE",
     "support": "COMMUNITY",
     "doc_url": "",
