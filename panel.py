@@ -220,9 +220,23 @@ class LLT_OT_obj_control_panel(bpy.types.Panel):
         self.draw_object(context, layout)
 
     def draw_object(self, context, layout):
+        if context.scene.object_linking_pin:
+            item = context.scene.object_linking_pin_object
+        else:
+            item = context.object
+        if not item: return
+        if item.type == 'LIGHT':
+            layout.label(text="Light can't be effect object")
+            return
+
         col = layout.column()
-        item = context.object
-        obj_state_dict = get_lights_from_effect_obj(context.object)
+        # top line
+        row = col.row(align=True)
+        row.label(text=f"{item.name}", icon=get_light_icon(item))
+        row.separator()
+        row.prop(bpy.context.scene, 'object_linking_pin', text='', icon='PINNED')
+
+        obj_state_dict = get_lights_from_effect_obj(item)
         if len(obj_state_dict) == 0:
             col.label(text=p_("No light", "No light"), icon='LIGHT')
             return
@@ -244,6 +258,16 @@ def update_pin_object(self, context):
         context.scene.light_linking_pin_object = None
 
 
+def update_pin_object2(self, context):
+    if context.scene.object_linking_pin_object is True:
+        if context.object and context.object.select_get():
+            context.scene.object_linking_pin_object = context.object
+        else:
+            context.scene.object_linking_pin_object = False
+    else:
+        context.scene.object_linking_pin_object = None
+
+
 def register():
     bpy.types.Scene.light_linking_ui = bpy.props.EnumProperty(
         items=[
@@ -255,8 +279,12 @@ def register():
     bpy.types.Scene.light_linking_pin_object = bpy.props.PointerProperty(
         poll=lambda self, obj: obj.type in {'LIGHT', 'MESH'}, type=bpy.types.Object,
     )
+    bpy.types.Scene.object_linking_pin_object = bpy.props.PointerProperty(
+        poll=lambda self, obj: obj.type not in {'LIGHT'}, type=bpy.types.Object,
+    )
 
     bpy.types.Scene.light_linking_pin = bpy.props.BoolProperty(name='Pin', update=update_pin_object)
+    bpy.types.Scene.object_linking_pin = bpy.props.BoolProperty(name='Pin', update=update_pin_object2)
 
     bpy.utils.register_class(LLT_PT_light_control_panel)
     bpy.utils.register_class(LLT_OT_obj_control_panel)

@@ -227,22 +227,17 @@ def get_lights_from_effect_obj(obj: bpy.types.Object) -> dict:
                 CollectionType.BLOCKER: None
             }
             if receiver_coll:
-                coll_objs = enum_coll_objs_from_coll(receiver_coll)
-                for obj in coll_objs:
-                    light_state[light_obj] = {
-                        CollectionType.RECEIVER: get_coll_item_linking_state(coll_objs[obj]),
-                        CollectionType.BLOCKER: None
-                    }
+                for i, o in enumerate(receiver_coll.objects):
+                    if o is obj:
+                        light_state[light_obj][CollectionType.RECEIVER] = get_coll_item_linking_state(
+                            receiver_coll.collection_objects[i])
+                        break
             if blocker_coll:
-                coll_objs = enum_coll_objs_from_coll(blocker_coll)
-                for obj in coll_objs:
-                    if light_state.get(light_obj):
-                        light_state[light_obj][CollectionType.BLOCKER] = get_coll_item_linking_state(coll_objs[obj])
-                    else:
-                        light_state[light_obj] = {
-                            CollectionType.RECEIVER: None,
-                            CollectionType.BLOCKER: get_coll_item_linking_state(coll_objs[obj])
-                        }
+                for i, o in enumerate(blocker_coll.objects):
+                    if o is obj:
+                        light_state[light_obj][CollectionType.BLOCKER] = get_coll_item_linking_state(
+                            blocker_coll.collection_objects[i])
+                        break
 
     return light_state
 
