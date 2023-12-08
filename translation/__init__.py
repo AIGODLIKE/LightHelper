@@ -26,19 +26,21 @@ class TranslationHelper():
 ############
 from . import zh_HANS
 
-adjt_zh_CN = TranslationHelper('light_helper_zh_CN', zh_HANS.data)
-adjt_zh_HANS = TranslationHelper('light_helper_zh_HANS', zh_HANS.data, lang='zh_HANS')
+zh_CN = TranslationHelper('light_helper_zh_CN', zh_HANS.data)
+zh_HANS = TranslationHelper('light_helper_zh_HANS', zh_HANS.data, lang='zh_HANS')
 
 
 def register():
     if bpy.app.version < (4, 0, 0):
-        adjt_zh_CN.register()
+        zh_CN.register()
     else:
-        adjt_zh_HANS.register()
+        zh_CN.register()
+        zh_HANS.register()
 
 
 def unregister():
     if bpy.app.version < (4, 0, 0):
-        adjt_zh_CN.unregister()
+        zh_CN.unregister()
     else:
-        adjt_zh_HANS.unregister()
+        zh_CN.unregister()
+        zh_HANS.unregister()
