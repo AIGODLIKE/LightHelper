@@ -38,7 +38,7 @@ def register():
 
 
 def unregister():
-    del bpy.types.Object.light_linking.state
+    del bpy.types.Object.light_linking_state
     del bpy.types.Object.show_light_linking_collection
 
     bpy.app.handlers.depsgraph_update_pre.remove(handle_all_lights)
