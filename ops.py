@@ -90,13 +90,26 @@ class LLP_OT_add_light_linking(bpy.types.Operator):
         items=enum_coll_type, options={'SKIP_SAVE'}
     )
 
+    init: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
     add_all: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
 
     def execute(self, context):
         obj = bpy.data.objects.get(self.obj)
         light = bpy.data.objects.get(self.light)
-
-        if not self.add_all:
+        if self.init or self.add_all:
+            # create collection for light linking and shadow linking(create safe object)
+            from .utils import ensure_linking_coll
+            ensure_linking_coll(CollectionType.RECEIVER, light)
+            ensure_linking_coll(CollectionType.BLOCKER, light)
+            # link to both collections
+            if self.add_all:
+                coll1 = light.light_linking.receiver_collection
+                coll2 = light.light_linking.blocker_collection
+                if obj not in coll1.objects:
+                    coll1.objects.link(obj)
+                if obj not in coll2.objects:
+                    coll2.objects.link(obj)
+        else:
             if not obj or not light: return {"CANCELLED"}
             coll = None
             if self.coll_type == CollectionType.RECEIVER.value:
@@ -111,10 +124,6 @@ class LLP_OT_add_light_linking(bpy.types.Operator):
                     light.light_linking.blocker_collection = coll
             if coll and obj:
                 coll.objects.link(obj)
-        else:
-            from .utils import ensure_linking_coll
-            ensure_linking_coll(CollectionType.RECEIVER, light)
-            ensure_linking_coll(CollectionType.BLOCKER, light)
 
         return {"FINISHED"}
 

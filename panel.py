@@ -188,7 +188,7 @@ Provides buttons to toggle the light effecting state of the objects."""
                 SAFE_OBJ_NAME not in coll_receiver.objects) or (
                 SAFE_OBJ_NAME not in coll_blocker.objects):
             op = col.operator(add_op_id, text='Init', icon='ADD')
-            op.add_all = True
+            op.init = True
             op.light = light_obj.name
             return
 
@@ -283,6 +283,8 @@ Provides buttons to toggle the light effecting state of the objects."""
         obj_state_dict = get_lights_from_effect_obj(item)
         if len(obj_state_dict) == 0:
             col.label(text='No light effecting this object', icon='LIGHT')
+            box = col.box()
+            box.prop(context.window_manager, 'object_linking_add_object', text='', icon='ADD')
             return
         for (light_obj, state_info) in obj_state_dict.items():
             row = col.row()
@@ -291,8 +293,12 @@ Provides buttons to toggle the light effecting state of the objects."""
             row.separator()
             draw_remove_button(row, light_obj, item)
 
+        box = col.box()
+        box.prop(context.window_manager, 'object_linking_add_object', text='', icon='ADD')
+
 
 def update_pin_object(self, context):
+    """Update pin object, effect the context layout object"""
     if context.scene.light_linking_pin is True:
         if context.object and context.object.select_get():
             context.scene.light_linking_pin_object = context.object
@@ -303,6 +309,7 @@ def update_pin_object(self, context):
 
 
 def update_pin_object2(self, context):
+    """Update pin object, effect the context layout object"""
     if context.scene.object_linking_pin is True:
         if context.object and context.object.select_get():
             context.scene.object_linking_pin_object = context.object
@@ -313,6 +320,9 @@ def update_pin_object2(self, context):
 
 
 def update_add_collection(self, context):
+    """Add collection to light's receiver and blocker collection
+    Most of the time, use drag and drop in the property layout to add
+    """
     wm = context.window_manager
     if wm.light_linking_add_collection is None: return
 
@@ -325,7 +335,6 @@ def update_add_collection(self, context):
         return
 
     coll = wm.light_linking_add_collection
-    # print(coll)
     # add collection to light's receiver and blocker collection
     if coll.name not in obj.light_linking.receiver_collection.children:
         obj.light_linking.receiver_collection.children.link(coll)
@@ -336,6 +345,9 @@ def update_add_collection(self, context):
 
 
 def update_add_obj(self, context):
+    """Add object to light's receiver and blocker collection
+    Most of the time, use drag and drop in the property layout to add
+    """
     wm = context.window_manager
     if wm.light_linking_add_object is None: return
 
@@ -357,24 +369,47 @@ def update_add_obj(self, context):
     wm.light_linking_add_object = None
 
 
+def update_add_light(self, context):
+    wm = context.window_manager
+    if wm.object_linking_add_object is None: return
+
+    if context.scene.object_linking_pin:
+        obj = context.scene.object_linking_pin_object
+    else:
+        obj = context.object
+    if obj is None or obj == wm.object_linking_add_object:
+        wm.object_linking_add_object = None
+        return
+
+    light = wm.object_linking_add_object
+
+    init_op = getattr(getattr(bpy.ops, add_op_id.split('.')[0]), add_op_id.split('.')[1])
+    init_op('INVOKE_DEFAULT', light=light.name, init=True, obj=obj.name)
+
+    coll1 = light.light_linking.receiver_collection
+    coll2 = light.light_linking.blocker_collection
+
+    if coll1 and obj.name not in coll1.objects:
+        coll1.objects.link(obj)
+    if coll2 and obj.name not in coll2.objects:
+        coll2.objects.link(obj)
+
+    # restore
+    wm.object_linking_add_object = None
+
 def register():
-    bpy.types.Scene.light_linking_ui = bpy.props.EnumProperty(
-        items=[
-            # ('LIGHT', 'Simple', ''),
-            # ('LIGHT_EX', 'Advanced', ''),
-            ('OBJECT', 'Object', '')
-        ]
-    )
+    # pin object, use to change context layout object
     bpy.types.Scene.light_linking_pin_object = bpy.props.PointerProperty(
         poll=lambda self, obj: obj.type in {'LIGHT', 'MESH'}, type=bpy.types.Object,
     )
     bpy.types.Scene.object_linking_pin_object = bpy.props.PointerProperty(
         poll=lambda self, obj: obj.type in {'MESH'}, type=bpy.types.Object,
     )
-
+    # pin property to change context draw layout
     bpy.types.Scene.light_linking_pin = bpy.props.BoolProperty(name='Pin', update=update_pin_object)
     bpy.types.Scene.object_linking_pin = bpy.props.BoolProperty(name='Pin', update=update_pin_object2)
 
+    # drag & drop to add
     bpy.types.WindowManager.light_linking_add_collection = bpy.props.PointerProperty(name='Drag and Drop to Add',
                                                                                      type=bpy.types.Collection,
                                                                                      update=update_add_collection
@@ -383,17 +418,22 @@ def register():
                                                                                  type=bpy.types.Object,
                                                                                  update=update_add_obj
                                                                                  )
+    bpy.types.WindowManager.object_linking_add_object = bpy.props.PointerProperty(name='Drag and Drop to Add',
+                                                                                  type=bpy.types.Object,
+                                                                                  update=update_add_light
+                                                                                  )
 
     bpy.utils.register_class(LLT_PT_light_control_panel)
     bpy.utils.register_class(LLT_PT_obj_control_panel)
 
 
 def unregister():
-    del bpy.types.Scene.light_linking_ui
     del bpy.types.Scene.light_linking_pin_object
     del bpy.types.Scene.light_linking_pin
     del bpy.types.Scene.object_linking_pin_object
     del bpy.types.WindowManager.light_linking_add_collection
+    del bpy.types.WindowManager.light_linking_add_object
+    del bpy.types.WindowManager.object_linking_add_object
 
     bpy.utils.unregister_class(LLT_PT_light_control_panel)
     bpy.utils.unregister_class(LLT_PT_obj_control_panel)
