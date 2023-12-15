@@ -221,7 +221,7 @@ Provides buttons to toggle the light effecting state of the objects."""
 
 class LLT_PT_obj_control_panel(bpy.types.Panel):
     bl_label = ""
-    bl_idname = "LLT_OT_obj_control_panel"
+    bl_idname = "LLT_PT_obj_control_panel"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "LH"
