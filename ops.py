@@ -172,7 +172,7 @@ class LLP_OT_toggle_light_linking(bpy.types.Operator):
 
 class LLP_OT_link_selected_objs(bpy.types.Operator):
     bl_idname = 'llp.link_selected_objs'
-    bl_label = "Link Selected Objects"
+    bl_label = "Add Selected Objects"
 
     light: bpy.props.StringProperty(options={'SKIP_SAVE'})
 

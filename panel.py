@@ -196,7 +196,14 @@ Provides buttons to toggle the light effecting state of the objects."""
 
         safe_obj = bpy.data.objects.get(SAFE_OBJ_NAME)
         if len(obj_state_dict) == 1 and safe_obj in obj_state_dict.keys():
-            op = col.operator(link_op_id, icon='LINKED')
+            box = col.box()
+            row = box.row()
+            row.label(text='', icon='ADD')
+            row.prop(context.window_manager, 'light_linking_add_collection', text='', icon='OUTLINER_COLLECTION')
+            row.prop(context.window_manager, 'light_linking_add_object', text='', icon='OBJECT_DATA')
+
+            row = box.row()
+            op = row.operator(link_op_id, icon='ADD')
             op.light = light_obj.name
             return
 
@@ -215,7 +222,14 @@ Provides buttons to toggle the light effecting state of the objects."""
 
         # extra op
         col.separator()
-        op = col.operator(link_op_id, icon='LINKED')
+        box = col.box()
+        row = box.row()
+        row.label(text='',icon = 'ADD')
+        row.prop(context.window_manager, 'light_linking_add_collection', text='', icon='OUTLINER_COLLECTION')
+        row.prop(context.window_manager, 'light_linking_add_object', text='', icon='OBJECT_DATA')
+
+        row = box.row()
+        op = row.operator(link_op_id, icon='ADD')
         op.light = light_obj.name
 
 
@@ -296,6 +310,51 @@ def update_pin_object2(self, context):
         context.scene.object_linking_pin_object = None
 
 
+def update_add_collection(self, context):
+    wm = context.window_manager
+    if wm.light_linking_add_collection is None: return
+
+    if context.scene.light_linking_pin:
+        obj = context.scene.light_linking_pin_object
+    else:
+        obj = context.object
+    if obj is None:
+        wm.light_linking_add_collection = None
+        return
+
+    coll = wm.light_linking_add_collection
+    # print(coll)
+    # add collection to light's receiver and blocker collection
+    if coll.name not in obj.light_linking.receiver_collection.children:
+        obj.light_linking.receiver_collection.children.link(coll)
+    if coll.name not in obj.light_linking.blocker_collection.children:
+        obj.light_linking.blocker_collection.children.link(coll)
+    # restore
+    wm.light_linking_add_collection = None
+
+
+def update_add_obj(self, context):
+    wm = context.window_manager
+    if wm.light_linking_add_object is None: return
+
+    if context.scene.light_linking_pin:
+        obj = context.scene.light_linking_pin_object
+    else:
+        obj = context.object
+    if obj is None:
+        wm.light_linking_add_object = None
+        return
+
+    obj2 = wm.light_linking_add_object
+    # add collection to light's receiver and blocker collection
+    if obj2.name not in obj.light_linking.receiver_collection.objects:
+        obj.light_linking.receiver_collection.objects.link(obj2)
+    if obj2.name not in obj.light_linking.blocker_collection.objects:
+        obj.light_linking.blocker_collection.objects.link(obj2)
+    # restore
+    wm.light_linking_add_object = None
+
+
 def register():
     bpy.types.Scene.light_linking_ui = bpy.props.EnumProperty(
         items=[
@@ -314,6 +373,13 @@ def register():
     bpy.types.Scene.light_linking_pin = bpy.props.BoolProperty(name='Pin', update=update_pin_object)
     bpy.types.Scene.object_linking_pin = bpy.props.BoolProperty(name='Pin', update=update_pin_object2)
 
+    bpy.types.WindowManager.light_linking_add_collection = bpy.props.PointerProperty(name= 'Drag and Drop to Add',
+        type=bpy.types.Collection, update=update_add_collection
+    )
+    bpy.types.WindowManager.light_linking_add_object = bpy.props.PointerProperty(name= 'Drag and Drop to Add',
+        type=bpy.types.Object, update=update_add_obj
+    )
+
     bpy.utils.register_class(LLT_PT_light_control_panel)
     bpy.utils.register_class(LLT_PT_obj_control_panel)
 
@@ -322,6 +388,8 @@ def unregister():
     del bpy.types.Scene.light_linking_ui
     del bpy.types.Scene.light_linking_pin_object
     del bpy.types.Scene.light_linking_pin
+    del bpy.types.Scene.object_linking_pin_object
+    del bpy.types.WindowManager.light_linking_add_collection
 
     bpy.utils.unregister_class(LLT_PT_light_control_panel)
     bpy.utils.unregister_class(LLT_PT_obj_control_panel)
