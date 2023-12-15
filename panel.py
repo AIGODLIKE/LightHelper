@@ -224,7 +224,7 @@ Provides buttons to toggle the light effecting state of the objects."""
         col.separator()
         box = col.box()
         row = box.row()
-        row.label(text='',icon = 'ADD')
+        row.label(text='', icon='ADD')
         row.prop(context.window_manager, 'light_linking_add_collection', text='', icon='OUTLINER_COLLECTION')
         row.prop(context.window_manager, 'light_linking_add_object', text='', icon='OBJECT_DATA')
 
@@ -277,6 +277,8 @@ Provides buttons to toggle the light effecting state of the objects."""
         row.label(text=f"{item.name}", icon=get_light_icon(item))
         row.separator()
         row.prop(bpy.context.scene, 'object_linking_pin', text='', icon='PINNED')
+
+        col.separator()
 
         obj_state_dict = get_lights_from_effect_obj(item)
         if len(obj_state_dict) == 0:
@@ -373,12 +375,14 @@ def register():
     bpy.types.Scene.light_linking_pin = bpy.props.BoolProperty(name='Pin', update=update_pin_object)
     bpy.types.Scene.object_linking_pin = bpy.props.BoolProperty(name='Pin', update=update_pin_object2)
 
-    bpy.types.WindowManager.light_linking_add_collection = bpy.props.PointerProperty(name= 'Drag and Drop to Add',
-        type=bpy.types.Collection, update=update_add_collection
-    )
-    bpy.types.WindowManager.light_linking_add_object = bpy.props.PointerProperty(name= 'Drag and Drop to Add',
-        type=bpy.types.Object, update=update_add_obj
-    )
+    bpy.types.WindowManager.light_linking_add_collection = bpy.props.PointerProperty(name='Drag and Drop to Add',
+                                                                                     type=bpy.types.Collection,
+                                                                                     update=update_add_collection
+                                                                                     )
+    bpy.types.WindowManager.light_linking_add_object = bpy.props.PointerProperty(name='Drag and Drop to Add',
+                                                                                 type=bpy.types.Object,
+                                                                                 update=update_add_obj
+                                                                                 )
 
     bpy.utils.register_class(LLT_PT_light_control_panel)
     bpy.utils.register_class(LLT_PT_obj_control_panel)
