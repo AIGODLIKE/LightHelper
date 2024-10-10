@@ -2,7 +2,7 @@ bl_info = {
     "name": "LightHelper",
     "author": "AIGODLIKE社区,Atticus",
     "blender": (4, 0, 0),
-    "version": (0, 2, 3),
+    "version": (0, 3, 0),
     "category": "AIGODLIKE",
     "support": "COMMUNITY",
     "doc_url": "",
