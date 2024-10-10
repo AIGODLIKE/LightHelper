@@ -131,6 +131,8 @@ class LLT_PT_light_control_panel(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
+        if bpy.app.version>=(4,3,0):
+            return context.scene.render.engine  in {"CYCLES", "BLENDER_EEVEE_NEXT"}
         return context.scene.render.engine == 'CYCLES'
 
     def draw_header(self, context):
