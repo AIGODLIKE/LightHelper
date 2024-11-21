@@ -343,7 +343,7 @@ def update_add_collection(self, context):
     if coll.name not in obj.light_linking.blocker_collection.children:
         obj.light_linking.blocker_collection.children.link(coll)
     # restore
-    wm.light_linking_add_collection = None
+    # wm.light_linking_add_collection = None
 
 
 def update_add_obj(self, context):
