@@ -1,8 +1,8 @@
 import bpy
 from bpy.app.translations import pgettext_iface as p_
 
-from .utils import get_all_light_effect_items_state, get_linking_coll
 from .utils import CollectionType, StateValue, SAFE_OBJ_NAME
+from .utils import get_all_light_effect_items_state, get_linking_coll
 from .utils import get_lights_from_effect_obj
 
 select_op_id = 'llp.select_item'
@@ -131,8 +131,8 @@ class LLT_PT_light_control_panel(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        if bpy.app.version>=(4,3,0):
-            return context.scene.render.engine  in {"CYCLES", "BLENDER_EEVEE_NEXT"}
+        if bpy.app.version >= (4, 3, 0):
+            return context.scene.render.engine in {"CYCLES", "BLENDER_EEVEE_NEXT"}
         return context.scene.render.engine == 'CYCLES'
 
     def draw_header(self, context):
@@ -343,7 +343,7 @@ def update_add_collection(self, context):
     if coll.name not in obj.light_linking.blocker_collection.children:
         obj.light_linking.blocker_collection.children.link(coll)
     # restore
-    # wm.light_linking_add_collection = None
+    wm.light_linking_add_collection = None
 
 
 def update_add_obj(self, context):
@@ -368,7 +368,7 @@ def update_add_obj(self, context):
     if obj2.name not in obj.light_linking.blocker_collection.objects:
         obj.light_linking.blocker_collection.objects.link(obj2)
     # restore
-    wm.light_linking_add_object = None
+    # wm["light_linking_add_object"] = None
 
 
 def update_add_light(self, context):
@@ -398,6 +398,7 @@ def update_add_light(self, context):
 
     # restore
     wm.object_linking_add_object = None
+
 
 def register():
     # pin object, use to change context layout object
