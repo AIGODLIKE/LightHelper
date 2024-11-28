@@ -148,32 +148,39 @@ Provides buttons to toggle the light effecting state of the objects."""
         self.draw_light_objs_control(context, layout)
 
     def draw_light_objs_control(self, context, layout):
-        from .ops import LLP_OT_add_light_linking, LLP_OT_link_selected_objs
+        from .ops import LLP_OT_add_light_linking, LLP_OT_link_selected_objs, LLP_OT_clear_light_linking
 
         if context.scene.light_helper_property.light_linking_pin:
             light_obj = context.scene.light_helper_property.light_linking_pin_object
         else:
             light_obj = context.object
-        if not light_obj: return
+        if not light_obj:
+            return
+
+        coll_receiver = get_linking_coll(light_obj, CollectionType.RECEIVER)
+        coll_blocker = get_linking_coll(light_obj, CollectionType.BLOCKER)
+        not_init = (not coll_receiver and not coll_blocker) or (
+                coll_receiver and SAFE_OBJ_NAME not in coll_receiver.objects) or (
+                           coll_blocker and SAFE_OBJ_NAME not in coll_blocker.objects)
 
         col = layout.column()
         # top line
         row = col.row(align=True)
         row.label(text=f"{light_obj.name}", icon=get_light_icon(light_obj), translate=False)
         row.separator()
-        row.operator(LLP)
+        if not not_init:
+            row.operator(LLP_OT_clear_light_linking.bl_idname, text="", icon="PANEL_CLOSE")
         row.prop(bpy.context.scene.light_helper_property, 'light_linking_pin', text='', icon='PINNED')
 
-        coll_receiver = get_linking_coll(light_obj, CollectionType.RECEIVER)
-        coll_blocker = get_linking_coll(light_obj, CollectionType.BLOCKER)
-
         # return if no receiver/blocker collection (exclude the safe obj)
-        if (not coll_receiver and not coll_blocker) or (
-                SAFE_OBJ_NAME not in coll_receiver.objects) or (
-                SAFE_OBJ_NAME not in coll_blocker.objects):
+        if not_init:
             op = col.operator(LLP_OT_add_light_linking.bl_idname, text='Init', icon='ADD')
             op.init = True
             op.light = light_obj.name
+            if not LLP_OT_add_light_linking.poll(context):
+                cc = col.column()
+                cc.alert = True
+                cc.label(text="Please select light or can be illuminated object")
             return
 
         obj_state_dict = get_all_light_effect_items_state(light_obj)

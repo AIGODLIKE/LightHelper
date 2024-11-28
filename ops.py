@@ -13,6 +13,14 @@ def enum_coll_type(self, context):
     return items
 
 
+def get_light_obj(context):
+    if context.scene.light_helper_property.light_linking_pin:
+        light_obj = context.scene.light_helper_property.light_linking_pin_object
+    else:
+        light_obj = context.object
+    return light_obj
+
+
 class LLP_OT_question(bpy.types.Operator):
     bl_idname = 'llp.question'
     bl_label = ""
@@ -41,6 +49,11 @@ class LLP_OT_remove_light_linking(bpy.types.Operator):
     )
 
     remove_all: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
+
+    @classmethod
+    def poll(cls, context):
+        obj = get_light_obj(context)
+        return obj is not None
 
     def execute(self, context):
         obj = bpy.data.objects.get(self.obj)
@@ -76,6 +89,21 @@ class LLP_OT_remove_light_linking(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class LLP_OT_clear_light_linking(bpy.types.Operator):
+    bl_idname = 'llp.clear_light_linking'
+    bl_label = "Clear"
+
+    @classmethod
+    def poll(cls, context):
+        return context.object is not None
+
+    def execute(self, context):
+        light_linking = context.object.light_linking
+        light_linking.receiver_collection = None
+        light_linking.blocker_collection = None
+        return {"FINISHED"}
+
+
 class LLP_OT_add_light_linking(bpy.types.Operator):
     bl_idname = 'llp.add_light_linking'
     bl_label = "Add"
@@ -89,6 +117,12 @@ class LLP_OT_add_light_linking(bpy.types.Operator):
 
     init: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
     add_all: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
+
+    @classmethod
+    def poll(cls, context):
+        return (context.object is not None) and (
+                context.object.type in {"LIGHT", "MESH", "CURVE", "SURFACE", "META", "FONT", "GPENCIL"}
+        )
 
     def execute(self, context):
         obj = bpy.data.objects.get(self.obj)
@@ -107,7 +141,8 @@ class LLP_OT_add_light_linking(bpy.types.Operator):
                 if obj not in coll2.objects:
                     coll2.objects.link(obj)
         else:
-            if not obj or not light: return {"CANCELLED"}
+            if not obj or not light:
+                return {"CANCELLED"}
             coll = None
             if self.coll_type == CollectionType.RECEIVER.value:
                 coll = light.light_linking.receiver_collection
@@ -138,6 +173,10 @@ class LLP_OT_toggle_light_linking(bpy.types.Operator):
     )
     # display
     value_set: bpy.props.StringProperty(options={'SKIP_SAVE'})
+
+    @classmethod
+    def poll(cls, context):
+        return context.object is not None
 
     @classmethod
     def description(cls, context, properties):
@@ -182,27 +221,34 @@ class LLP_OT_link_selected_objs(bpy.types.Operator):
 
     light: bpy.props.StringProperty(options={'SKIP_SAVE'})
 
+    @classmethod
+    def poll(cls, context):
+        return context.object is not None
+
     def execute(self, context):
         light = bpy.data.objects.get(self.light)
         coll1 = light.light_linking.receiver_collection
         coll2 = light.light_linking.blocker_collection
         for obj in context.selected_objects:
-            if obj == light: continue
+            if obj == light:
+                continue
             if coll1 and obj.name not in coll1.objects:
                 coll1.objects.link(obj)
             if coll2 and obj.name not in coll2.objects:
                 coll2.objects.link(obj)
-
         return {"FINISHED"}
 
 
 class LLP_OT_select_item(bpy.types.Operator):
     bl_idname = 'llp.select_item'
     bl_label = "Select"
-    # bl_options = {'REGISTER', 'UNDO'}
 
     obj: bpy.props.StringProperty(options={'SKIP_SAVE'})
     coll: bpy.props.StringProperty(options={'SKIP_SAVE'})
+
+    @classmethod
+    def poll(cls, context):
+        return context.object is not None
 
     def execute(self, context):
         obj = bpy.data.objects.get(self.obj)
@@ -247,6 +293,7 @@ class LLP_OT_select_item(bpy.types.Operator):
 
 ops_list = [
     LLP_OT_remove_light_linking,
+    LLP_OT_clear_light_linking,
     LLP_OT_add_light_linking,
     LLP_OT_toggle_light_linking,
     LLP_OT_select_item,
