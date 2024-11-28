@@ -2,7 +2,7 @@ bl_info = {
     "name": "LightHelper",
     "author": "AIGODLIKE社区,Atticus",
     "blender": (4, 0, 0),
-    "version": (0, 3, 0),
+    "version": (0, 3, 2),
     "category": "AIGODLIKE",
     "support": "COMMUNITY",
     "doc_url": "",
@@ -13,11 +13,11 @@ bl_info = {
 
 __ADDON_NAME__ = __name__
 
-from . import panel, props, ops, translation
+from . import panel, property, ops, translation
 
 
 def register():
-    props.register()
+    property.register()
     ops.register()
     panel.register()
     translation.register()
@@ -25,7 +25,7 @@ def register():
 
 def unregister():
     panel.unregister()
-    props.unregister()
+    property.unregister()
     ops.unregister()
     translation.unregister()
 

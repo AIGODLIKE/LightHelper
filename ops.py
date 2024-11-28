@@ -5,9 +5,6 @@ from .utils import get_light_effect_obj_state, get_light_effect_coll_state
 from .utils import set_light_effect_obj_state, set_light_effect_coll_state, CollectionType, StateValue
 
 
-# return light_state
-
-
 def enum_coll_type(self, context):
     items = []
     for i in CollectionType:
@@ -248,19 +245,20 @@ class LLP_OT_select_item(bpy.types.Operator):
         bpy.ops.outliner.item_activate(deselect_all=True)
 
 
+ops_list = [
+    LLP_OT_remove_light_linking,
+    LLP_OT_add_light_linking,
+    LLP_OT_toggle_light_linking,
+    LLP_OT_select_item,
+    LLP_OT_link_selected_objs,
+    LLP_OT_question,
+]
+register_class, unregister_class = bpy.utils.register_classes_factory(ops_list)
+
+
 def register():
-    bpy.utils.register_class(LLP_OT_remove_light_linking)
-    bpy.utils.register_class(LLP_OT_add_light_linking)
-    bpy.utils.register_class(LLP_OT_toggle_light_linking)
-    bpy.utils.register_class(LLP_OT_select_item)
-    bpy.utils.register_class(LLP_OT_link_selected_objs)
-    bpy.utils.register_class(LLP_OT_question)
+    register_class()
 
 
 def unregister():
-    bpy.utils.unregister_class(LLP_OT_remove_light_linking)
-    bpy.utils.unregister_class(LLP_OT_add_light_linking)
-    bpy.utils.unregister_class(LLP_OT_toggle_light_linking)
-    bpy.utils.unregister_class(LLP_OT_select_item)
-    bpy.utils.unregister_class(LLP_OT_link_selected_objs)
-    bpy.utils.unregister_class(LLP_OT_question)
+    unregister_class()
