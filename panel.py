@@ -168,10 +168,10 @@ Provides buttons to toggle the light effecting state of the objects."""
         row.label(text=f"{light_obj.name}", icon=get_light_icon(light_obj), translate=False)
         row.separator()
         row.prop(bpy.context.scene.light_helper_property, 'light_linking_pin', text='', icon='PINNED')
-        if not not_init:
-            row.operator(LLP_OT_clear_light_linking.bl_idname, text="", icon="PANEL_CLOSE")
         if LLP_OT_instances_data.poll(context):
             row.operator(LLP_OT_instances_data.bl_idname, text="", icon='RESTRICT_INSTANCED_ON')
+        if not not_init:
+            row.operator(LLP_OT_clear_light_linking.bl_idname, text="", icon="PANEL_CLOSE")
 
         # return if no receiver/blocker collection (exclude the safe obj)
         if not_init:
