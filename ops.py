@@ -323,7 +323,10 @@ class LLP_OT_instances_data(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        light = get_light_obj(context).light_linking
+        light_obj = get_light_obj(context)
+        if not light_obj:
+            return False
+        light = light_obj.light_linking
         receiver = getattr(light, "receiver_collection", None)
         if receiver and receiver.users > 1:
             return True
