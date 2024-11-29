@@ -1,10 +1,10 @@
 name = "Light Helper"
 id = "LightHepler"
-maintainer = "Atticus, AIGODLIKE Community"
+maintainer = "ACGGit Community,Atticus,小萌新"
 version = "0.3.2"
 tagline = "Light Helper"
-blender_version_min = "4.2.0"
+blender_version_min = "4.3.0"
 type = "add-on"
 schema_version = "1.0.0"
-tags = ["Render","User Interface"]
+tags = ["Render", "User Interface"]
 license = ["SPDX:GPL-3.0-or-later"]

@@ -1,6 +1,6 @@
 bl_info = {
     "name": "LightHelper",
-    "author": "AIGODLIKE社区,Atticus",
+    "author": "ACGGit Community,Atticus,小萌新",
     "blender": (4, 0, 0),
     "version": (0, 3, 2),
     "category": "AIGODLIKE",
