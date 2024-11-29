@@ -317,14 +317,44 @@ class LLP_OT_select_item(bpy.types.Operator):
         bpy.context.view_layer.active_layer_collection = lc
 
 
+class LLP_OT_instances_data(bpy.types.Operator):
+    bl_idname = 'llp.instances_data'
+    bl_label = "Instances Data"
+
+    @classmethod
+    def poll(cls, context):
+        light = get_light_obj(context).light_linking
+        receiver = getattr(light, "receiver_collection", None)
+        if receiver and receiver.users > 1:
+            return True
+        blocker = getattr(light, "blocker_collection", None)
+        if blocker and blocker.users > 1:
+            return True
+        return False
+
+    def execute(self, context):
+        light_obj = get_light_obj(context)
+        light = light_obj.light_linking
+        receiver = getattr(light, "receiver_collection", None)
+        if receiver and receiver.users > 1:
+            setattr(light, "receiver_collection", receiver.copy())
+            # bpy.ops.object.light_linking_receiver_collection_new()
+        blocker = getattr(light, "blocker_collection", None)
+        if blocker and blocker.users > 1:
+            setattr(light, "blocker_collection", blocker.copy())
+            # bpy.ops.object.light_linking_blocker_collection_new()
+        return {"FINISHED"}
+
+
 ops_list = [
+    LLP_OT_question,
     LLP_OT_remove_light_linking,
     LLP_OT_clear_light_linking,
     LLP_OT_add_light_linking,
     LLP_OT_toggle_light_linking,
-    LLP_OT_select_item,
     LLP_OT_link_selected_objs,
-    LLP_OT_question,
+    LLP_OT_select_item,
+    LLP_OT_instances_data,
 ]
 register_class, unregister_class = bpy.utils.register_classes_factory(ops_list)
 
