@@ -24,6 +24,20 @@ def check_light_object(obj: bpy.types.Object) -> bool:
     return type_ok and name_ok
 
 
+def get_all_view_layout_collection() -> [bpy.types.Collection]:
+    layer_collection = bpy.context.view_layer.layer_collection
+
+    res = []
+
+    def get_lc(lc: bpy.types.LayerCollection):
+        res.append(lc.collection)
+        for i in lc.children:
+            get_lc(i)
+
+    get_lc(layer_collection)
+    return res
+
+
 class ObjectProperty(PropertyGroup):
     light_linking_state: bpy.props.EnumProperty(
         items=[
@@ -163,9 +177,18 @@ class WindowManagerProperty(PropertyGroup):
 
     # poll
     def poll_object_linking_add_collection(self, coll: bpy.types.Collection):
+        from .utils import get_all_light_effect_items_state
+        if bpy.context.scene.light_helper_property.light_linking_pin:
+            light_obj = bpy.context.scene.light_helper_property.light_linking_pin_object
+        else:
+            light_obj = bpy.context.object
+        light_ok = coll not in get_all_light_effect_items_state(light_obj)
+        coll_ok = coll in get_all_view_layout_collection()
+
         shadow = not coll.name.startswith("Shadow Linking for ")
         light = not coll.name.startswith("Light Linking for ")
-        return shadow and light
+
+        return shadow and light and light_ok and coll_ok
 
     def poll_light_linking_add_object(self, obj: bpy.types.Object):
         from .utils import get_all_light_effect_items_state

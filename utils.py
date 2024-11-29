@@ -3,7 +3,7 @@ from enum import Enum, unique
 import bpy
 
 SAFE_OBJ_NAME = "LLP_SAFE_OBJ"
-ILLUMINATED_OBJECT_TYPE_LIST = ["LIGHT", "MESH", "CURVE", "SURFACE", "META", "FONT", "GPENCIL"]
+ILLUMINATED_OBJECT_TYPE_LIST = ["LIGHT", "MESH", "CURVE", "SURFACE", "META", "FONT", "GPENCIL", "EMPTY"]
 
 
 @unique

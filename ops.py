@@ -1,4 +1,5 @@
 import bpy
+import bpy_types
 from bpy.app.translations import pgettext_iface as p_
 
 from .utils import get_light_effect_obj_state, get_light_effect_coll_state
@@ -31,6 +32,20 @@ def get_area(area_type: str):
         area = max(areas, key=lambda area: area.width * area.height)
         return area
     return None
+
+
+def get_layer_collection_by_coll(coll: bpy_types.Collection) -> bpy.types.LayerCollection:
+    layer_collection = bpy.context.view_layer.layer_collection
+
+    def get_lc(lc: bpy.types.LayerCollection):
+        if lc.collection == coll:
+            return lc
+        for i in lc.children:
+            rs = get_lc(i)
+            if rs:
+                return rs
+
+    return get_lc(layer_collection)
 
 
 class LLP_OT_question(bpy.types.Operator):
@@ -281,7 +296,7 @@ class LLP_OT_select_item(bpy.types.Operator):
             if not area_outliner:
                 return {"CANCELLED"}
 
-            with context.temp_override(area=area_outliner, id=coll):
+            with context.temp_override(area=area_outliner, id=coll, region=area_outliner.regions[0]):
                 self.select_coll_in_outliner(coll)
 
         return {"FINISHED"}
@@ -293,9 +308,13 @@ class LLP_OT_select_item(bpy.types.Operator):
         obj.select_set(True)
 
     def select_coll_in_outliner(self, coll: bpy.types.Collection):
-        # TODO select collection in outliner
         bpy.ops.object.select_all(action='DESELECT')
-        bpy.ops.outliner.item_activate(deselect_all=True)
+        # bpy.ops.outliner.item_activate(deselect_all=True)
+        lc = get_layer_collection_by_coll(coll)
+        if not lc:
+            self.report({'ERROR'}, "Collection not in scene found")
+            return
+        bpy.context.view_layer.active_layer_collection = lc
 
 
 ops_list = [
