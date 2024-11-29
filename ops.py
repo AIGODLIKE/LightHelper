@@ -40,10 +40,6 @@ class LLP_OT_remove_light_linking(bpy.types.Operator):
     bl_idname = 'llp.remove_light_linking'
     bl_label = "Remove"
 
-    obj: bpy.props.StringProperty(options={'SKIP_SAVE'})
-    coll: bpy.props.StringProperty(options={'SKIP_SAVE'})
-    light: bpy.props.StringProperty(options={'SKIP_SAVE'})
-
     coll_type: bpy.props.EnumProperty(
         items=enum_coll_type, options={'SKIP_SAVE'}
     )
@@ -52,26 +48,32 @@ class LLP_OT_remove_light_linking(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        obj = get_light_obj(context)
-        return obj is not None
+        obj = hasattr(context, "remove_light_linking_object")
+        coll = hasattr(context, "remove_light_linking_collection")
+        light = hasattr(context, "remove_light_linking_light_obj")
+        return light and (obj or coll)
 
     def execute(self, context):
-        obj = bpy.data.objects.get(self.obj)
-        coll_item = bpy.data.collections.get(self.coll)
-        light = bpy.data.objects.get(self.light)
+        obj = getattr(context, "remove_light_linking_object", None)
+        coll = getattr(context, "remove_light_linking_collection", None)
+        light = getattr(context, "remove_light_linking_light_obj", None)
 
         if obj is None:
-            item = coll_item
+            item = coll
         else:
             item = obj
+        if item is None or light is None:
+            self.report({'ERROR'}, "No object selected")
+            return {"CANCELLED"}
 
-        def remove_item_from_coll(coll: bpy.types.Collection, item: bpy.types.Object | bpy.types.Collection):
-            if isinstance(item, bpy.types.Object):
-                if item.name in coll.objects:
-                    coll.objects.unlink(obj)
-            elif isinstance(item, bpy.types.Collection):
-                if item.name in coll.children:
-                    coll.children.unlink(item)
+        def remove_item_from_coll(collection: bpy.types.Collection,
+                                  remove_item: bpy.types.Object | bpy.types.Collection):
+            if isinstance(remove_item, bpy.types.Object):
+                if remove_item.name in collection.objects:
+                    collection.objects.unlink(obj)
+            elif isinstance(remove_item, bpy.types.Collection):
+                if remove_item.name in collection.children:
+                    collection.children.unlink(remove_item)
 
         if not self.remove_all:
             if self.coll_type == CollectionType.RECEIVER.value:
@@ -95,10 +97,12 @@ class LLP_OT_clear_light_linking(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.object is not None
+        light = get_light_obj(context)
+        return light is not None
 
     def execute(self, context):
-        light_linking = context.object.light_linking
+        light = get_light_obj(context)
+        light_linking = light.light_linking
         light_linking.receiver_collection = None
         light_linking.blocker_collection = None
         return {"FINISHED"}
@@ -107,9 +111,6 @@ class LLP_OT_clear_light_linking(bpy.types.Operator):
 class LLP_OT_add_light_linking(bpy.types.Operator):
     bl_idname = 'llp.add_light_linking'
     bl_label = "Add"
-
-    obj: bpy.props.StringProperty(options={'SKIP_SAVE'})
-    light: bpy.props.StringProperty(options={'SKIP_SAVE'})
 
     coll_type: bpy.props.EnumProperty(
         items=enum_coll_type, options={'SKIP_SAVE'}
@@ -120,13 +121,18 @@ class LLP_OT_add_light_linking(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return (context.object is not None) and (
-                context.object.type in {"LIGHT", "MESH", "CURVE", "SURFACE", "META", "FONT", "GPENCIL"}
-        )
+        light = getattr(context, "add_light_linking_light_obj", None)
+        from .utils import ILLUMINATED_OBJECT_TYPE_LIST
+        return (light is not None) and light.type in ILLUMINATED_OBJECT_TYPE_LIST
 
     def execute(self, context):
-        obj = bpy.data.objects.get(self.obj)
-        light = bpy.data.objects.get(self.light)
+        obj = getattr(context, "add_light_linking_object", None)
+        light = getattr(context, "add_light_linking_light_obj", None)
+        print("execute", self.bl_idname, obj, light)
+        if not light:
+            self.report({'ERROR'}, "No light selected")
+            return {"CANCELLED"}
+
         if self.init or self.add_all:
             # create collection for light linking and shadow linking(create safe object)
             from .utils import ensure_linking_coll
@@ -164,19 +170,16 @@ class LLP_OT_toggle_light_linking(bpy.types.Operator):
     bl_idname = 'llp.toggle_light_linking'
     bl_label = "Toggle"
 
-    obj: bpy.props.StringProperty(options={'SKIP_SAVE'})
-    coll: bpy.props.StringProperty(options={'SKIP_SAVE'})
-    light: bpy.props.StringProperty(options={'SKIP_SAVE'})
-
     coll_type: bpy.props.EnumProperty(
         items=enum_coll_type, options={'SKIP_SAVE'}
     )
-    # display
-    value_set: bpy.props.StringProperty(options={'SKIP_SAVE'})
 
     @classmethod
     def poll(cls, context):
-        return context.object is not None
+        light = hasattr(context, "toggle_light_linking_light_obj")
+        obj = hasattr(context, "toggle_light_linking_object")
+        coll = hasattr(context, "toggle_light_linking_collection")
+        return (obj and coll) or light
 
     @classmethod
     def description(cls, context, properties):
@@ -186,10 +189,11 @@ class LLP_OT_toggle_light_linking(bpy.types.Operator):
             return "Toggle Shadow"
 
     def execute(self, context):
-        obj = bpy.data.objects.get(self.obj)
-        coll = bpy.data.collections.get(self.coll)
-        light = bpy.data.objects.get(self.light)
-        if (not obj and not coll) or not light: return {"CANCELLED"}
+        light = getattr(context, "toggle_light_linking_light_obj", None)
+        obj = getattr(context, "toggle_light_linking_object", None)
+        coll = getattr(context, "toggle_light_linking_collection", None)
+        if (not obj and not coll) or not light:
+            return {"CANCELLED"}
 
         if obj:
             state_get = get_light_effect_obj_state(light, obj)
@@ -201,7 +205,6 @@ class LLP_OT_toggle_light_linking(bpy.types.Operator):
 
         if state_value := state_get.get(coll_type):  # exist
             # toggle state value
-            # print(state_value)
             if state_value == StateValue.INCLUDE:
                 value_set = StateValue.EXCLUDE
             else:
@@ -219,14 +222,15 @@ class LLP_OT_link_selected_objs(bpy.types.Operator):
     bl_idname = 'llp.link_selected_objs'
     bl_label = "Add Selected Objects"
 
-    light: bpy.props.StringProperty(options={'SKIP_SAVE'})
-
     @classmethod
     def poll(cls, context):
-        return context.object is not None
+        return hasattr(context, "link_light_obj")
 
     def execute(self, context):
-        light = bpy.data.objects.get(self.light)
+        light = getattr(context, "link_light_obj", None)
+        if not light:
+            self.report({'ERROR'}, "No light selected")
+            return {"CANCELLED"}
         coll1 = light.light_linking.receiver_collection
         coll2 = light.light_linking.blocker_collection
         for obj in context.selected_objects:
@@ -243,17 +247,18 @@ class LLP_OT_select_item(bpy.types.Operator):
     bl_idname = 'llp.select_item'
     bl_label = "Select"
 
-    obj: bpy.props.StringProperty(options={'SKIP_SAVE'})
-    coll: bpy.props.StringProperty(options={'SKIP_SAVE'})
-
     @classmethod
     def poll(cls, context):
-        return context.object is not None
+        obj = hasattr(context, "select_item_object")
+        coll = hasattr(context, "select_item_collection")
+        return obj or coll
 
     def execute(self, context):
-        obj = bpy.data.objects.get(self.obj)
-        coll = bpy.data.collections.get(self.coll)
-        if not obj and not coll: return {"CANCELLED"}
+        obj = getattr(context, "select_item_object", None)
+        coll = getattr(context, "select_item_collection", None)
+        if not obj and not coll:
+            self.report({'ERROR'}, "No object or collection selected")
+            return {"CANCELLED"}
 
         if obj:
             area_3d = self.get_area('VIEW_3D')

@@ -22,13 +22,16 @@ def copy_files() -> Path:
 
     for file in parent_path.glob('*'):
         if file.is_dir():
-            if file.name == parent_path.name: continue
-            if file.name.startswith('__') or file.name.startswith('.'): continue
+            if file.name == parent_path.name:
+                continue
+            if file.name.startswith('__') or file.name.startswith('.'):
+                continue
 
             shutil.copytree(file, sub_dir.joinpath(file.name))
 
         elif file.is_file():
-            if file.name == __file__: continue
+            if file.name == __file__:
+                continue
 
             shutil.copy(file, sub_dir.joinpath(file.name))
 

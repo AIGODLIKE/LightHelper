@@ -1,9 +1,9 @@
+from enum import Enum, unique
+
 import bpy
-from dataclasses import dataclass
 
-from enum import Enum, auto, unique
-
-SAFE_OBJ_NAME = 'LLP_SAFE_OBJ'
+SAFE_OBJ_NAME = "LLP_SAFE_OBJ"
+ILLUMINATED_OBJECT_TYPE_LIST = ["LIGHT", "MESH", "CURVE", "SURFACE", "META", "FONT", "GPENCIL"]
 
 
 @unique
@@ -20,14 +20,14 @@ class CollectionType(Enum):
     BLOCKER = 'blocker'
 
 
-def ensure_linking_coll(type: CollectionType, light: bpy.types.Object, make_safe_obj: bool = True):
+def ensure_linking_coll(coll_type: CollectionType, light: bpy.types.Object, make_safe_obj: bool = True):
     """ensure the collection exists
     """
 
-    prefix = 'Light Linking for ' if type == CollectionType.RECEIVER else 'Shadow Linking for '
+    prefix = 'Light Linking for ' if coll_type == CollectionType.RECEIVER else 'Shadow Linking for '
     coll_name = prefix + light.name
 
-    if type == CollectionType.RECEIVER:
+    if coll_type == CollectionType.RECEIVER:
         if light.light_linking.receiver_collection is None:
             coll = bpy.data.collections.new(coll_name)
             light.light_linking.receiver_collection = coll

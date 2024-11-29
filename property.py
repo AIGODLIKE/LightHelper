@@ -17,6 +17,13 @@ def handle_all_lights(null):
             update_lightlinking_state(obj, bpy.context)
 
 
+def check_light_object(obj: bpy.types.Object) -> bool:
+    from .utils import ILLUMINATED_OBJECT_TYPE_LIST, SAFE_OBJ_NAME
+    type_ok = obj.type in ILLUMINATED_OBJECT_TYPE_LIST
+    name_ok = obj.name != SAFE_OBJ_NAME
+    return type_ok and name_ok
+
+
 class ObjectProperty(PropertyGroup):
     light_linking_state: bpy.props.EnumProperty(
         items=[
@@ -95,7 +102,7 @@ class WindowManagerProperty(PropertyGroup):
         if coll.name not in obj.light_linking.blocker_collection.children:
             obj.light_linking.blocker_collection.children.link(coll)
         # restore
-        wm.light_helper_property.light_linking_add_collection = None
+        wm.light_helper_property["light_linking_add_collection"] = None
 
     def update_add_obj(self, context):
         """Add object to light's receiver and blocker collection
@@ -122,9 +129,7 @@ class WindowManagerProperty(PropertyGroup):
         wm.light_helper_property["light_linking_add_object"] = None
 
     def update_add_light(self, context):
-        from .ops import LLP_OT_add_light_linking
 
-        add_op_id = LLP_OT_add_light_linking.bl_idname
         wm = context.window_manager
 
         if wm.light_helper_property.object_linking_add_object is None:
@@ -139,8 +144,10 @@ class WindowManagerProperty(PropertyGroup):
 
         light = wm.light_helper_property.object_linking_add_object
 
-        init_op = getattr(getattr(bpy.ops, add_op_id.split('.')[0]), add_op_id.split('.')[1])
-        init_op('INVOKE_DEFAULT', light=light.name, init=True, obj=obj.name)
+        with context.temp_override(add_light_linking_object=light, add_light_linking_light_obj=obj):
+            bpy.ops.llp.add_light_linking('INVOKE_DEFAULT', init=True)
+            # sp = LLP_OT_add_light_linking.bl_idname.split('.')
+            # getattr(getattr(bpy.ops, sp[0]), sp[1])()
 
         coll1 = light.light_linking.receiver_collection
         coll2 = light.light_linking.blocker_collection
@@ -151,20 +158,47 @@ class WindowManagerProperty(PropertyGroup):
             coll2.objects.link(obj)
 
         # restore
-        wm.light_helper_property.object_linking_add_object = None
+        wm.light_helper_property["object_linking_add_object"] = None
+
+    # poll
+    def poll_object_linking_add_collection(self, coll: bpy.types.Collection):
+        shadow = not coll.name.startswith("Shadow Linking for ")
+        light = not coll.name.startswith("Light Linking for ")
+        return shadow and light
+
+    def poll_light_linking_add_object(self, obj: bpy.types.Object):
+        from .utils import get_all_light_effect_items_state
+        if bpy.context.scene.light_helper_property.light_linking_pin:
+            light_obj = bpy.context.scene.light_helper_property.light_linking_pin_object
+        else:
+            light_obj = bpy.context.object
+        light_ok = obj not in get_all_light_effect_items_state(light_obj)
+        return check_light_object(obj) and light_ok
+
+    def poll_object_linking_add_object(self, obj: bpy.types.Object):
+        from .utils import get_lights_from_effect_obj
+        if bpy.context.scene.light_helper_property.object_linking_pin:
+            item = bpy.context.scene.light_helper_property.object_linking_pin_object
+        else:
+            item = bpy.context.object
+        light_ok = obj not in get_lights_from_effect_obj(item)
+        return check_light_object(obj) and light_ok
 
     # drag & drop to add
     light_linking_add_collection: bpy.props.PointerProperty(name='Drag and Drop to Add',
                                                             type=bpy.types.Collection,
-                                                            update=update_add_collection
+                                                            update=update_add_collection,
+                                                            poll=poll_object_linking_add_collection,
                                                             )
     light_linking_add_object: bpy.props.PointerProperty(name='Drag and Drop to Add',
                                                         type=bpy.types.Object,
-                                                        update=update_add_obj
+                                                        update=update_add_obj,
+                                                        poll=poll_light_linking_add_object,
                                                         )
     object_linking_add_object: bpy.props.PointerProperty(name='Drag and Drop to Add',
                                                          type=bpy.types.Object,
-                                                         update=update_add_light
+                                                         update=update_add_light,
+                                                         poll=poll_object_linking_add_object,
                                                          )
 
 
