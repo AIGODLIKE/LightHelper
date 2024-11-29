@@ -240,7 +240,7 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.render.engine == 'CYCLES'
+        return LLT_PT_light_control_panel.poll(context)
 
     def draw_header(self, context):
         from .ops import LLP_OT_question
