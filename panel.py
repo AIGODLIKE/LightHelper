@@ -36,7 +36,7 @@ def draw_select_btn(layout, item):
         row.context_pointer_set("select_item_object", item)
     else:
         row.context_pointer_set("select_item_collection", item)
-    row.operator(LLP_OT_select_item.bl_idname, text=item.name, icon=get_item_icon(item), emboss=False)
+    row.operator(LLP_OT_select_item.bl_idname, text=item.name, icon=get_item_icon(item), emboss=False, translate=False)
 
 
 def draw_toggle_btn(layout,

@@ -21,6 +21,18 @@ def get_light_obj(context):
     return light_obj
 
 
+def get_area(area_type: str):
+    areas = []
+    for area in bpy.context.screen.areas:
+        if area.type == area_type:
+            areas.append(area)
+    # get biggest area
+    if len(areas) > 0:
+        area = max(areas, key=lambda area: area.width * area.height)
+        return area
+    return None
+
+
 class LLP_OT_question(bpy.types.Operator):
     bl_idname = 'llp.question'
     bl_label = ""
@@ -261,28 +273,18 @@ class LLP_OT_select_item(bpy.types.Operator):
             return {"CANCELLED"}
 
         if obj:
-            area_3d = self.get_area('VIEW_3D')
+            area_3d = get_area('VIEW_3D')
             if not area_3d: return {"CANCELLED"}
             self.select_obj_in_view3d(obj)
         elif coll:
-            area_outliner = self.get_area('OUTLINER')
-            if not area_outliner: return {"CANCELLED"}
+            area_outliner = get_area('OUTLINER')
+            if not area_outliner:
+                return {"CANCELLED"}
 
             with context.temp_override(area=area_outliner, id=coll):
                 self.select_coll_in_outliner(coll)
 
         return {"FINISHED"}
-
-    def get_area(self, area_type: str):
-        areas = []
-        for area in bpy.context.screen.areas:
-            if area.type == area_type:
-                areas.append(area)
-        # get biggest area
-        if len(areas) > 0:
-            area = max(areas, key=lambda area: area.width * area.height)
-            return area
-        return None
 
     def select_obj_in_view3d(self, obj: bpy.types.Object):
         # deselect all

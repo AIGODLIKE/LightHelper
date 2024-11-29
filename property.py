@@ -144,10 +144,11 @@ class WindowManagerProperty(PropertyGroup):
 
         light = wm.light_helper_property.object_linking_add_object
 
-        with context.temp_override(add_light_linking_object=light, add_light_linking_light_obj=obj):
-            bpy.ops.llp.add_light_linking('INVOKE_DEFAULT', init=True)
-            # sp = LLP_OT_add_light_linking.bl_idname.split('.')
-            # getattr(getattr(bpy.ops, sp[0]), sp[1])()
+        with context.temp_override(add_light_linking_light_obj=light, add_light_linking_object=obj):
+            from .ops import LLP_OT_add_light_linking
+            sp = LLP_OT_add_light_linking.bl_idname.split('.')
+            ops = getattr(getattr(bpy.ops, sp[0]), sp[1])
+            ops('INVOKE_DEFAULT', init=True)
 
         coll1 = light.light_linking.receiver_collection
         coll2 = light.light_linking.blocker_collection
@@ -182,7 +183,7 @@ class WindowManagerProperty(PropertyGroup):
         else:
             item = bpy.context.object
         light_ok = obj not in get_lights_from_effect_obj(item)
-        return check_light_object(obj) and light_ok
+        return check_light_object(obj) and light_ok and obj != light_ok
 
     # drag & drop to add
     light_linking_add_collection: bpy.props.PointerProperty(name='Drag and Drop to Add',
