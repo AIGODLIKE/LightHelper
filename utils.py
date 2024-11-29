@@ -20,6 +20,10 @@ class CollectionType(Enum):
     BLOCKER = 'blocker'
 
 
+def get_pref():
+    return bpy.context.preferences.addons[__package__].preferences
+
+
 def ensure_linking_coll(coll_type: CollectionType, light: bpy.types.Object, make_safe_obj: bool = True):
     """ensure the collection exists
     """

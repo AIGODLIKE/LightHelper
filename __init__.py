@@ -13,21 +13,25 @@ bl_info = {
 
 __ADDON_NAME__ = __name__
 
-from . import panel, property, ops, translation
+from . import panel, property, ops, translation, preferences
+
+module_list = [
+    preferences,
+    property,
+    ops,
+    panel,
+    translation,
+]
 
 
 def register():
-    property.register()
-    ops.register()
-    panel.register()
-    translation.register()
+    for mod in module_list:
+        mod.register()
 
 
 def unregister():
-    panel.unregister()
-    property.unregister()
-    ops.unregister()
-    translation.unregister()
+    for mod in module_list[::-1]:
+        mod.unregister()
 
 
 if __name__ == '__main__':

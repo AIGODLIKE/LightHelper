@@ -300,11 +300,25 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
         box.prop(context.window_manager.light_helper_property, 'object_linking_add_object', text='', icon='ADD')
 
 
+panel_list = [
+    LLT_PT_light_control_panel,
+    LLT_PT_obj_control_panel,
+]
+register_class, unregister_class = bpy.utils.register_classes_factory(panel_list)
+
+
 def register():
-    bpy.utils.register_class(LLT_PT_light_control_panel)
-    bpy.utils.register_class(LLT_PT_obj_control_panel)
+    from .utils import get_pref
+    pref = get_pref()
+    for panel in panel_list:
+        panel.bl_category = pref.panel_name
+    register_class()
 
 
 def unregister():
-    bpy.utils.unregister_class(LLT_PT_light_control_panel)
-    bpy.utils.unregister_class(LLT_PT_obj_control_panel)
+    unregister_class()
+
+
+def refresh_panel():
+    unregister()
+    register()
