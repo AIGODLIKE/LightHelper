@@ -285,7 +285,7 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
 
         obj_state_dict = get_lights_from_effect_obj(item)
         if len(obj_state_dict) == 0:
-            col.label(text='No light effecting this object', icon='LIGHT')
+            col.label(text='No Link type lights effecting this object', icon='LIGHT')
             box = col.box()
             box.prop(context.window_manager.light_helper_property, 'object_linking_add_object', text='', icon='ADD')
             return

@@ -3,7 +3,7 @@ bl_info = {
     "author": "ACGGit Community,Atticus,小萌新",
     "blender": (4, 0, 0),
     "version": (0, 3, 2),
-    "category": "ACGGit",
+    "category": "Render",
     "support": "COMMUNITY",
     "doc_url": "",
     "tracker_url": "",
