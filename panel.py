@@ -300,9 +300,95 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
         box.prop(context.window_manager.light_helper_property, 'object_linking_add_object', text='', icon='ADD')
 
 
+class LLT_PT_light_list_panel(bpy.types.Panel):
+    bl_label = ""
+    bl_idname = "LLT_PT_light_list_panel"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "LH"
+    bl_options = {'HEADER_LAYOUT_EXPAND'}
+
+    @classmethod
+    def poll(cls, context):
+        return LLT_PT_light_control_panel.poll(context)
+
+    def draw_header(self, context):
+        from .ops import LLP_OT_question
+        layout = self.layout
+        row = layout.row(align=True)
+        row.label(text="Linking List")
+        tips = row.operator(LLP_OT_question.bl_idname, text='', icon='QUESTION', emboss=False)
+        if tips:
+            tips.data = p_(
+                """列出场景内所有的灯光,包括物体自发光."""
+            )
+        row.separator()
+
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text="list")
+        layout.template_list("LLT_UL_light", "", context.scene, "objects", context.scene.light_helper_property,
+                             "active_object_index")
+
+
+class LLT_UL_light(bpy.types.UIList):
+    EMPTY = 1 << 0
+
+    sort_type: bpy.props.EnumProperty(
+        name="Use Sort",
+        default="TYPE",
+        items=[("TYPE", "Type", ""),
+               ("NAME", "Name", "")],
+        options=set(),
+        description="",
+    )
+
+    def draw_filter(self, context, layout):
+        # Nothing much to say here, it's usual UI code...
+        row = layout.row()
+
+        subrow = row.row(align=True)
+        subrow.prop(self, "filter_name", text="")
+        icon = 'ZOOM_OUT' if self.use_filter_name_reverse else 'ZOOM_IN'
+        subrow.prop(self, "use_filter_name_reverse", text="", icon=icon)
+
+        row = layout.row(align=True)
+        icon = 'TRIA_UP' if self.use_filter_orderby_invert else 'TRIA_DOWN'
+        row.prop(self, "use_filter_orderby_invert", text="", icon=icon)
+
+        row.prop(self, "sort_type")
+
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
+        layout.label(text=item.name)
+
+    def filter_items(self, context, data, propname):
+        helper_funcs = bpy.types.UI_UL_list
+        objects = getattr(data, propname)[:]
+
+        flt_flags = []
+        flt_neworder = []
+
+        if not flt_flags:
+            flt_flags = [self.bitflag_filter_item] * len(objects)
+
+        for idx, obj in enumerate(objects):
+            if obj.type in {'LIGHT', 'MESH'}:
+                flt_flags[idx] &= ~self.EMPTY
+            else:
+                flt_flags[idx] |= self.EMPTY
+        if self.sort_type == "TYPE":
+            # flt_neworder = helper_funcs.sort_items_helper(objects, "type", True)
+            flt_neworder = helper_funcs.sort_items_by_name(objects, "type")
+        elif self.sort_type == "NAME":
+            flt_neworder = helper_funcs.sort_items_by_name(objects, "name")
+        return flt_flags, flt_neworder
+
+
 panel_list = [
     LLT_PT_light_control_panel,
     LLT_PT_obj_control_panel,
+    LLT_PT_light_list_panel,
+    LLT_UL_light,
 ]
 register_class, unregister_class = bpy.utils.register_classes_factory(panel_list)
 

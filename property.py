@@ -90,6 +90,7 @@ class SceneProperty(PropertyGroup):
     force_light_linking_state: bpy.props.BoolProperty(
         name='Update',
         default=False)
+    active_object_index: bpy.props.IntProperty(default=0)
 
 
 class WindowManagerProperty(PropertyGroup):
