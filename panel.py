@@ -326,7 +326,8 @@ class LLT_PT_light_list_panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        layout.label(text="list")
+        row = layout.row()
+        row.prop(context.scene.light_helper_property, "light_list_filter_type", expand=True)
         layout.template_list("LLT_UL_light", "", context.scene, "objects", context.scene.light_helper_property,
                              "active_object_index")
 
@@ -356,12 +357,15 @@ class LLT_UL_light(bpy.types.UIList):
         # icon = 'TRIA_UP' if self.use_filter_orderby_invert else 'TRIA_DOWN'
         # row.prop(self, "use_filter_orderby_invert", text="", icon=icon)
 
-        row.prop(self, "sort_type")
+        row.prop(self, "sort_type", expand=True)
+        column = layout.column()
+        column.prop(context.scene.light_helper_property, "light_list_filter_type", expand=True)
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
         split = layout.split(factor=0.2, align=True)
 
         left = split.row(align=True)
+        left.template_icon(icon_value=bpy.types.UILayout.icon(item.data))
         left.label(text=item.type)
 
         right = split.row(align=True)
@@ -370,6 +374,7 @@ class LLT_UL_light(bpy.types.UIList):
     def filter_items(self, context, data, propname):
         helper_funcs = bpy.types.UI_UL_list
         objects = getattr(data, propname)[:]
+        filter_type = context.scene.light_helper_property.light_list_filter_type
 
         flt_flags = []
         flt_neworder = []
@@ -377,13 +382,22 @@ class LLT_UL_light(bpy.types.UIList):
         if not flt_flags:
             flt_flags = [self.bitflag_filter_item] * len(objects)
 
+        # flt_flags[idx] |= self.EMPTY
         for idx, obj in enumerate(objects):
-            if obj.type in {'LIGHT', 'MESH'}:
-                flt_flags[idx] &= ~self.EMPTY
+            if filter_type == "ALL":
+                flag = self.bitflag_filter_item if obj.type in {'LIGHT', 'MESH'} else self.EMPTY
+            elif filter_type == "LIGHT":
+                flag = self.bitflag_filter_item if obj.type == 'LIGHT' else self.EMPTY
+            elif filter_type == "MESH":
+                flag = self.bitflag_filter_item if obj.type == 'MESH' else self.EMPTY
+            elif filter_type == "EMISSION":
+                from .utils import check_material_including_emission
+                flag = self.bitflag_filter_item if check_material_including_emission(obj) else self.EMPTY
             else:
-                flt_flags[idx] |= self.EMPTY
+                flag = self.EMPTY
+            flt_flags[idx] = flag
+
         if self.sort_type == "TYPE":
-            # flt_neworder = helper_funcs.sort_items_helper(objects, "type", True)
             flt_neworder = helper_funcs.sort_items_by_name(objects, "type")
         elif self.sort_type == "NAME":
             flt_neworder = helper_funcs.sort_items_by_name(objects, "name")

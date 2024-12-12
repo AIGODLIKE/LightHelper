@@ -16,5 +16,7 @@ data = {
     'Please select light or can be illuminated object': '请选择灯光或可被照射物体',
     'Current type: ': '当前类型: ',
     'Instances Data': '实例数据',
-    'Panel Name': '面板名称'
+    'Panel Name': '面板名称',
+    "Emission Material": "自发光材质",
+    "Linking List": "灯光列表",
 }

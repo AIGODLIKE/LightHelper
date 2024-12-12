@@ -96,19 +96,29 @@ class SceneProperty(PropertyGroup):
         act_obj = context.scene.objects[index]
         context.view_layer.objects.active = act_obj
 
+        # context.view_layer.objects.selected = bpy_prop_collection(act_obj)
+        # 仅选中所选
         act_obj.select_set(True)
         for obj in context.view_layer.objects.selected:
             if obj != act_obj:
                 obj.select_set(False)
+
+        # 视图到所选
         for area in bpy.context.screen.areas:
             if area.type == "VIEW_3D":
                 for region in area.regions:
                     if region.type == "WINDOW":
                         with context.temp_override(area=area, region=region):
                             bpy.ops.view3d.view_selected("INVOKE_DEFAULT")
-        # context.view_layer.objects.selected = bpy_prop_collection(act_obj)
 
     active_object_index: bpy.props.IntProperty(default=0, update=update_active_object_index)
+    light_list_filter_type: bpy.props.EnumProperty(default="ALL", items=[
+        ("ALL", "All", ""),
+        ("LIGHT", "Light", ""),
+        ("MESH", "Mesh", ""),
+        ("EMISSION", "Emission Material", ""),
+    ]
+                                                   )
 
 
 class WindowManagerProperty(PropertyGroup):
