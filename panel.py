@@ -349,17 +349,23 @@ class LLT_UL_light(bpy.types.UIList):
 
         subrow = row.row(align=True)
         subrow.prop(self, "filter_name", text="")
-        icon = 'ZOOM_OUT' if self.use_filter_name_reverse else 'ZOOM_IN'
-        subrow.prop(self, "use_filter_name_reverse", text="", icon=icon)
+        # icon = 'ZOOM_OUT' if self.use_filter_name_reverse else 'ZOOM_IN'
+        # subrow.prop(self, "use_filter_name_reverse", text="", icon=icon)
 
         row = layout.row(align=True)
-        icon = 'TRIA_UP' if self.use_filter_orderby_invert else 'TRIA_DOWN'
-        row.prop(self, "use_filter_orderby_invert", text="", icon=icon)
+        # icon = 'TRIA_UP' if self.use_filter_orderby_invert else 'TRIA_DOWN'
+        # row.prop(self, "use_filter_orderby_invert", text="", icon=icon)
 
         row.prop(self, "sort_type")
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
-        layout.label(text=item.name)
+        split = layout.split(factor=0.2, align=True)
+
+        left = split.row(align=True)
+        left.label(text=item.type)
+
+        right = split.row(align=True)
+        right.label(text=item.name)
 
     def filter_items(self, context, data, propname):
         helper_funcs = bpy.types.UI_UL_list
