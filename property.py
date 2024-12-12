@@ -100,15 +100,12 @@ class SceneProperty(PropertyGroup):
         for obj in context.view_layer.objects.selected:
             if obj != act_obj:
                 obj.select_set(False)
-        # import bpy
         for area in bpy.context.screen.areas:
             if area.type == "VIEW_3D":
                 for region in area.regions:
-                    # bpy.context.screen.areas[5].regions[6].type
                     if region.type == "WINDOW":
                         with context.temp_override(area=area, region=region):
                             bpy.ops.view3d.view_selected("INVOKE_DEFAULT")
-                # bpy.context.screen.areas[0].type
         # context.view_layer.objects.selected = bpy_prop_collection(act_obj)
 
     active_object_index: bpy.props.IntProperty(default=0, update=update_active_object_index)
