@@ -154,6 +154,7 @@ class LLT_PT_light_control_panel(bpy.types.Panel):
         row.separator()
         row.prop(pref, "light_link_filter_type", expand=True, text="")
 
+        row.separator()
         tips = row.operator(LLP_OT_question.bl_idname, text="", icon="QUESTION", emboss=False)
         tips.data = p_(
             """Light Linking Panel
