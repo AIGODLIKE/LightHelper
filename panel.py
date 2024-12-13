@@ -143,9 +143,17 @@ class LLT_PT_light_control_panel(bpy.types.Panel):
 
     def draw_header(self, context):
         from .ops import LLP_OT_question
+        from .utils import get_pref
+
+        pref = get_pref()
+
         layout = self.layout
         row = layout.row(align=True)
         row.label(text="Light Linking")
+        row.prop(pref, "moving_view_type", expand=True, icon_only=True)
+        row.separator()
+        row.prop(pref, "light_link_filter_type", expand=True, text="")
+
         tips = row.operator(LLP_OT_question.bl_idname, text="", icon="QUESTION", emboss=False)
         tips.data = p_(
             """Light Linking Panel
@@ -157,6 +165,7 @@ Provides buttons to toggle the light effecting state of the objects."""
 
     def draw(self, context):
         layout = self.layout
+        self.draw_light_list(context, layout)
         self.draw_light_objs_control(context, layout)
 
     def draw_light_objs_control(self, context, layout):
@@ -246,6 +255,18 @@ Provides buttons to toggle the light effecting state of the objects."""
         row.context_pointer_set("link_light_obj", light_obj)
         row.operator(LLP_OT_link_selected_objs.bl_idname, icon='ADD')
 
+    def draw_light_list(self, context, layout):
+        from .utils import get_pref
+        pref = get_pref()
+
+        column = layout.column(align=True)
+        column.row().prop(pref, "light_list_filter_type", expand=True)
+
+        row = column.row(align=True)
+        row.template_list("LLT_UL_light", "", context.scene, "objects", context.scene.light_helper_property,
+                          "active_object_index")
+        # row.column(align=True).prop(pref, "light_link_filter_type", expand=True, text="", icon_only=True)
+
 
 class LLT_PT_obj_control_panel(bpy.types.Panel):
     bl_label = ""
@@ -312,48 +333,6 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
 
         box = col.box()
         box.prop(context.window_manager.light_helper_property, 'object_linking_add_object', text='', icon='ADD')
-
-
-class LLT_PT_light_list_panel(bpy.types.Panel):
-    bl_label = ""
-    bl_idname = "LLT_PT_light_list_panel"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = "LH"
-    bl_options = {'HEADER_LAYOUT_EXPAND'}
-
-    @classmethod
-    def poll(cls, context):
-        return LLT_PT_light_control_panel.poll(context)
-
-    def draw_header(self, context):
-        from .utils import get_pref
-        from .ops import LLP_OT_question
-
-        pref = get_pref()
-
-        layout = self.layout
-        row = layout.row(align=True)
-        row.label(text="Linking List")
-        row.prop(pref, "light_link_filter_type", expand=True, text="")
-
-        tips = row.operator(LLP_OT_question.bl_idname, text='', icon='QUESTION', emboss=False)
-        if tips:
-            tips.data = p_(
-                """List all the lights in the scene, including object self illumination"""
-            )
-        row.separator()
-
-    def draw(self, context):
-        from .utils import get_pref
-        pref = get_pref()
-
-        layout = self.layout
-        column = layout.column(align=True)
-        column.row().prop(pref, "light_list_filter_type", expand=True)
-
-        layout.template_list("LLT_UL_light", "", context.scene, "objects", context.scene.light_helper_property,
-                             "active_object_index")
 
 
 class LLT_UL_light(bpy.types.UIList):
@@ -450,7 +429,6 @@ class LLT_UL_light(bpy.types.UIList):
 panel_list = [
     LLT_PT_light_control_panel,
     LLT_PT_obj_control_panel,
-    LLT_PT_light_list_panel,
     LLT_UL_light,
 ]
 register_class, unregister_class = bpy.utils.register_classes_factory(panel_list)

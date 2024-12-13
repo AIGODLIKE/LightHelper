@@ -35,9 +35,9 @@ class LLT_AddonPreferences(AddonPreferences):
     light_link_filter_type: EnumProperty(
         default="ALL",
         items=[
-            ("ALL", "All", "", "OUTLINER", 1 << 0),
+            ("ALL", "All", "", "ALIGN_LEFT", 1 << 0),
             ("LINK", "LINK", "", "OUTLINER_OB_LIGHT", 1 << 1),
-            ("NOT_LINK", "NOT_LINK", "", "OUTLINER_OB_LIGHTPROBE", 1 << 2),
+            ("NOT_LINK", "NOT_LINK", "", "OUTLINER_DATA_LIGHT", 1 << 2),
         ],
         get=get_link,
         set=set_link,
@@ -45,9 +45,9 @@ class LLT_AddonPreferences(AddonPreferences):
     moving_view_type: EnumProperty(
         default="ANIMATION",
         items=[
-            ("NONE", "None", "",),
-            ("MAINTAINING_ZOOM", "Maintaining Zoom", "Direct switching of view position, no animation",),
-            ("ANIMATION", "Animation", "Animation switching, no fixed zoom"),
+            ("NONE", "None", "", "RESTRICT_SELECT_ON", 0),
+            ("MAINTAINING_ZOOM", "Maintaining Zoom", "Direct switching of view position, no animation", "VIEWZOOM", 1),
+            ("ANIMATION", "Animation", "Animation switching, no fixed zoom", "ANIM", 2),
         ]
     )
 
