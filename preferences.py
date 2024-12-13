@@ -60,9 +60,9 @@ class LLT_AddonPreferences(AddonPreferences):
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "panel_name")
-        layout.prop(self, "light_list_filter_type", expend=True)
-        layout.prop(self, "light_link_filter_type", expend=True)
-        layout.prop(self, "moving_view_type", expend=True)
+        layout.prop(self, "light_list_filter_type", expand=True)
+        layout.prop(self, "light_link_filter_type", expand=True)
+        layout.prop(self, "moving_view_type", expand=True)
 
 
 def register():
