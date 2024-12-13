@@ -41,7 +41,7 @@ class LLT_AddonPreferences(AddonPreferences):
     light_link_filter_type: EnumProperty(
         default="ALL",
         items=[
-            ("ALL", "All", "", "OUTLINER", 0),
+            ("ALL", "All", "", "ALIGN_LEFT", 0),
             ("LINK", "LINK", "", "OUTLINER_OB_LIGHT", 1),
             ("NOT_LINK", "NOT_LINK", "", "OUTLINER_OB_LIGHTPROBE", 2),
         ],

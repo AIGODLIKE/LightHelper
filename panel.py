@@ -327,10 +327,16 @@ class LLT_PT_light_list_panel(bpy.types.Panel):
         return LLT_PT_light_control_panel.poll(context)
 
     def draw_header(self, context):
+        from .utils import get_pref
         from .ops import LLP_OT_question
+
+        pref = get_pref()
+
         layout = self.layout
         row = layout.row(align=True)
         row.label(text="Linking List")
+        row.prop(pref, "light_link_filter_type", expand=True, text="")
+
         tips = row.operator(LLP_OT_question.bl_idname, text='', icon='QUESTION', emboss=False)
         if tips:
             tips.data = p_(
@@ -345,7 +351,6 @@ class LLT_PT_light_list_panel(bpy.types.Panel):
         layout = self.layout
         column = layout.column(align=True)
         column.row().prop(pref, "light_list_filter_type", expand=True)
-        column.row().prop(pref, "light_link_filter_type", expand=True)
 
         layout.template_list("LLT_UL_light", "", context.scene, "objects", context.scene.light_helper_property,
                              "active_object_index")
