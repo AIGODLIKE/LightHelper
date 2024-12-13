@@ -17,8 +17,7 @@ class LLT_AddonPreferences(AddonPreferences):
         items=[
             ("ALL", "All", "", "OUTLINER", 0),
             ("LIGHT", "Light", "", "OUTLINER_DATA_LIGHT", 1),
-            ("LIGHT_LINK", "Light Link", "", "OUTLINER_OB_LIGHT", 2),
-            ("EMISSION", "Emission Material", "", "MATERIAL", 3),
+            ("EMISSION", "Emission Material", "", "MATERIAL", 2),
         ]
     )
 
