@@ -341,4 +341,6 @@ def view_selected(context: bpy.types.Context):
             for region in area.regions:
                 if region.type == "WINDOW":
                     with context.temp_override(area=area, region=region):
-                        bpy.ops.view3d.view_selected("INVOKE_DEFAULT")
+                        view_distance = context.space_data.region_3d.view_distance
+                        bpy.ops.view3d.view_selected("INVOKE_DEFAULT", use_all_regions=True)
+                        context.space_data.region_3d.view_distance = view_distance

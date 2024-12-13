@@ -21,12 +21,20 @@ def get_light_icon(light):
 
 
 def get_item_icon(item: bpy.types.Object | bpy.types.Collection):
-    if isinstance(item, bpy.types.Object):
-        return 'OBJECT_DATA'
-    elif isinstance(item, bpy.types.Collection):
-        return 'OUTLINER_COLLECTION'
-    else:
-        return 'QUESTION'
+    from bpy.types import UILayout
+
+    if isinstance(item, bpy.types.Collection):
+        return {'icon': "OUTLINER_COLLECTION"}
+    elif isinstance(item, bpy.types.Object):
+        if item.data is not None:
+            icon_value = UILayout.icon(item.data)
+            if icon_value != 157:
+                return {"icon_value": icon_value}
+        if item.type == "EMPTY":
+            return {"icon": "EMPTY_DATA"}
+        else:
+            return {"icon": "OBJECT_DATA"}
+    return {"icon": "QUESTION"}
 
 
 def draw_select_btn(layout, item):
@@ -36,7 +44,7 @@ def draw_select_btn(layout, item):
         row.context_pointer_set("select_item_object", item)
     else:
         row.context_pointer_set("select_item_collection", item)
-    row.operator(LLP_OT_select_item.bl_idname, text=item.name, icon=get_item_icon(item), emboss=False, translate=False)
+    row.operator(LLP_OT_select_item.bl_idname, text=item.name, emboss=False, translate=False, **get_item_icon(item))
 
 
 def draw_toggle_btn(layout,
