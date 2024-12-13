@@ -19,4 +19,7 @@ data = {
     'Panel Name': '面板名称',
     "Emission Material": "自发光材质",
     "Linking List": "灯光列表",
+    "List all the lights in the scene, including object self illumination": "列出场景内所有的灯光,包括物体自发光",
+    "Receiver": "接收器",
+    "Blocker": "阻断器",
 }

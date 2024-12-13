@@ -281,6 +281,7 @@ class LLP_OT_select_item(bpy.types.Operator):
         return obj or coll
 
     def execute(self, context):
+        from .utils import view_selected
         obj = getattr(context, "select_item_object", None)
         coll = getattr(context, "select_item_collection", None)
         if not obj and not coll:
@@ -298,7 +299,7 @@ class LLP_OT_select_item(bpy.types.Operator):
 
             with context.temp_override(area=area_outliner, id=coll, region=area_outliner.regions[0]):
                 self.select_coll_in_outliner(coll)
-
+        view_selected(context)
         return {"FINISHED"}
 
     def select_obj_in_view3d(self, obj: bpy.types.Object):

@@ -21,7 +21,7 @@ def check_light_object(obj: bpy.types.Object) -> bool:
     from .utils import ILLUMINATED_OBJECT_TYPE_LIST, SAFE_OBJ_NAME
     type_ok = obj.type in ILLUMINATED_OBJECT_TYPE_LIST
     name_ok = obj.name != SAFE_OBJ_NAME
-    return type_ok and name_ok
+    return type_ok and name_ok and obj.type != "LIGHT"
 
 
 def get_all_view_layout_collection() -> [bpy.types.Collection]:
@@ -92,6 +92,7 @@ class SceneProperty(PropertyGroup):
         default=False)
 
     def update_active_object_index(self, context):
+        from .utils import view_selected
         index = self.active_object_index
         act_obj = context.scene.objects[index]
         context.view_layer.objects.active = act_obj
@@ -103,13 +104,7 @@ class SceneProperty(PropertyGroup):
             if obj != act_obj:
                 obj.select_set(False)
 
-        # 视图到所选
-        for area in bpy.context.screen.areas:
-            if area.type == "VIEW_3D":
-                for region in area.regions:
-                    if region.type == "WINDOW":
-                        with context.temp_override(area=area, region=region):
-                            bpy.ops.view3d.view_selected("INVOKE_DEFAULT")
+        view_selected(context)
 
     active_object_index: bpy.props.IntProperty(default=0, update=update_active_object_index)
     light_list_filter_type: bpy.props.EnumProperty(default="ALL", items=[
@@ -117,6 +112,8 @@ class SceneProperty(PropertyGroup):
         ("LIGHT", "Light", ""),
         ("MESH", "Mesh", ""),
         ("EMISSION", "Emission Material", ""),
+        ("RECEIVER", "Receiver", ""),
+        ("BLOCKER", "Blocker", ""),
     ]
                                                    )
 
@@ -140,10 +137,12 @@ class WindowManagerProperty(PropertyGroup):
 
         coll = wm.light_helper_property.light_linking_add_collection
         # add collection to light's receiver and blocker collection
-        if coll.name not in obj.light_linking.receiver_collection.children:
-            obj.light_linking.receiver_collection.children.link(coll)
-        if coll.name not in obj.light_linking.blocker_collection.children:
-            obj.light_linking.blocker_collection.children.link(coll)
+        if obj.light_linking.receiver_collection:
+            if coll.name not in obj.light_linking.receiver_collection.children:
+                obj.light_linking.receiver_collection.children.link(coll)
+        if obj.light_linking.blocker_collection:
+            if coll.name not in obj.light_linking.blocker_collection.children:
+                obj.light_linking.blocker_collection.children.link(coll)
         # restore
         wm.light_helper_property["light_linking_add_collection"] = None
 
@@ -164,10 +163,12 @@ class WindowManagerProperty(PropertyGroup):
 
         obj2 = wm.light_helper_property.light_linking_add_object
         # add collection to light's receiver and blocker collection
-        if obj2.name not in obj.light_linking.receiver_collection.objects:
-            obj.light_linking.receiver_collection.objects.link(obj2)
-        if obj2.name not in obj.light_linking.blocker_collection.objects:
-            obj.light_linking.blocker_collection.objects.link(obj2)
+        if obj.light_linking.receiver_collection:
+            if obj2.name not in obj.light_linking.receiver_collection.objects:
+                obj.light_linking.receiver_collection.objects.link(obj2)
+        if obj.light_linking.blocker_collection:
+            if obj2.name not in obj.light_linking.blocker_collection.objects:
+                obj.light_linking.blocker_collection.objects.link(obj2)
         # restore
         wm.light_helper_property["light_linking_add_object"] = None
 

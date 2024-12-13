@@ -332,3 +332,13 @@ def find_material_output_node(nodes: [bpy.types.Node]) -> [bpy.types.Material | 
     for node in nodes:
         if node.type == "OUTPUT_MATERIAL" and node.is_active_output:
             return node
+
+
+def view_selected(context: bpy.types.Context):
+    # 视图到所选
+    for area in context.screen.areas:
+        if area.type == "VIEW_3D":
+            for region in area.regions:
+                if region.type == "WINDOW":
+                    with context.temp_override(area=area, region=region):
+                        bpy.ops.view3d.view_selected("INVOKE_DEFAULT")

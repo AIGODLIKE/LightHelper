@@ -320,7 +320,7 @@ class LLT_PT_light_list_panel(bpy.types.Panel):
         tips = row.operator(LLP_OT_question.bl_idname, text='', icon='QUESTION', emboss=False)
         if tips:
             tips.data = p_(
-                """列出场景内所有的灯光,包括物体自发光."""
+                """List all the lights in the scene, including object self illumination"""
             )
         row.separator()
 
@@ -393,6 +393,10 @@ class LLT_UL_light(bpy.types.UIList):
             elif filter_type == "EMISSION":
                 from .utils import check_material_including_emission
                 flag = self.bitflag_filter_item if check_material_including_emission(obj) else self.EMPTY
+            elif filter_type == "RECEIVER":
+                flag = self.bitflag_filter_item if obj.light_linking.receiver_collection is not None else self.EMPTY
+            elif filter_type == "BLOCKER":
+                flag = self.bitflag_filter_item if obj.light_linking.blocker_collection is not None else self.EMPTY
             else:
                 flag = self.EMPTY
             flt_flags[idx] = flag
