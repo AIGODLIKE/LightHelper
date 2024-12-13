@@ -33,7 +33,7 @@ class LLT_AddonPreferences(AddonPreferences):
         if key in self:
             return self[key]
         else:
-            return 1 << 0
+            return 0
 
     def set_link(self, value):
         key = f"{self.light_list_filter_type}_link"
