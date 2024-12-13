@@ -21,18 +21,12 @@ class LLT_AddonPreferences(AddonPreferences):
         ]
     )
 
-    __items__ = [
-        ("ALL", "All", "", "OUTLINER", 1 << 0),
-        ("LINK", "LINK", "", "OUTLINER_OB_LIGHT", 1 << 1),
-        ("NOT_LINK", "NOT_LINK", "", "OUTLINER_OB_LIGHTPROBE", 1 << 2),
-    ]
-
     def get_link(self):
         key = f"{self.light_list_filter_type}_link"
         if key in self:
             return self[key]
         else:
-            return 0
+            return 1 << 0
 
     def set_link(self, value):
         key = f"{self.light_list_filter_type}_link"
@@ -41,9 +35,9 @@ class LLT_AddonPreferences(AddonPreferences):
     light_link_filter_type: EnumProperty(
         default="ALL",
         items=[
-            ("ALL", "All", "", "ALIGN_LEFT", 0),
-            ("LINK", "LINK", "", "OUTLINER_OB_LIGHT", 1),
-            ("NOT_LINK", "NOT_LINK", "", "OUTLINER_OB_LIGHTPROBE", 2),
+            ("ALL", "All", "", "OUTLINER", 1 << 0),
+            ("LINK", "LINK", "", "OUTLINER_OB_LIGHT", 1 << 1),
+            ("NOT_LINK", "NOT_LINK", "", "OUTLINER_OB_LIGHTPROBE", 1 << 2),
         ],
         get=get_link,
         set=set_link,

@@ -50,6 +50,20 @@ class ObjectProperty(PropertyGroup):
     show_light_linking_collection: bpy.props.BoolProperty(
         default=True)
 
+    def get_show(self):
+        obj = self.id_data
+        return not obj.hide_viewport and not obj.hide_get()
+
+    def set_show(self, value):
+        obj = self.id_data
+        obj.hide_render = obj.hide_viewport = not value
+        if value:
+            obj.hide_set(False)
+        else:
+            obj.hide_set(True)
+
+    show_in_view: bpy.props.BoolProperty(name="Show", get=get_show, set=set_show, )
+
 
 class SceneProperty(PropertyGroup):
     def update_pin_object(self, context):

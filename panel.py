@@ -391,9 +391,14 @@ class LLT_UL_light(bpy.types.UIList):
         right.label(text=item.name)
         right.separator()
 
+        icon = "HIDE_OFF" if item.light_helper_property.show_in_view else "HIDE_ON"
+
+        right.prop(item.light_helper_property, "show_in_view", text='', icon=icon, emboss=False)
+        right.separator()
+
         if check_link(item):
             right.context_pointer_set("clear_light_linking_object", item)
-            right.operator(LLP_OT_clear_light_linking.bl_idname, text="", icon="PANEL_CLOSE", emboss=False, )
+            right.operator(LLP_OT_clear_light_linking.bl_idname, text="", icon="PANEL_CLOSE", emboss=False)
         else:
             with context.temp_override(add_light_linking_light_obj=item):
                 from bpy.app.translations import pgettext_iface
