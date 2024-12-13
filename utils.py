@@ -336,11 +336,21 @@ def find_material_output_node(nodes: [bpy.types.Node]) -> [bpy.types.Material | 
 
 def view_selected(context: bpy.types.Context):
     # 视图到所选
+    mt = get_pref().moving_view_type
+    if mt == "NONE":
+        return
     for area in context.screen.areas:
-        if area.type == "VIEW_3D":
+        if area.type == "VIEW_3D" and area == context.area:
             for region in area.regions:
                 if region.type == "WINDOW":
                     with context.temp_override(area=area, region=region):
-                        view_distance = context.space_data.region_3d.view_distance
-                        bpy.ops.view3d.view_selected("INVOKE_DEFAULT", use_all_regions=True)
-                        context.space_data.region_3d.view_distance = view_distance
+                        if mt == "MAINTAINING_ZOOM":
+                            view_distance = context.space_data.region_3d.view_distance
+                            bpy.ops.view3d.view_selected("EXEC_DEFAULT", use_all_regions=True)
+                            context.space_data.region_3d.view_distance = view_distance
+                        elif mt == "ANIMATION":
+                            bpy.ops.view3d.view_selected("INVOKE_DEFAULT", use_all_regions=True)
+
+
+def check_link(obj: bpy.types.Object) -> bool:
+    return obj.light_linking.receiver_collection or obj.light_linking.blocker_collection

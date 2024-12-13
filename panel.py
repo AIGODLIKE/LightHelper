@@ -26,10 +26,16 @@ def get_item_icon(item: bpy.types.Object | bpy.types.Collection):
     if isinstance(item, bpy.types.Collection):
         return {'icon': "OUTLINER_COLLECTION"}
     elif isinstance(item, bpy.types.Object):
-        if item.data is not None:
-            icon_value = UILayout.icon(item.data)
-            if icon_value != 157:
-                return {"icon_value": icon_value}
+        if item.type == "LIGHT":
+            from .utils import check_link
+            return {"icon": "OUTLINER_OB_LIGHT" if check_link(item) else "OUTLINER_DATA_LIGHT"}
+        elif hasattr(item, 'data'):
+            try:
+                icon_value = UILayout.icon(item.data)
+                if icon_value != 157:
+                    return {"icon_value": icon_value}
+            except Exception:
+                ...
         if item.type == "EMPTY":
             return {"icon": "EMPTY_DATA"}
         else:
@@ -333,9 +339,14 @@ class LLT_PT_light_list_panel(bpy.types.Panel):
         row.separator()
 
     def draw(self, context):
+        from .utils import get_pref
+        pref = get_pref()
+
         layout = self.layout
-        row = layout.row()
-        row.prop(context.scene.light_helper_property, "light_list_filter_type", expand=True)
+        column = layout.column(align=True)
+        column.row().prop(pref, "light_list_filter_type", expand=True)
+        column.row().prop(pref, "light_link_filter_type", expand=True)
+
         layout.template_list("LLT_UL_light", "", context.scene, "objects", context.scene.light_helper_property,
                              "active_object_index")
 
@@ -351,38 +362,48 @@ class LLT_UL_light(bpy.types.UIList):
         options=set(),
         description="",
     )
+    show_type: bpy.props.BoolProperty(name="Show Type", default=False)
 
     def draw_filter(self, context, layout):
-        # Nothing much to say here, it's usual UI code...
-        row = layout.row()
-
-        subrow = row.row(align=True)
-        subrow.prop(self, "filter_name", text="")
-        # icon = 'ZOOM_OUT' if self.use_filter_name_reverse else 'ZOOM_IN'
-        # subrow.prop(self, "use_filter_name_reverse", text="", icon=icon)
-
-        row = layout.row(align=True)
-        # icon = 'TRIA_UP' if self.use_filter_orderby_invert else 'TRIA_DOWN'
-        # row.prop(self, "use_filter_orderby_invert", text="", icon=icon)
-
-        row.prop(self, "sort_type", expand=True)
-        column = layout.column()
-        column.prop(context.scene.light_helper_property, "light_list_filter_type", expand=True)
+        from .utils import get_pref
+        pref = get_pref()
+        column = layout.column(align=True)
+        column.row().prop(self, "sort_type", expand=True)
+        column.row().prop(pref, "moving_view_type", expand=True)
+        column.prop(self, "show_type", expand=True)
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
+        from .utils import check_link
+        from .ops import LLP_OT_add_light_linking, LLP_OT_clear_light_linking
         split = layout.split(factor=0.2, align=True)
 
         left = split.row(align=True)
-        left.template_icon(icon_value=bpy.types.UILayout.icon(item.data))
-        left.label(text=item.type)
+        left.label(**get_item_icon(item))
+        if self.show_type:
+            left.label(text=item.type.title())
 
         right = split.row(align=True)
         right.label(text=item.name)
+        right.separator()
+
+        if check_link(item):
+            right.context_pointer_set("clear_light_linking_object", item)
+            right.operator(LLP_OT_clear_light_linking.bl_idname, text="", icon="PANEL_CLOSE", emboss=False, )
+        else:
+            with context.temp_override(add_light_linking_light_obj=item):
+                from bpy.app.translations import pgettext_iface
+                right.context_pointer_set("add_light_linking_light_obj", item)
+                op = right.operator(LLP_OT_add_light_linking.bl_idname, text='', icon='OUTLINER_OB_LIGHT',
+                                    emboss=False, )
+                op.init = True
 
     def filter_items(self, context, data, propname):
+        from .utils import get_pref, check_link
         helper_funcs = bpy.types.UI_UL_list
         objects = getattr(data, propname)[:]
-        filter_type = context.scene.light_helper_property.light_list_filter_type
+        pref = get_pref()
+        filter_type = pref.light_list_filter_type
+        link_type = pref.light_link_filter_type
 
         flt_flags = []
         flt_neworder = []
@@ -390,23 +411,23 @@ class LLT_UL_light(bpy.types.UIList):
         if not flt_flags:
             flt_flags = [self.bitflag_filter_item] * len(objects)
 
-        # flt_flags[idx] |= self.EMPTY
+        from .utils import check_material_including_emission
         for idx, obj in enumerate(objects):
             if filter_type == "ALL":
-                flag = self.bitflag_filter_item if obj.type in {'LIGHT', 'MESH'} else self.EMPTY
+                is_show = obj.type == "LIGHT" or check_material_including_emission(obj)
+                flag = self.bitflag_filter_item if is_show else self.EMPTY
             elif filter_type == "LIGHT":
                 flag = self.bitflag_filter_item if obj.type == 'LIGHT' else self.EMPTY
-            elif filter_type == "MESH":
-                flag = self.bitflag_filter_item if obj.type == 'MESH' else self.EMPTY
             elif filter_type == "EMISSION":
-                from .utils import check_material_including_emission
                 flag = self.bitflag_filter_item if check_material_including_emission(obj) else self.EMPTY
-            elif filter_type == "RECEIVER":
-                flag = self.bitflag_filter_item if obj.light_linking.receiver_collection is not None else self.EMPTY
-            elif filter_type == "BLOCKER":
-                flag = self.bitflag_filter_item if obj.light_linking.blocker_collection is not None else self.EMPTY
             else:
                 flag = self.EMPTY
+
+            if flag == self.bitflag_filter_item and link_type != "ALL":
+                is_link = check_link(obj)
+
+                is_ok = link_type == "LINK" and is_link or link_type == "NOT_LINK" and not is_link
+                flag = self.bitflag_filter_item if is_ok else self.EMPTY
             flt_flags[idx] = flag
 
         if self.sort_type == "TYPE":

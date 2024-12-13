@@ -124,11 +124,13 @@ class LLP_OT_clear_light_linking(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
+        obj = hasattr(context, "clear_light_linking_object")
         light = get_light_obj(context)
-        return light is not None
+        return obj is not None or light is not None
 
     def execute(self, context):
-        light = get_light_obj(context)
+        obj = getattr(context, "clear_light_linking_object", None)
+        light = obj if obj is not None else get_light_obj(context)
         light_linking = light.light_linking
         light_linking.receiver_collection = None
         light_linking.blocker_collection = None

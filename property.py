@@ -107,15 +107,6 @@ class SceneProperty(PropertyGroup):
         view_selected(context)
 
     active_object_index: bpy.props.IntProperty(default=0, update=update_active_object_index)
-    light_list_filter_type: bpy.props.EnumProperty(default="ALL", items=[
-        ("ALL", "All", ""),
-        ("LIGHT", "Light", ""),
-        ("MESH", "Mesh", ""),
-        ("EMISSION", "Emission Material", ""),
-        ("RECEIVER", "Receiver", ""),
-        ("BLOCKER", "Blocker", ""),
-    ]
-                                                   )
 
 
 class WindowManagerProperty(PropertyGroup):
