@@ -15,9 +15,9 @@ class LLT_AddonPreferences(AddonPreferences):
     light_list_filter_type: EnumProperty(
         default="ALL",
         items=[
-            ("ALL", "All", "", "OUTLINER", 0),
-            ("LIGHT", "Light", "", "OUTLINER_DATA_LIGHT", 1),
-            ("EMISSION", "Emission Material", "", "MATERIAL", 2),
+            ("ALL", "All", "Display lights and objects that can emit light", "OUTLINER", 0),
+            ("LIGHT", "Light", "Only show the lights", "OUTLINER_DATA_LIGHT", 1),
+            ("EMISSION", "Emission Material", "Only luminous material are displayed", "MATERIAL", 2),
         ]
     )
 
@@ -35,9 +35,9 @@ class LLT_AddonPreferences(AddonPreferences):
     light_link_filter_type: EnumProperty(
         default="ALL",
         items=[
-            ("ALL", "All", "", "ALIGN_LEFT", 1 << 0),
-            ("LINK", "LINK", "", "OUTLINER_OB_LIGHT", 1 << 1),
-            ("NOT_LINK", "NOT_LINK", "", "OUTLINER_DATA_LIGHT", 1 << 2),
+            ("ALL", "All", "Show all", "ALIGN_LEFT", 1 << 0),
+            ("LINK", "LINK", "Only light links are displayed", "OUTLINER_OB_LIGHT", 1 << 1),
+            ("NOT_LINK", "NOT_LINK", "Only non-light links are displayed", "OUTLINER_DATA_LIGHT", 1 << 2),
         ],
         get=get_link,
         set=set_link,

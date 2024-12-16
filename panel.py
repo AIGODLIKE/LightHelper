@@ -348,14 +348,33 @@ class LLT_UL_light(bpy.types.UIList):
         description="",
     )
     show_type: bpy.props.BoolProperty(name="Show Type", default=False)
+    show_in_view: bpy.props.BoolProperty(name="Show View Button", default=True)
 
     def draw_filter(self, context, layout):
         from .utils import get_pref
+        from bpy.app.translations import pgettext_iface
+
         pref = get_pref()
-        column = layout.column(align=True)
-        column.row().prop(self, "sort_type", expand=True)
-        column.row().prop(pref, "moving_view_type", expand=True)
-        column.prop(self, "show_type", expand=True)
+
+        sp = layout.column(align=True).split(factor=0.2, align=True)
+
+        sc = sp.column(align=True)
+
+        for i in (
+                "Sort Type",
+                "Show",
+                "Moving View Type",
+        ):
+            sc.label(text=f"{pgettext_iface(i)}:")
+
+        sc = sp.column(align=True)
+        sc.row(align=True).prop(self, "sort_type", expand=True)
+
+        row = sc.row(align=True)
+        row.prop(self, "show_type", emboss=True, toggle=True)
+        row.prop(self, "show_in_view", emboss=True, toggle=True)
+
+        sc.row(align=True).prop(pref, "moving_view_type", expand=True)
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
         from .utils import check_link
@@ -371,10 +390,11 @@ class LLT_UL_light(bpy.types.UIList):
         right.label(text=item.name)
         right.separator()
 
-        icon = "HIDE_OFF" if item.light_helper_property.show_in_view else "HIDE_ON"
+        if self.show_in_view:
+            icon = "HIDE_OFF" if item.light_helper_property.show_in_view else "HIDE_ON"
 
-        right.prop(item.light_helper_property, "show_in_view", text='', icon=icon, emboss=False)
-        right.separator()
+            right.prop(item.light_helper_property, "show_in_view", text='', icon=icon, emboss=False)
+            right.separator()
 
         if check_link(item):
             right.context_pointer_set("clear_light_linking_object", item)
