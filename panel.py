@@ -387,7 +387,7 @@ class LLT_UL_light(bpy.types.UIList):
             left.label(text=item.type.title())
 
         right = split.row(align=True)
-        right.label(text=item.name)
+        right.label(text=item.name, translate=False)
         right.separator()
 
         if self.show_in_view:
