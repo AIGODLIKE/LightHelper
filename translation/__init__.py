@@ -1,4 +1,20 @@
+import ast
+import re
+
 import bpy
+
+
+def get_language_list() -> list:
+    """
+    Traceback (most recent call last):
+  File "<blender_console>", line 1, in <module>
+TypeError: bpy_struct: item.attr = val: enum "a" not found in ("DEFAULT", "en_US", "es", "ja_JP", "sk_SK", "vi_VN", "zh_HANS", "ar_EG", "de_DE", "fr_FR", "it_IT", "ko_KR", "pt_BR", "pt_PT", "ru_RU", "uk_UA", "zh_TW", "ab", "ca_AD", "cs_CZ", "eo", "eu_EU", "fa_IR", "ha", "he_IL", "hi_IN", "hr_HR", "hu_HU", "id_ID", "ky_KG", "nl_NL", "pl_PL", "sr_RS", "sr_RS@latin", "sv_SE", "th_TH", "tr_TR")
+    """
+    try:
+        bpy.context.preferences.view.language = ""
+    except TypeError as e:
+        matches = re.findall(r"\(([^()]*)\)", e.args[-1])
+        return ast.literal_eval(f"({matches[-1]})")
 
 
 class TranslationHelper():
@@ -26,21 +42,24 @@ class TranslationHelper():
 ############
 from . import zh_HANS
 
-zh_CN = TranslationHelper('light_helper_zh_CN', zh_HANS.data)
-zh_HANS = TranslationHelper('light_helper_zh_HANS', zh_HANS.data, lang='zh_HANS')
+all_language = get_language_list()
+
+zh_CN = None
 
 
 def register():
-    if bpy.app.version < (4, 0, 0):
-        zh_CN.register()
-    else:
-        zh_CN.register()
-        zh_HANS.register()
+    global zh_CN
+
+    language = "zh_CN"
+    if language not in all_language:
+        if language in ("zh_CN", "zh_HANS"):
+            if "zh_CN" in all_language:
+                language = "zh_CN"
+            elif "zh_HANS" in all_language:
+                language = "zh_HANS"
+    zh_CN = TranslationHelper('light_helper_zh_CN', zh_HANS.data, lang=language)
+    zh_CN.register()
 
 
 def unregister():
-    if bpy.app.version < (4, 0, 0):
-        zh_CN.unregister()
-    else:
-        zh_CN.unregister()
-        zh_HANS.unregister()
+    zh_CN.unregister()

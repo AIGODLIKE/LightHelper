@@ -30,7 +30,13 @@ data = {
     "Only show the lights": "仅显示灯光",
     "Only luminous material are displayed": "仅显示发光材质",
     "Show all": "显示所有",
-    "Only light links are displayed": "仅显示链接",
+    "Only light links are displayed": "仅显示灯光链接",
     "Only non-light links are displayed": "仅显示非灯光链接",
-    "Moving View Type": "移动视图类型"
+    "Moving View Type": "移动视图类型",
+    "Version lower than 4.3.0, only the CYCLE renderer can set light exclusion": "版本低于4.3.0，仅CYCLE渲染器可设置灯光排除",
+    "List Filter Type": "列表筛选类型",
+    "Link Filter Type": "链接筛选类型",
+    "Do not move the view": "不移动视图",
+    "Direct switching of view position,no animation": "直接移动视图位置,无动画",
+    "Animation switching, no fixed zoom": "动画切换，无固定缩放",
 }

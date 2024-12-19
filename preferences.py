@@ -13,6 +13,7 @@ class LLT_AddonPreferences(AddonPreferences):
     panel_name: StringProperty(name="Panel Name", default="LH", update=update_panel)
 
     light_list_filter_type: EnumProperty(
+        name="List Filter Type",
         default="ALL",
         items=[
             ("ALL", "All", "Display lights and objects that can emit light", "OUTLINER", 0),
@@ -33,6 +34,7 @@ class LLT_AddonPreferences(AddonPreferences):
         self[key] = value
 
     light_link_filter_type: EnumProperty(
+        name="Link Filter Type",
         default="ALL",
         items=[
             ("ALL", "All", "Show all", "ALIGN_LEFT", 1 << 0),
@@ -43,20 +45,24 @@ class LLT_AddonPreferences(AddonPreferences):
         set=set_link,
     )
     moving_view_type: EnumProperty(
+        name="Moving View Type",
         default="ANIMATION",
         items=[
-            ("NONE", "None", "", "RESTRICT_SELECT_ON", 0),
-            ("MAINTAINING_ZOOM", "Maintaining Zoom", "Direct switching of view position, no animation", "VIEWZOOM", 1),
+            ("NONE", "None", "Do not move the view", "RESTRICT_SELECT_ON", 0),
+            ("MAINTAINING_ZOOM", "Maintaining Zoom", "Direct switching of view position,no animation", "VIEWZOOM", 1),
             ("ANIMATION", "Animation", "Animation switching, no fixed zoom", "ANIM", 2),
         ]
     )
 
     def draw(self, context):
         layout = self.layout
-        layout.prop(self, "panel_name")
-        layout.prop(self, "light_list_filter_type", expand=True)
-        layout.prop(self, "light_link_filter_type", expand=True)
-        layout.prop(self, "moving_view_type", expand=True)
+        column = layout.column(align=True)
+        if bpy.app.version < (4, 3, 0):
+            column.label(text="Version lower than 4.3.0, only the CYCLE renderer can set light exclusion")
+        column.prop(self, "panel_name")
+        column.prop(self, "light_list_filter_type")
+        column.prop(self, "light_link_filter_type")
+        column.prop(self, "moving_view_type")
 
 
 def register():
