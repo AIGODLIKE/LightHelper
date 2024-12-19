@@ -21,12 +21,26 @@ def get_light_icon(light):
 
 
 def get_item_icon(item: bpy.types.Object | bpy.types.Collection):
-    if isinstance(item, bpy.types.Object):
-        return 'OBJECT_DATA'
-    elif isinstance(item, bpy.types.Collection):
-        return 'OUTLINER_COLLECTION'
-    else:
-        return 'QUESTION'
+    from bpy.types import UILayout
+
+    if isinstance(item, bpy.types.Collection):
+        return {'icon': "OUTLINER_COLLECTION"}
+    elif isinstance(item, bpy.types.Object):
+        if item.type == "LIGHT":
+            from .utils import check_link
+            return {"icon": "OUTLINER_OB_LIGHT" if check_link(item) else "OUTLINER_DATA_LIGHT"}
+        elif hasattr(item, 'data'):
+            try:
+                icon_value = UILayout.icon(item.data)
+                if icon_value != 157:
+                    return {"icon_value": icon_value}
+            except Exception:
+                ...
+        if item.type == "EMPTY":
+            return {"icon": "EMPTY_DATA"}
+        else:
+            return {"icon": "OBJECT_DATA"}
+    return {"icon": "QUESTION"}
 
 
 def draw_select_btn(layout, item):
@@ -36,7 +50,7 @@ def draw_select_btn(layout, item):
         row.context_pointer_set("select_item_object", item)
     else:
         row.context_pointer_set("select_item_collection", item)
-    row.operator(LLP_OT_select_item.bl_idname, text=item.name, icon=get_item_icon(item), emboss=False, translate=False)
+    row.operator(LLP_OT_select_item.bl_idname, text=item.name, emboss=False, translate=False, **get_item_icon(item))
 
 
 def draw_toggle_btn(layout,
@@ -129,9 +143,18 @@ class LLT_PT_light_control_panel(bpy.types.Panel):
 
     def draw_header(self, context):
         from .ops import LLP_OT_question
+        from .utils import get_pref
+
+        pref = get_pref()
+
         layout = self.layout
         row = layout.row(align=True)
         row.label(text="Light Linking")
+        row.prop(pref, "moving_view_type", expand=True, icon_only=True)
+        row.separator()
+        row.prop(pref, "light_link_filter_type", expand=True, text="")
+
+        row.separator()
         tips = row.operator(LLP_OT_question.bl_idname, text="", icon="QUESTION", emboss=False)
         tips.data = p_(
             """Light Linking Panel
@@ -143,6 +166,7 @@ Provides buttons to toggle the light effecting state of the objects."""
 
     def draw(self, context):
         layout = self.layout
+        self.draw_light_list(context, layout)
         self.draw_light_objs_control(context, layout)
 
     def draw_light_objs_control(self, context, layout):
@@ -232,6 +256,18 @@ Provides buttons to toggle the light effecting state of the objects."""
         row.context_pointer_set("link_light_obj", light_obj)
         row.operator(LLP_OT_link_selected_objs.bl_idname, icon='ADD')
 
+    def draw_light_list(self, context, layout):
+        from .utils import get_pref
+        pref = get_pref()
+
+        column = layout.column(align=True)
+        column.row().prop(pref, "light_list_filter_type", expand=True)
+
+        row = column.row(align=True)
+        row.template_list("LLT_UL_light", "", context.scene, "objects", context.scene.light_helper_property,
+                          "active_object_index")
+        # row.column(align=True).prop(pref, "light_link_filter_type", expand=True, text="", icon_only=True)
+
 
 class LLT_PT_obj_control_panel(bpy.types.Panel):
     bl_label = ""
@@ -300,9 +336,121 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
         box.prop(context.window_manager.light_helper_property, 'object_linking_add_object', text='', icon='ADD')
 
 
+class LLT_UL_light(bpy.types.UIList):
+    EMPTY = 1 << 0
+
+    sort_type: bpy.props.EnumProperty(
+        name="Use Sort",
+        default="TYPE",
+        items=[("TYPE", "Type", ""),
+               ("NAME", "Name", "")],
+        options=set(),
+        description="",
+    )
+    show_type: bpy.props.BoolProperty(name="Show Type", default=False)
+    show_in_view: bpy.props.BoolProperty(name="Show View Button", default=True)
+
+    def draw_filter(self, context, layout):
+        from .utils import get_pref
+        from bpy.app.translations import pgettext_iface
+
+        pref = get_pref()
+
+        sp = layout.column(align=True).split(factor=0.2, align=True)
+
+        sc = sp.column(align=True)
+
+        for i in (
+                "Sort Type",
+                "Show",
+                "Moving View Type",
+        ):
+            sc.label(text=f"{pgettext_iface(i)}:")
+
+        sc = sp.column(align=True)
+        sc.row(align=True).prop(self, "sort_type", expand=True)
+
+        row = sc.row(align=True)
+        row.prop(self, "show_type", emboss=True, toggle=True)
+        row.prop(self, "show_in_view", emboss=True, toggle=True)
+
+        sc.row(align=True).prop(pref, "moving_view_type", expand=True)
+
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
+        from .utils import check_link
+        from .ops import LLP_OT_add_light_linking, LLP_OT_clear_light_linking
+        split = layout.split(factor=0.2, align=True)
+
+        left = split.row(align=True)
+        left.label(**get_item_icon(item))
+        if self.show_type:
+            left.label(text=item.type.title())
+
+        right = split.row(align=True)
+        right.label(text=item.name, translate=False)
+        right.separator()
+
+        if self.show_in_view:
+            icon = "HIDE_OFF" if item.light_helper_property.show_in_view else "HIDE_ON"
+
+            right.prop(item.light_helper_property, "show_in_view", text='', icon=icon, emboss=False)
+            right.separator()
+
+        if check_link(item):
+            right.context_pointer_set("clear_light_linking_object", item)
+            right.operator(LLP_OT_clear_light_linking.bl_idname, text="", icon="PANEL_CLOSE", emboss=False)
+        else:
+            with context.temp_override(add_light_linking_light_obj=item):
+                from bpy.app.translations import pgettext_iface
+                right.context_pointer_set("add_light_linking_light_obj", item)
+                op = right.operator(LLP_OT_add_light_linking.bl_idname, text='', icon='OUTLINER_OB_LIGHT',
+                                    emboss=False, )
+                op.init = True
+
+    def filter_items(self, context, data, propname):
+        from .utils import get_pref, check_link
+        helper_funcs = bpy.types.UI_UL_list
+        objects = getattr(data, propname)[:]
+        pref = get_pref()
+        filter_type = pref.light_list_filter_type
+        link_type = pref.light_link_filter_type
+
+        flt_flags = []
+        flt_neworder = []
+
+        if not flt_flags:
+            flt_flags = [self.bitflag_filter_item] * len(objects)
+
+        from .utils import check_material_including_emission
+        for idx, obj in enumerate(objects):
+            if filter_type == "ALL":
+                is_show = obj.type == "LIGHT" or check_material_including_emission(obj)
+                flag = self.bitflag_filter_item if is_show else self.EMPTY
+            elif filter_type == "LIGHT":
+                flag = self.bitflag_filter_item if obj.type == 'LIGHT' else self.EMPTY
+            elif filter_type == "EMISSION":
+                flag = self.bitflag_filter_item if check_material_including_emission(obj) else self.EMPTY
+            else:
+                flag = self.EMPTY
+
+            if flag == self.bitflag_filter_item and link_type != "ALL":
+                is_link = check_link(obj)
+
+                is_ok = link_type == "LINK" and is_link or link_type == "NOT_LINK" and not is_link
+                flag = self.bitflag_filter_item if is_ok else self.EMPTY
+            flt_flags[idx] = flag
+
+        if self.sort_type == "TYPE":
+            flt_neworder = helper_funcs.sort_items_by_name(objects, "type")
+        elif self.sort_type == "NAME":
+            flt_neworder = helper_funcs.sort_items_by_name(objects, "name")
+        return flt_flags, flt_neworder
+
+
 panel_list = [
     LLT_PT_light_control_panel,
     LLT_PT_obj_control_panel,
+    LLT_UL_light,
 ]
 register_class, unregister_class = bpy.utils.register_classes_factory(panel_list)
 

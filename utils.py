@@ -292,3 +292,65 @@ def set_light_effect_coll_state(light: bpy.types.Object, coll: bpy.types.Collect
         set_obj_state_from_coll(get_linking_coll(light, CollectionType.BLOCKER), state[1])
 
     return
+
+
+def check_material_including_emission(obj: bpy.types.Object, check_depth=5) -> bool:
+    """检查材质是否有自发光"""
+
+    # bpy.context.object.material_slots['Material'].material.node_tree.nodes.active
+    # bpy.data.materials["Material"].use_nodes
+    # bpy.data.materials["Material"].node_tree.nodes["Material Output.001"].is_active_output
+    def node_tree_search(node: bpy.types.Node, depth=0) -> [bpy.types.Node | None]:
+        if depth > check_depth:
+            return None
+        for input_point in node.inputs:  # 当前节点的输入节点
+            for link in input_point.links:  # 输入链接的节点
+                from_node = link.from_node  # 链接 从
+                if from_node.type in {"ADD_SHADER", "MIX_SHADER"}:
+                    find = node_tree_search(from_node, depth + 1)
+                    if find:
+                        return find
+                elif from_node.type == "EMISSION":  # 就是一个自发光节点
+                    return True
+                elif from_node.type == "BSDF_PRINCIPLED":  # 原理化节点
+                    for i in from_node.inputs:
+                        if i.identifier == "Emission Strength" and i.default_value > 0:
+                            return True
+                else:
+                    return node_tree_search(input_point.node_tree, depth + 1)
+
+    for material in obj.material_slots:
+        mat = material.material
+        if mat.use_nodes:
+            out_node = find_material_output_node(mat.node_tree.nodes)
+            if out_node:
+                return node_tree_search(out_node) is not None
+    return False
+
+
+def find_material_output_node(nodes: [bpy.types.Node]) -> [bpy.types.Material | None]:
+    for node in nodes:
+        if node.type == "OUTPUT_MATERIAL" and node.is_active_output:
+            return node
+
+
+def view_selected(context: bpy.types.Context):
+    # 视图到所选
+    mt = get_pref().moving_view_type
+    if mt == "NONE":
+        return
+    for area in context.screen.areas:
+        if area.type == "VIEW_3D" and area == context.area:
+            for region in area.regions:
+                if region.type == "WINDOW":
+                    with context.temp_override(area=area, region=region):
+                        if mt == "MAINTAINING_ZOOM":
+                            view_distance = context.space_data.region_3d.view_distance
+                            bpy.ops.view3d.view_selected("EXEC_DEFAULT", use_all_regions=True)
+                            context.space_data.region_3d.view_distance = view_distance
+                        elif mt == "ANIMATION":
+                            bpy.ops.view3d.view_selected("INVOKE_DEFAULT", use_all_regions=True)
+
+
+def check_link(obj: bpy.types.Object) -> bool:
+    return obj.light_linking.receiver_collection or obj.light_linking.blocker_collection

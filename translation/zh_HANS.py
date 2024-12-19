@@ -16,5 +16,21 @@ data = {
     'Please select light or can be illuminated object': '请选择灯光或可被照射物体',
     'Current type: ': '当前类型: ',
     'Instances Data': '实例数据',
-    'Panel Name': '面板名称'
+    'Panel Name': '面板名称',
+    "Emission Material": "自发光材质",
+    "Linking List": "灯光列表",
+    "Receiver": "接收器",
+    "Blocker": "阻断器",
+    "Light Link": "灯光链接",
+    "Maintaining Zoom": "保持缩放",
+    "Show Type": "显示类型",
+    "Show In View": "显示在视图",
+    "Show View Button": "显示视图按钮",
+    "Display lights and objects that can emit light": "显示灯光以及可以发光的物体",
+    "Only show the lights": "仅显示灯光",
+    "Only luminous material are displayed": "仅显示发光材质",
+    "Show all": "显示所有",
+    "Only light links are displayed": "仅显示链接",
+    "Only non-light links are displayed": "仅显示非灯光链接",
+    "Moving View Type": "移动视图类型"
 }
