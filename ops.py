@@ -360,6 +360,35 @@ class LLP_OT_instances_data(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class LLP_OT_switch_filter_show(bpy.types.Operator):
+    bl_idname = 'llp.switch_filter_show'
+    bl_label = "Switch Filter Show"
+
+    def execute(self, context):
+        from .filter import filter_objects
+        _, show = self.get_icon(context)
+        for obj in filter_objects(context):
+            obj.light_helper_property.show_in_view = not show
+        return {"FINISHED"}
+
+    @staticmethod
+    def get_icon(context):
+        from .filter import filter_objects
+        last_show = None
+        for obj in filter_objects(context):
+            show = obj.light_helper_property.show_in_view
+            if last_show is None:
+                last_show = show
+            if show != last_show:
+                return 'REMOVE', show
+            last_show = show
+
+        if last_show is True:
+            return 'HIDE_OFF', True
+        else:
+            return 'HIDE_ON', False
+
+
 ops_list = [
     LLP_OT_question,
     LLP_OT_remove_light_linking,
@@ -369,6 +398,7 @@ ops_list = [
     LLP_OT_link_selected_objs,
     LLP_OT_select_item,
     LLP_OT_instances_data,
+    LLP_OT_switch_filter_show,
 ]
 register_class, unregister_class = bpy.utils.register_classes_factory(ops_list)
 

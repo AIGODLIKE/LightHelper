@@ -257,15 +257,21 @@ Provides buttons to toggle the light effecting state of the objects."""
         row.operator(LLP_OT_link_selected_objs.bl_idname, icon='ADD')
 
     def draw_light_list(self, context, layout):
+        from .ops import LLP_OT_switch_filter_show
         from .utils import get_pref
         pref = get_pref()
+
+        icon, _ = LLP_OT_switch_filter_show.get_icon(context)
 
         column = layout.column(align=True)
         column.row(align=True).prop(pref, "light_link_filter_type", expand=True,
                                     text_ctxt="light_helper_zh_CN")
 
         row = column.row(align=True)
-        row.column(align=True).prop(pref, "light_list_filter_type", expand=True, text="", icon_only=True)
+        col = row.column(align=True)
+        col.prop(pref, "light_list_filter_type", expand=True, text="", icon_only=True)
+        col.separator()
+        col.operator(LLP_OT_switch_filter_show.bl_idname, text="", icon=icon)
         row.template_list("LLT_UL_light", "", context.scene, "objects", context.scene.light_helper_property,
                           "active_object_index")
 
@@ -338,8 +344,6 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
 
 
 class LLT_UL_light(bpy.types.UIList):
-    EMPTY = 1 << 0
-
     sort_type: bpy.props.EnumProperty(
         name="Use Sort",
         default="TYPE",
@@ -413,37 +417,13 @@ class LLT_UL_light(bpy.types.UIList):
                 op.init = True
 
     def filter_items(self, context, data, propname):
-        from .utils import get_pref, check_link
+        from .filter import filter_list
+
         helper_funcs = bpy.types.UI_UL_list
         objects = getattr(data, propname)[:]
-        pref = get_pref()
-        filter_type = pref.light_list_filter_type
-        link_type = pref.light_link_filter_type
 
-        flt_flags = []
         flt_neworder = []
-
-        if not flt_flags:
-            flt_flags = [self.bitflag_filter_item] * len(objects)
-
-        from .utils import check_material_including_emission
-        for idx, obj in enumerate(objects):
-            if filter_type == "ALL":
-                is_show = obj.type == "LIGHT" or check_material_including_emission(obj)
-                flag = self.bitflag_filter_item if is_show else self.EMPTY
-            elif filter_type == "LIGHT":
-                flag = self.bitflag_filter_item if obj.type == 'LIGHT' else self.EMPTY
-            elif filter_type == "EMISSION":
-                flag = self.bitflag_filter_item if check_material_including_emission(obj) else self.EMPTY
-            else:
-                flag = self.EMPTY
-
-            if flag == self.bitflag_filter_item and link_type != "ALL":
-                is_link = check_link(obj)
-
-                is_ok = link_type == "LINK" and is_link or link_type == "NOT_LINK" and not is_link
-                flag = self.bitflag_filter_item if is_ok else self.EMPTY
-            flt_flags[idx] = flag
+        flt_flags = filter_list(context, self.bitflag_filter_item)
 
         if self.sort_type == "TYPE":
             flt_neworder = helper_funcs.sort_items_by_name(objects, "type")
