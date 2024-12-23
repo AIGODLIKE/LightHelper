@@ -15,6 +15,7 @@ class LLT_AddonPreferences(AddonPreferences):
     light_list_filter_type: EnumProperty(
         name="List Filter Type",
         default="ALL",
+        translation_context="light_helper_zh_CN",
         items=[
             ("ALL", "All", "Display lights and objects that can emit light", "SCENE_DATA", 0),
             ("LIGHT", "Light", "Only show the lights", "OUTLINER_DATA_LIGHT", 1),
@@ -27,7 +28,7 @@ class LLT_AddonPreferences(AddonPreferences):
         if key in self:
             return self[key]
         else:
-            return 1 << 0
+            return 0
 
     def set_link(self, value):
         key = f"{self.light_list_filter_type}_link"
@@ -37,9 +38,9 @@ class LLT_AddonPreferences(AddonPreferences):
         name="Link Filter Type",
         default="ALL",
         items=[
-            ("ALL", "All", "Show all"),  # , "SCENE_DATA", 1 << 0
-            ("NOT_LINK", "General", "Only non-light links are displayed"),  # , "OUTLINER_DATA_LIGHT", 1 << 2
-            ("LINK", "Linkling", "Only light links are displayed"),  # , "OUTLINER_OB_LIGHT", 1 << 1
+            ("ALL", "All", "Show all"),
+            ("NOT_LINK", "General", "Only non-light links are displayed"),
+            ("LINK", "Linkling", "Only light links are displayed"),
         ],
         get=get_link,
         set=set_link,

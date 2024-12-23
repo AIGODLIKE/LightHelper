@@ -27,6 +27,8 @@ class TranslationHelper():
             self.translations_dict.setdefault(lang, {})[key] = src_trans
             key = ("*", src)
             self.translations_dict.setdefault(lang, {})[key] = src_trans
+            key = (name, src)
+            self.translations_dict.setdefault(lang, {})[key] = src_trans
 
     def register(self):
         try:

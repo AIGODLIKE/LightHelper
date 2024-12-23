@@ -42,5 +42,5 @@ data = {
     "General": "普通型",
     "All": "所有",
     "Linkling": "链接型",
-    "Restore": "还原"
+    "Restore": "还原",
 }

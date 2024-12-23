@@ -28,6 +28,9 @@ def get_item_icon(item: bpy.types.Object | bpy.types.Collection):
     elif isinstance(item, bpy.types.Object):
         if item.type == "LIGHT":
             from .utils import check_link
+            for i in item.data.bl_rna.properties['type'].enum_items:
+                if item.data.type == i.identifier:
+                    return {"icon": i.icon}
             return {"icon": "OUTLINER_OB_LIGHT" if check_link(item) else "OUTLINER_DATA_LIGHT"}
         elif hasattr(item, 'data'):
             try:
@@ -258,7 +261,8 @@ Provides buttons to toggle the light effecting state of the objects."""
         pref = get_pref()
 
         column = layout.column(align=True)
-        column.row(align=True).prop(pref, "light_link_filter_type", expand=True)
+        column.row(align=True).prop(pref, "light_link_filter_type", expand=True,
+                                    text_ctxt="light_helper_zh_CN")
 
         row = column.row(align=True)
         row.column(align=True).prop(pref, "light_list_filter_type", expand=True, text="", icon_only=True)
@@ -396,12 +400,12 @@ class LLT_UL_light(bpy.types.UIList):
 
         if check_link(item):
             right.context_pointer_set("clear_light_linking_object", item)
-            right.operator(LLP_OT_clear_light_linking.bl_idname, text="Restore")
+            right.operator(LLP_OT_clear_light_linking.bl_idname, text="Restore", icon="PANEL_CLOSE")
         else:
             with context.temp_override(add_light_linking_light_obj=item):
                 from bpy.app.translations import pgettext_iface
                 right.context_pointer_set("add_light_linking_light_obj", item)
-                op = right.operator(LLP_OT_add_light_linking.bl_idname, text='Init')
+                op = right.operator(LLP_OT_add_light_linking.bl_idname, text='Init', icon="ADD")
                 op.init = True
 
     def filter_items(self, context, data, propname):
