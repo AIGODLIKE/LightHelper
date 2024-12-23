@@ -39,4 +39,8 @@ data = {
     "Do not move the view": "不移动视图",
     "Direct switching of view position,no animation": "直接移动视图位置,无动画",
     "Animation switching, no fixed zoom": "动画切换，无固定缩放",
+    "General": "普通型",
+    "All": "所有",
+    "Linkling": "链接型",
+    "Restore":"还原"
 }

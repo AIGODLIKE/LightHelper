@@ -16,7 +16,7 @@ class LLT_AddonPreferences(AddonPreferences):
         name="List Filter Type",
         default="ALL",
         items=[
-            ("ALL", "All", "Display lights and objects that can emit light", "OUTLINER", 0),
+            ("ALL", "All", "Display lights and objects that can emit light", "SCENE_DATA", 0),
             ("LIGHT", "Light", "Only show the lights", "OUTLINER_DATA_LIGHT", 1),
             ("EMISSION", "Emission Material", "Only luminous material are displayed", "MATERIAL", 2),
         ]
@@ -37,9 +37,9 @@ class LLT_AddonPreferences(AddonPreferences):
         name="Link Filter Type",
         default="ALL",
         items=[
-            ("ALL", "All", "Show all", "ALIGN_LEFT", 1 << 0),
-            ("LINK", "LINK", "Only light links are displayed", "OUTLINER_OB_LIGHT", 1 << 1),
-            ("NOT_LINK", "NOT_LINK", "Only non-light links are displayed", "OUTLINER_DATA_LIGHT", 1 << 2),
+            ("ALL", "All", "Show all"),  # , "SCENE_DATA", 1 << 0
+            ("NOT_LINK", "General", "Only non-light links are displayed"),  # , "OUTLINER_DATA_LIGHT", 1 << 2
+            ("LINK", "Linkling", "Only light links are displayed"),  # , "OUTLINER_OB_LIGHT", 1 << 1
         ],
         get=get_link,
         set=set_link,

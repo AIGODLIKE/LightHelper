@@ -152,9 +152,6 @@ class LLT_PT_light_control_panel(bpy.types.Panel):
         row.label(text="Light Linking")
         row.prop(pref, "moving_view_type", expand=True, icon_only=True)
         row.separator()
-        row.prop(pref, "light_link_filter_type", expand=True, text="")
-
-        row.separator()
         tips = row.operator(LLP_OT_question.bl_idname, text="", icon="QUESTION", emboss=False)
         tips.data = p_(
             """Light Linking Panel
@@ -261,12 +258,12 @@ Provides buttons to toggle the light effecting state of the objects."""
         pref = get_pref()
 
         column = layout.column(align=True)
-        column.row().prop(pref, "light_list_filter_type", expand=True)
+        column.row(align=True).prop(pref, "light_link_filter_type", expand=True)
 
         row = column.row(align=True)
+        row.column(align=True).prop(pref, "light_list_filter_type", expand=True, text="", icon_only=True)
         row.template_list("LLT_UL_light", "", context.scene, "objects", context.scene.light_helper_property,
                           "active_object_index")
-        # row.column(align=True).prop(pref, "light_link_filter_type", expand=True, text="", icon_only=True)
 
 
 class LLT_PT_obj_control_panel(bpy.types.Panel):
@@ -382,6 +379,13 @@ class LLT_UL_light(bpy.types.UIList):
         split = layout.split(factor=0.2, align=True)
 
         left = split.row(align=True)
+
+        if self.show_in_view:
+            icon = "HIDE_OFF" if item.light_helper_property.show_in_view else "HIDE_ON"
+
+            left.prop(item.light_helper_property, "show_in_view", text='', icon=icon, emboss=False)
+            left.separator()
+
         left.label(**get_item_icon(item))
         if self.show_type:
             left.label(text=item.type.title())
@@ -390,21 +394,14 @@ class LLT_UL_light(bpy.types.UIList):
         right.label(text=item.name, translate=False)
         right.separator()
 
-        if self.show_in_view:
-            icon = "HIDE_OFF" if item.light_helper_property.show_in_view else "HIDE_ON"
-
-            right.prop(item.light_helper_property, "show_in_view", text='', icon=icon, emboss=False)
-            right.separator()
-
         if check_link(item):
             right.context_pointer_set("clear_light_linking_object", item)
-            right.operator(LLP_OT_clear_light_linking.bl_idname, text="", icon="PANEL_CLOSE", emboss=False)
+            right.operator(LLP_OT_clear_light_linking.bl_idname, text="Restore")
         else:
             with context.temp_override(add_light_linking_light_obj=item):
                 from bpy.app.translations import pgettext_iface
                 right.context_pointer_set("add_light_linking_light_obj", item)
-                op = right.operator(LLP_OT_add_light_linking.bl_idname, text='', icon='OUTLINER_OB_LIGHT',
-                                    emboss=False, )
+                op = right.operator(LLP_OT_add_light_linking.bl_idname, text='Init')
                 op.init = True
 
     def filter_items(self, context, data, propname):
