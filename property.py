@@ -21,7 +21,7 @@ def check_light_object(obj: bpy.types.Object) -> bool:
     from .utils import ILLUMINATED_OBJECT_TYPE_LIST, SAFE_OBJ_NAME
     type_ok = obj.type in ILLUMINATED_OBJECT_TYPE_LIST
     name_ok = obj.name != SAFE_OBJ_NAME
-    return type_ok and name_ok and obj.type != "LIGHT"
+    return type_ok and name_ok
 
 
 def get_all_view_layout_collection() -> [bpy.types.Collection]:
@@ -232,7 +232,7 @@ class WindowManagerProperty(PropertyGroup):
         else:
             light_obj = bpy.context.object
         light_ok = obj not in get_all_light_effect_items_state(light_obj)
-        return check_light_object(obj) and light_ok
+        return check_light_object(obj) and obj.type != "LIGHT" and light_ok
 
     def poll_object_linking_add_object(self, obj: bpy.types.Object):
         from .utils import get_lights_from_effect_obj

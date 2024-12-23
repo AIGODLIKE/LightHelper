@@ -121,6 +121,7 @@ class LLP_OT_remove_light_linking(bpy.types.Operator):
 class LLP_OT_clear_light_linking(bpy.types.Operator):
     bl_idname = 'llp.clear_light_linking'
     bl_label = "Clear"
+    index: bpy.props.IntProperty(default=-1, options={'SKIP_SAVE'})
 
     @classmethod
     def poll(cls, context):
@@ -134,6 +135,9 @@ class LLP_OT_clear_light_linking(bpy.types.Operator):
         light_linking = light.light_linking
         light_linking.receiver_collection = None
         light_linking.blocker_collection = None
+
+        if self.index != -1:
+            context.scene.light_helper_property.active_object_index = self.index
         return {"FINISHED"}
 
 
@@ -147,6 +151,8 @@ class LLP_OT_add_light_linking(bpy.types.Operator):
 
     init: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
     add_all: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
+
+    index: bpy.props.IntProperty(default=-1, options={'SKIP_SAVE'})
 
     @classmethod
     def poll(cls, context):
@@ -192,6 +198,8 @@ class LLP_OT_add_light_linking(bpy.types.Operator):
             if coll and obj:
                 coll.objects.link(obj)
 
+        if self.index != -1:
+            context.scene.light_helper_property.active_object_index = self.index
         return {"FINISHED"}
 
 

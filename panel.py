@@ -314,7 +314,7 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
         col = layout.column()
         # top line
         row = col.row(align=True)
-        row.label(text=f"{item.name}", icon=get_light_icon(item))
+        row.label(text=f"{item.name}", icon=get_light_icon(item), translate=False)
         row.separator()
         row.prop(bpy.context.scene.light_helper_property, 'object_linking_pin', text='', icon='PINNED')
 
@@ -400,14 +400,16 @@ class LLT_UL_light(bpy.types.UIList):
 
         rs = right.split()
         rs.separator()
+        index = context.scene.objects[:].index(item)
         if check_link(item):
             rs.context_pointer_set("clear_light_linking_object", item)
-            rs.operator(LLP_OT_clear_light_linking.bl_idname, text="Restore")
+            rs.operator(LLP_OT_clear_light_linking.bl_idname, text="Restore").index = index
         else:
             with context.temp_override(add_light_linking_light_obj=item):
                 from bpy.app.translations import pgettext_iface
                 rs.context_pointer_set("add_light_linking_light_obj", item)
                 op = rs.operator(LLP_OT_add_light_linking.bl_idname, text='Init')
+                op.index = index
                 op.init = True
 
     def filter_items(self, context, data, propname):
