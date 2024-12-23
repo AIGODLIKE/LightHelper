@@ -37,6 +37,7 @@ class LLT_AddonPreferences(AddonPreferences):
     light_link_filter_type: EnumProperty(
         name="Link Filter Type",
         default="ALL",
+        translation_context="light_helper_zh_CN",
         items=[
             ("ALL", "All", "Show all"),
             ("NOT_LINK", "General", "Only non-light links are displayed"),
@@ -62,7 +63,7 @@ class LLT_AddonPreferences(AddonPreferences):
             column.label(text="Version lower than 4.3.0, only the CYCLE renderer can set light exclusion")
         column.prop(self, "panel_name")
         column.prop(self, "light_list_filter_type")
-        column.prop(self, "light_link_filter_type")
+        column.prop(self, "light_link_filter_type", text_ctxt="light_helper_zh_CN")
         column.prop(self, "moving_view_type")
 
 

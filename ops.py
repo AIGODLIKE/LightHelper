@@ -135,6 +135,7 @@ class LLP_OT_clear_light_linking(bpy.types.Operator):
         light_linking = light.light_linking
         light_linking.receiver_collection = None
         light_linking.blocker_collection = None
+        self.report({'INFO'}, light.name + " " + p_("Restored"))
 
         if self.index != -1:
             context.scene.light_helper_property.active_object_index = self.index
@@ -167,7 +168,10 @@ class LLP_OT_add_light_linking(bpy.types.Operator):
         if not light:
             self.report({'ERROR'}, "No light selected")
             return {"CANCELLED"}
-
+        if light:
+            self.info(light)
+        if obj:
+            self.info(obj)
         if self.init or self.add_all:
             # create collection for light linking and shadow linking(create safe object)
             from .utils import ensure_linking_coll
@@ -201,6 +205,9 @@ class LLP_OT_add_light_linking(bpy.types.Operator):
         if self.index != -1:
             context.scene.light_helper_property.active_object_index = self.index
         return {"FINISHED"}
+
+    def info(self, obj):
+        self.report({'INFO'}, obj.name + " " + p_("Already initialized as linked type"))
 
 
 class LLP_OT_toggle_light_linking(bpy.types.Operator):
