@@ -398,14 +398,16 @@ class LLT_UL_light(bpy.types.UIList):
         right.label(text=item.name, translate=False)
         right.separator()
 
+        rs = right.split()
+        rs.separator()
         if check_link(item):
-            right.context_pointer_set("clear_light_linking_object", item)
-            right.operator(LLP_OT_clear_light_linking.bl_idname, text="Restore", icon="PANEL_CLOSE")
+            rs.context_pointer_set("clear_light_linking_object", item)
+            rs.operator(LLP_OT_clear_light_linking.bl_idname, text="Restore")
         else:
             with context.temp_override(add_light_linking_light_obj=item):
                 from bpy.app.translations import pgettext_iface
-                right.context_pointer_set("add_light_linking_light_obj", item)
-                op = right.operator(LLP_OT_add_light_linking.bl_idname, text='Init', icon="ADD")
+                rs.context_pointer_set("add_light_linking_light_obj", item)
+                op = rs.operator(LLP_OT_add_light_linking.bl_idname, text='Init')
                 op.init = True
 
     def filter_items(self, context, data, propname):

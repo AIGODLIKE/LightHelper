@@ -47,7 +47,7 @@ class LLT_AddonPreferences(AddonPreferences):
     )
     moving_view_type: EnumProperty(
         name="Moving View Type",
-        default="ANIMATION",
+        default="NONE",
         items=[
             ("NONE", "None", "Do not move the view", "RESTRICT_SELECT_ON", 0),
             ("MAINTAINING_ZOOM", "Maintaining Zoom", "Direct switching of view position,no animation", "VIEWZOOM", 1),
