@@ -231,9 +231,12 @@ Provides buttons to toggle the light effecting state of the objects."""
 
         col.separator()
 
+        objects = context.scene.objects[:]
         for (item, state_info) in obj_state_dict.items():
             if item.name == SAFE_OBJ_NAME:
                 continue  # skip safe obj
+            elif item not in objects:
+                continue  # skip scene delete object
             row = col.row(align=False)
             row.scale_x = 1.1
             row.scale_y = 1.1
@@ -332,7 +335,13 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
             box = col.box()
             box.prop(context.window_manager.light_helper_property, 'object_linking_add_object', text='', icon='ADD')
             return
+
+        objects = context.scene.objects[:]
         for (light_obj, state_info) in obj_state_dict.items():
+            if light_obj.name == SAFE_OBJ_NAME:
+                continue  # skip safe obj
+            elif light_obj not in objects:
+                continue  # skip scene delete object
             row = col.row()
             draw_select_btn(row, light_obj)
             draw_toggle_btn(row, state_info, light_obj, item)

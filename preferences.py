@@ -41,7 +41,7 @@ class LLT_AddonPreferences(AddonPreferences):
         items=[
             ("ALL", "All", "Show all"),
             ("NOT_LINK", "General", "Only non-light links are displayed"),
-            ("LINK", "Linkling", "Only light links are displayed"),
+            ("LINK", "Linking", "Only light links are displayed"),
         ],
         get=get_link,
         set=set_link,
