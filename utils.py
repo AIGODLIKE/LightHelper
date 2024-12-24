@@ -317,7 +317,7 @@ def check_material_including_emission(obj: bpy.types.Object, check_depth=5) -> b
                         if i.identifier == "Emission Strength" and i.default_value > 0:
                             return True
                 else:
-                    return node_tree_search(input_point.node_tree, depth + 1)
+                    return node_tree_search(input_point.node, depth + 1)
 
     for material in obj.material_slots:
         mat = material.material
