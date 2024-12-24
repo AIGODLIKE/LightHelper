@@ -5,28 +5,43 @@ You can decide(Support lighting and shadows):
 
 Light Link| which object/Collection should be illuminated by the light
 
-![image](https://github.com/user-attachments/assets/9919be1a-88c9-4806-b572-3523c1b9eff1)
+![image](https://github.com/user-attachments/assets/eff68fc8-f2e2-4d68-bd0a-cd298b62a424)
 
 
 Object Link| Which light does the object receive illumination from
 
-![image](https://github.com/user-attachments/assets/e9ac7f06-b0a4-4e04-8158-c52c38d06949)
+![image](https://github.com/user-attachments/assets/efd17d36-cb3e-4593-85fb-3530c8edba33)
+
 
 # Usage
 
-## Lights Link
+## Automatic recognition
 
-1. Initialize lights/glowing objects，And add objects and collections that are illuminated/shaded
+Objects with light and material Emission channel intensity>0 will be automatically recognized
 
-https://github.com/user-attachments/assets/5a0fb0e2-3a14-4376-a03e-af2a7259e76a
+https://github.com/user-attachments/assets/833e55e3-7bd2-4476-a275-78cbcd96f6f8
 
-2. Control the projection of lighting or shadows
+## Easy to create exclusions (Light&Material)
 
-https://github.com/user-attachments/assets/a7b84c98-4ca9-4d55-abab-3e7842f61f43
 
-## Objects Link
+https://github.com/user-attachments/assets/19dbc501-e501-43d4-a0cd-50ad1fae7993
 
-Note: You need to enable Light link or Shadow link lighting for the lights, and the objects need to be included in the Link list
+## Exclude light with illuminated objects
 
-https://github.com/user-attachments/assets/508afa39-58f6-4a74-8739-c6ecad7960e8
+
+https://github.com/user-attachments/assets/148198df-3886-43a5-8b65-91353f642ad3
+
+
+## Quickly Select Link Objects
+
+
+
+https://github.com/user-attachments/assets/667f8efc-6102-4559-a724-23071a143399
+
+
+
+## Quickly Select Linking light
+
+https://github.com/user-attachments/assets/216b665c-66dd-4fa0-90c2-59fa6c2cc686
+
 
