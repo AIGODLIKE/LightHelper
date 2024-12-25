@@ -50,7 +50,7 @@ class LLT_AddonPreferences(AddonPreferences):
         name="Moving View Type",
         default="NONE",
         items=[
-            ("NONE", "None", "Do not move the view", "RESTRICT_SELECT_ON", 0),
+            ("NONE", "None", "Only Select, Do not move the view", "RESTRICT_SELECT_OFF", 0),
             ("MAINTAINING_ZOOM", "Maintaining Zoom", "Direct switching of view position,no animation", "VIEWZOOM", 1),
             ("ANIMATION", "Animation", "Animation switching, no fixed zoom", "ANIM", 2),
         ]
