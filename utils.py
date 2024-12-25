@@ -321,7 +321,7 @@ def check_material_including_emission(obj: bpy.types.Object, check_depth=5) -> b
 
     for material in obj.material_slots:
         mat = material.material
-        if mat.use_nodes:
+        if mat and mat.use_nodes:
             out_node = find_material_output_node(mat.node_tree.nodes)
             if out_node:
                 return node_tree_search(out_node) is not None
