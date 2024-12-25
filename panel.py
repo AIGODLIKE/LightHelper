@@ -389,6 +389,7 @@ class LLT_UL_light(bpy.types.UIList):
         row.prop(self, "show_in_view", emboss=True, toggle=True)
 
         sc.row(align=True).prop(pref, "moving_view_type", expand=True)
+        sc.row(align=True).prop(pref, "node_search_depth", expand=True)
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
         from .utils import check_link
