@@ -7,6 +7,8 @@ def filter_list(context, bitflag=None):
     pref = get_pref()
     filter_type = pref.light_list_filter_type
     link_type = pref.light_link_filter_type
+    search_deep = pref.node_search_depth
+
     objects = context.scene.objects[:]
 
     flt_flags = []
@@ -15,12 +17,12 @@ def filter_list(context, bitflag=None):
 
     for idx, obj in enumerate(objects):
         if filter_type == "ALL":
-            is_show = obj.type == "LIGHT" or check_material_including_emission(obj)
+            is_show = obj.type == "LIGHT" or check_material_including_emission(obj, search_deep)
             flag = bitflag if is_show else EMPTY
         elif filter_type == "LIGHT":
             flag = bitflag if obj.type == 'LIGHT' else EMPTY
         elif filter_type == "EMISSION":
-            flag = bitflag if check_material_including_emission(obj) else EMPTY
+            flag = bitflag if check_material_including_emission(obj, search_deep) else EMPTY
         else:
             flag = EMPTY
 

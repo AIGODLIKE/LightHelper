@@ -1,5 +1,5 @@
 import bpy
-from bpy.props import StringProperty, EnumProperty
+from bpy.props import StringProperty, EnumProperty, IntProperty
 from bpy.types import AddonPreferences
 
 
@@ -11,7 +11,9 @@ class LLT_AddonPreferences(AddonPreferences):
         refresh_panel()
 
     panel_name: StringProperty(name="Panel Name", default="LH", update=update_panel)
-
+    node_search_depth: IntProperty(name="Node search depth",
+                                   description="If the setting is too high or the materials in the scene are too complex, stuttering may occur",
+                                   default=10, max=50, min=3)
     light_list_filter_type: EnumProperty(
         name="List Filter Type",
         default="ALL",
@@ -62,6 +64,7 @@ class LLT_AddonPreferences(AddonPreferences):
         if bpy.app.version < (4, 3, 0):
             column.label(text="Version lower than 4.3.0, only the CYCLE renderer can set light exclusion")
         column.prop(self, "panel_name")
+        column.prop(self, "node_search_depth")
         column.prop(self, "light_list_filter_type")
         column.prop(self, "light_link_filter_type", text_ctxt="light_helper_zh_CN")
         column.prop(self, "moving_view_type")

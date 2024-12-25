@@ -295,11 +295,12 @@ def set_light_effect_coll_state(light: bpy.types.Object, coll: bpy.types.Collect
 
 
 def check_material_including_emission(obj: bpy.types.Object, check_depth=5) -> bool:
-    """检查材质是否有自发光"""
-
-    # bpy.context.object.material_slots['Material'].material.node_tree.nodes.active
+    """检查材质是否有自发光
     # bpy.data.materials["Material"].use_nodes
+    # bpy.context.object.material_slots['Material'].material.node_tree.nodes.active
     # bpy.data.materials["Material"].node_tree.nodes["Material Output.001"].is_active_output
+    """
+
     def node_tree_search(node: bpy.types.Node, depth=0) -> [bpy.types.Node | None]:
         if depth > check_depth:
             return None
@@ -316,6 +317,12 @@ def check_material_including_emission(obj: bpy.types.Object, check_depth=5) -> b
                     for i in from_node.inputs:
                         if i.identifier == "Emission Strength" and i.default_value > 0:
                             return True
+                elif from_node.type == "GROUP":  # 处理节点组
+                    group_out_node = find_material_output_node(from_node.node_tree.nodes)
+                    if group_out_node:
+                        find = node_tree_search(group_out_node) is not None
+                        if find:
+                            return find
                 else:
                     return node_tree_search(input_point.node, depth + 1)
 
@@ -330,7 +337,7 @@ def check_material_including_emission(obj: bpy.types.Object, check_depth=5) -> b
 
 def find_material_output_node(nodes: [bpy.types.Node]) -> [bpy.types.Material | None]:
     for node in nodes:
-        if node.type == "OUTPUT_MATERIAL" and node.is_active_output:
+        if node.type in ("OUTPUT_MATERIAL", "GROUP_OUTPUT") and node.is_active_output:
             return node
 
 
