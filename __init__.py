@@ -1,3 +1,5 @@
+from . import ui, property, ops, translation, preferences
+
 bl_info = {
     "name": "LightHelper",
     "author": "ACGGit Community,Atticus,小萌新",
@@ -11,15 +13,12 @@ bl_info = {
     "location": "3D视图右侧控件栏",
 }
 
-__ADDON_NAME__ = __name__
-
-from . import panel, property, ops, translation, preferences
-
 module_list = [
     preferences,
     property,
     ops,
-    panel,
+    ui,
+
     translation,
 ]
 

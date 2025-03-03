@@ -4,6 +4,7 @@ import bpy
 
 SAFE_OBJ_NAME = "LLP_SAFE_OBJ"
 ILLUMINATED_OBJECT_TYPE_LIST = ["LIGHT", "MESH", "CURVE", "SURFACE", "META", "FONT", "GPENCIL", "EMPTY"]
+from .. import __package__ as base_package
 
 
 @unique
@@ -21,7 +22,7 @@ class CollectionType(Enum):
 
 
 def get_pref():
-    return bpy.context.preferences.addons[__package__].preferences
+    return bpy.context.preferences.addons[base_package].preferences
 
 
 def ensure_linking_coll(coll_type: CollectionType, light: bpy.types.Object, make_safe_obj: bool = True):
@@ -327,7 +328,7 @@ def check_material_including_emission(obj: bpy.types.Object, check_depth=5) -> b
                     find = node_tree_search(link.from_node, depth + 1)
                     if find:
                         return find
-                    
+
     for material in obj.material_slots:
         mat = material.material
         if mat and mat.use_nodes:

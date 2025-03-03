@@ -1,53 +1,16 @@
 import bpy
 from bpy.app.translations import pgettext_iface as p_
 
-from .utils import CollectionType, StateValue, SAFE_OBJ_NAME
-from .utils import get_all_light_effect_items_state, get_linking_coll
-from .utils import get_lights_from_effect_obj
-
-
-def get_light_icon(light):
-    data = light.data
-    type_icon = {
-        'AREA': 'LIGHT_AREA',
-        'POINT': 'LIGHT_POINT',
-        'SPOT': 'LIGHT_SPOT',
-        'SUN': 'LIGHT_SUN',
-    }
-    if hasattr(data, 'type'):
-        return type_icon.get(data.type, 'OBJECT_DATA')
-
-    return 'OBJECT_DATA'
-
-
-def get_item_icon(item: bpy.types.Object | bpy.types.Collection):
-    from bpy.types import UILayout
-
-    if isinstance(item, bpy.types.Collection):
-        return {'icon': "OUTLINER_COLLECTION"}
-    elif isinstance(item, bpy.types.Object):
-        if item.type == "LIGHT":
-            from .utils import check_link
-            for i in item.data.bl_rna.properties['type'].enum_items:
-                if item.data.type == i.identifier:
-                    return {"icon": i.icon}
-            return {"icon": "OUTLINER_OB_LIGHT" if check_link(item) else "OUTLINER_DATA_LIGHT"}
-        elif hasattr(item, 'data'):
-            try:
-                icon_value = UILayout.icon(item.data)
-                if icon_value != 157:
-                    return {"icon_value": icon_value}
-            except Exception:
-                ...
-        if item.type == "EMPTY":
-            return {"icon": "EMPTY_DATA"}
-        else:
-            return {"icon": "OBJECT_DATA"}
-    return {"icon": "QUESTION"}
+from ..utils import (
+    CollectionType,
+    StateValue, SAFE_OBJ_NAME, get_all_light_effect_items_state, get_linking_coll,
+    get_lights_from_effect_obj, get_pref
+)
+from ..utils.icon import get_item_icon, get_light_icon
 
 
 def draw_select_btn(layout, item):
-    from .ops import LLP_OT_select_item
+    from ..ops import LLP_OT_select_item
     row = layout.row()
     if isinstance(item, bpy.types.Object):
         row.context_pointer_set("select_item_object", item)
@@ -61,7 +24,7 @@ def draw_toggle_btn(layout,
                     light_obj: bpy.types.Object,
                     item: bpy.types.Object | bpy.types.Collection):
     """Draw toggle button for receiver / blocker collection"""
-    from .ops import LLP_OT_toggle_light_linking
+    from ..ops import LLP_OT_toggle_light_linking
     row = layout.row()
     row.context_pointer_set("toggle_light_linking_light_obj", light_obj)
 
@@ -88,7 +51,7 @@ def draw_toggle_btn(layout,
 def draw_remove_button(layout,
                        light_obj: bpy.types.Object,
                        item: bpy.types.Object | bpy.types.Collection):
-    from .ops import LLP_OT_remove_light_linking
+    from ..ops import LLP_OT_remove_light_linking
     row = layout.row()
     row.context_pointer_set("remove_light_linking_light_obj", light_obj)
     if isinstance(item, bpy.types.Object):
@@ -145,8 +108,7 @@ class LLT_PT_light_control_panel(bpy.types.Panel):
         return context.scene.render.engine == "CYCLES"
 
     def draw_header(self, context):
-        from .ops import LLP_OT_question
-        from .utils import get_pref
+        from ..ops import LLP_OT_question
 
         pref = get_pref()
 
@@ -170,7 +132,7 @@ Provides buttons to toggle the light effecting state of the objects."""
         self.draw_light_objs_control(context, layout)
 
     def draw_light_objs_control(self, context, layout):
-        from .ops import LLP_OT_add_light_linking, LLP_OT_link_selected_objs, LLP_OT_clear_light_linking, \
+        from ..ops import LLP_OT_add_light_linking, LLP_OT_link_selected_objs, LLP_OT_clear_light_linking, \
             LLP_OT_instances_data
 
         if context.scene.light_helper_property.light_linking_pin:
@@ -217,6 +179,7 @@ Provides buttons to toggle the light effecting state of the objects."""
         safe_obj = bpy.data.objects.get(SAFE_OBJ_NAME)
         if len(obj_state_dict) == 1 and safe_obj in obj_state_dict.keys():
             box = col.box()
+
             row = box.row()
             row.label(text='', icon='ADD')
             row.prop(context.window_manager.light_helper_property, 'light_linking_add_collection', text='',
@@ -235,8 +198,9 @@ Provides buttons to toggle the light effecting state of the objects."""
         for (item, state_info) in obj_state_dict.items():
             if item.name == SAFE_OBJ_NAME:
                 continue  # skip safe obj
-            elif item not in objects:
-                continue  # skip scene delete object
+            elif isinstance(item, bpy.types.Object):
+                if item not in objects:
+                    continue  # skip scene delete object
             row = col.row(align=False)
             row.scale_x = 1.1
             row.scale_y = 1.1
@@ -260,8 +224,10 @@ Provides buttons to toggle the light effecting state of the objects."""
         row.operator(LLP_OT_link_selected_objs.bl_idname, icon='ADD')
 
     def draw_light_list(self, context, layout):
-        from .ops import LLP_OT_switch_filter_show
-        from .utils import get_pref
+        from ..ops import LLP_OT_switch_filter_show
+        from ..utils import get_pref
+        from .ui_list import LLT_UL_light
+
         pref = get_pref()
 
         icon, _ = LLP_OT_switch_filter_show.get_icon(context)
@@ -275,7 +241,7 @@ Provides buttons to toggle the light effecting state of the objects."""
         col.prop(pref, "light_list_filter_type", expand=True, text="", icon_only=True)
         col.separator()
         col.operator(LLP_OT_switch_filter_show.bl_idname, text="", icon=icon)
-        row.template_list("LLT_UL_light", "", context.scene, "objects", context.scene.light_helper_property,
+        row.template_list(LLT_UL_light.__name__, "", context.scene, "objects", context.scene.light_helper_property,
                           "active_object_index")
 
 
@@ -292,7 +258,7 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
         return LLT_PT_light_control_panel.poll(context)
 
     def draw_header(self, context):
-        from .ops import LLP_OT_question
+        from ..ops import LLP_OT_question
         layout = self.layout
         row = layout.row(align=True)
         row.label(text="Object Linking")
@@ -352,106 +318,15 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
         box.prop(context.window_manager.light_helper_property, 'object_linking_add_object', text='', icon='ADD')
 
 
-class LLT_UL_light(bpy.types.UIList):
-    sort_type: bpy.props.EnumProperty(
-        name="Use Sort",
-        default="TYPE",
-        items=[("TYPE", "Type", ""),
-               ("NAME", "Name", "")],
-        options=set(),
-        description="",
-    )
-    show_type: bpy.props.BoolProperty(name="Show Type", default=False)
-    show_in_view: bpy.props.BoolProperty(name="Show View Button", default=True)
-
-    def draw_filter(self, context, layout):
-        from .utils import get_pref
-        from bpy.app.translations import pgettext_iface
-
-        pref = get_pref()
-
-        sp = layout.column(align=True).split(factor=0.2, align=True)
-
-        sc = sp.column(align=True)
-
-        for i in (
-                "Sort Type",
-                "Show",
-                "Moving View Type",
-        ):
-            sc.label(text=f"{pgettext_iface(i)}:")
-
-        sc = sp.column(align=True)
-        sc.row(align=True).prop(self, "sort_type", expand=True)
-
-        row = sc.row(align=True)
-        row.prop(self, "show_type", emboss=True, toggle=True)
-        row.prop(self, "show_in_view", emboss=True, toggle=True)
-
-        sc.row(align=True).prop(pref, "moving_view_type", expand=True)
-        sc.row(align=True).prop(pref, "node_search_depth", expand=True)
-
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
-        from .utils import check_link
-        from .ops import LLP_OT_add_light_linking, LLP_OT_clear_light_linking
-        split = layout.split(factor=0.2, align=True)
-
-        left = split.row(align=True)
-
-        if self.show_in_view:
-            icon = "HIDE_OFF" if item.light_helper_property.show_in_view else "HIDE_ON"
-
-            left.prop(item.light_helper_property, "show_in_view", text='', icon=icon, emboss=False)
-            left.separator()
-
-        left.label(**get_item_icon(item))
-        if self.show_type:
-            left.label(text=item.type.title())
-
-        right = split.row(align=True)
-        right.label(text=item.name, translate=False)
-        right.separator()
-
-        rs = right.split()
-        rs.separator()
-        index = context.scene.objects[:].index(item)
-        if check_link(item):
-            rs.context_pointer_set("clear_light_linking_object", item)
-            rs.operator(LLP_OT_clear_light_linking.bl_idname, text="Restore").index = index
-        else:
-            with context.temp_override(add_light_linking_light_obj=item):
-                from bpy.app.translations import pgettext_iface
-                rs.context_pointer_set("add_light_linking_light_obj", item)
-                op = rs.operator(LLP_OT_add_light_linking.bl_idname, text='Init')
-                op.index = index
-                op.init = True
-
-    def filter_items(self, context, data, propname):
-        from .filter import filter_list
-
-        helper_funcs = bpy.types.UI_UL_list
-        objects = getattr(data, propname)[:]
-
-        flt_neworder = []
-        flt_flags = filter_list(context, self.bitflag_filter_item)
-
-        if self.sort_type == "TYPE":
-            flt_neworder = helper_funcs.sort_items_by_name(objects, "type")
-        elif self.sort_type == "NAME":
-            flt_neworder = helper_funcs.sort_items_by_name(objects, "name")
-        return flt_flags, flt_neworder
-
-
 panel_list = [
     LLT_PT_light_control_panel,
     LLT_PT_obj_control_panel,
-    LLT_UL_light,
 ]
 register_class, unregister_class = bpy.utils.register_classes_factory(panel_list)
 
 
 def register():
-    from .utils import get_pref
+    from ..utils import get_pref
     pref = get_pref()
     for panel in panel_list:
         panel.bl_category = pref.panel_name
