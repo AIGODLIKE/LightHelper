@@ -1,7 +1,7 @@
 name = "Light Helper"
 id = "LightHepler"
 maintainer = "ACGGit Community,Atticus,小萌新"
-version = "0.3.9"
+version = "0.4.0"
 tagline = "Light Helper"
 blender_version_min = "4.2.0"
 type = "add-on"
