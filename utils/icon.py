@@ -22,10 +22,11 @@ def get_item_icon(item: bpy.types.Object | bpy.types.Collection):
         return {'icon': "OUTLINER_COLLECTION"}
     elif isinstance(item, bpy.types.Object):
         if item.type == "LIGHT":
-            from . import check_link
             for i in item.data.bl_rna.properties['type'].enum_items:
                 if item.data.type == i.identifier:
                     return {"icon": i.icon}
+
+            from . import check_link
             return {"icon": "OUTLINER_OB_LIGHT" if check_link(item) else "OUTLINER_DATA_LIGHT"}
         elif hasattr(item, 'data'):
             try:
