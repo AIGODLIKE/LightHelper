@@ -2,7 +2,7 @@ import bpy
 from bpy.props import StringProperty, EnumProperty, IntProperty
 from bpy.types import AddonPreferences
 
-is_50 = bpy.app.version[:2] > (5, 0)
+is_50 = bpy.app.version >= (5, 0, 0)
 
 
 class LLT_AddonPreferences(AddonPreferences):
