@@ -45,8 +45,8 @@ class LLT_AddonPreferences(AddonPreferences):
             ("NOT_LINK", "General", "Only non-light links are displayed"),
             ("LINK", "Linking", "Only light links are displayed"),
         ],
-        get=get_link,
-        set=set_link,
+        # get=get_link,
+        # set=set_link,
     )
     moving_view_type: EnumProperty(
         name="Moving View Type",

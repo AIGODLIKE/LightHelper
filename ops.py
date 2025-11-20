@@ -1,5 +1,4 @@
 import bpy
-import bpy_types
 from bpy.app.translations import pgettext_iface as p_
 
 from .utils import get_light_effect_obj_state, get_light_effect_coll_state
@@ -34,7 +33,7 @@ def get_area(area_type: str):
     return None
 
 
-def get_layer_collection_by_coll(coll: bpy_types.Collection) -> bpy.types.LayerCollection:
+def get_layer_collection_by_coll(coll: bpy.types.Collection) -> bpy.types.LayerCollection:
     layer_collection = bpy.context.view_layer.layer_collection
 
     def get_lc(lc: bpy.types.LayerCollection):
@@ -164,7 +163,6 @@ class LLP_OT_add_light_linking(bpy.types.Operator):
     def execute(self, context):
         obj = getattr(context, "add_light_linking_object", None)
         light = getattr(context, "add_light_linking_light_obj", None)
-        print("execute", self.bl_idname, obj, light)
         if not light:
             self.report({'ERROR'}, "No light selected")
             return {"CANCELLED"}
