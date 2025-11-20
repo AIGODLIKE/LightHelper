@@ -2,6 +2,8 @@ import bpy
 from bpy.props import StringProperty, EnumProperty, IntProperty
 from bpy.types import AddonPreferences
 
+is_50 = bpy.app.version[:2] > (5, 0)
+
 
 class LLT_AddonPreferences(AddonPreferences):
     bl_idname = __package__
@@ -27,14 +29,24 @@ class LLT_AddonPreferences(AddonPreferences):
 
     def get_link(self):
         key = f"{self.light_list_filter_type}_link"
-        if key in self:
-            return self[key]
+        if is_50:
+            properties = self.bl_system_properties_get()
+            if key in properties:
+                return properties[key]
+            else:
+                return 0
         else:
-            return 0
+            if key in self:
+                return self[key]
+            else:
+                return 0
 
     def set_link(self, value):
         key = f"{self.light_list_filter_type}_link"
-        self[key] = value
+        if is_50:
+            self.bl_system_properties_get()[key] = value
+        else:
+            self[key] = value
 
     light_link_filter_type: EnumProperty(
         name="Link Filter Type",
@@ -45,8 +57,8 @@ class LLT_AddonPreferences(AddonPreferences):
             ("NOT_LINK", "General", "Only non-light links are displayed"),
             ("LINK", "Linking", "Only light links are displayed"),
         ],
-        # get=get_link,
-        # set=set_link,
+        get=get_link,
+        set=set_link,
     )
     moving_view_type: EnumProperty(
         name="Moving View Type",
