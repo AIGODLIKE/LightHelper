@@ -264,10 +264,6 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
     bl_category = "LH"
     bl_options = {'HEADER_LAYOUT_EXPAND'}
 
-    @classmethod
-    def poll(cls, context):
-        return LLT_PT_light_control_panel.poll(context)
-
     def draw_header(self, context):
         from ..ops import LLP_OT_question
         layout = self.layout
