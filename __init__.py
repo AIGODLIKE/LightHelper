@@ -4,7 +4,7 @@ bl_info = {
     "name": "LightHelper",
     "author": "ACGGit Community,Atticus,小萌新",
     "blender": (4, 0, 0),
-    "version": (0, 4, 5),
+    "version": (0, 4, 6),
     "category": "Lighting",
     "support": "COMMUNITY",
     "doc_url": "",
