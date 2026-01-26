@@ -46,5 +46,6 @@ data = {
     "Already initialized as linked type": "已初始化为链接型",
     "Restored": "已还原",
     "Node search depth": "节点搜索深度",
+    "This rendering engine does not support light linking": "此渲染引擎不支持灯光链接",
     "If the setting is too high or the materials in the scene are too complex, stuttering may occur": "如果设置的过高或者场景内材质太过复杂,那么将会出现卡顿"
 }

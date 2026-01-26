@@ -101,12 +101,6 @@ class LLT_PT_light_control_panel(bpy.types.Panel):
     bl_category = "LH"
     bl_options = {'HEADER_LAYOUT_EXPAND'}
 
-    @classmethod
-    def poll(cls, context):
-        if bpy.app.version >= (4, 3, 0):
-            return context.scene.render.engine in {"CYCLES", "BLENDER_EEVEE_NEXT"}
-        return context.scene.render.engine == "CYCLES"
-
     def draw_header(self, context):
         from ..ops import LLP_OT_question
 
@@ -126,8 +120,25 @@ Provides buttons to toggle the light effecting state of the objects."""
 
         row.separator()
 
+    @staticmethod
+    def check_support_light_linking(context):
+        """仅cycles渲染器支持灯光排除
+        eevee在5.0支持
+        """
+        if bpy.app.version >= (4, 3, 0):  # 大于4.3.0版本之后有eevee_next,5.0以后eevee_next改名了
+            return context.scene.render.engine in {"CYCLES", "BLENDER_EEVEE_NEXT", "BLENDER_EEVEE"}
+        return context.scene.render.engine in {"CYCLES"}
+
     def draw(self, context):
         layout = self.layout
+        if not self.check_support_light_linking(context):
+            layout.alert = True
+            layout.label(text="This rendering engine does not support light linking")
+            layout.label(text=context.scene.render.engine)
+            layout = layout.column()
+            layout.alert = False
+            layout.enabled = False
+            layout.active = False
         self.draw_light_list(context, layout)
         self.draw_light_objs_control(context, layout)
 
