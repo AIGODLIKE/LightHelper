@@ -10,6 +10,7 @@ data = {
     'Select': '选择',
     'Pin': '固定',
     'Show': '显示',
+    'Settings': '设置',
     'Link Selected Objects': '链接选中物体',
     'Add Selected Objects': '添加选中物体',
     'Switch Filter Show': '切换筛选显示',

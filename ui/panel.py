@@ -12,6 +12,41 @@ from ..utils import (
 from ..utils.icon import get_item_icon, get_light_icon
 
 
+def get_panel_light_obj(context) -> bpy.types.Object | None:
+    if context.scene.light_helper_property.light_linking_pin:
+        obj = context.scene.light_helper_property.light_linking_pin_object
+        if obj and obj.type == 'LIGHT':
+            return obj
+    obj = context.object
+    if obj and obj.type == 'LIGHT':
+        return obj
+    return None
+
+
+def draw_light_settings(layout, context, light_obj: bpy.types.Object) -> None:
+    light_data = light_obj.data
+    engine = context.scene.render.engine
+
+    layout.use_property_split = True
+    layout.use_property_decorate = True
+
+    if engine == 'CYCLES' and hasattr(light_data, 'cycles'):
+        cycles = light_data.cycles
+        layout.prop(cycles, "max_bounces")
+        layout.prop(light_data, "use_shadow")
+        layout.prop(cycles, "use_multiple_importance_sampling")
+        if hasattr(cycles, "use_caustics"):
+            layout.prop(cycles, "use_caustics")
+        elif hasattr(cycles, "use_shadow_caustics"):
+            layout.prop(cycles, "use_shadow_caustics")
+    elif engine in {"BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"}:
+        layout.prop(light_data, "use_shadow")
+        if hasattr(light_data, "use_contact_shadow"):
+            layout.prop(light_data, "use_contact_shadow")
+    else:
+        layout.prop(light_data, "use_shadow")
+
+
 def draw_select_btn(layout, item):
     from ..ops import LLP_OT_select_item
     row = layout.row()
@@ -283,9 +318,29 @@ Provides buttons to toggle light or shadow channel per light."""
         box.prop(context.window_manager.light_helper_property, 'object_linking_add_object', text='', icon='ADD')
 
 
+class LLT_PT_light_settings(bpy.types.Panel):
+    bl_label = "Settings"
+    bl_idname = "LLT_PT_light_settings"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "LH"
+    bl_options = set()
+
+    @classmethod
+    def poll(cls, context):
+        return get_panel_light_obj(context) is not None
+
+    def draw(self, context):
+        light_obj = get_panel_light_obj(context)
+        if light_obj is None:
+            return
+        draw_light_settings(self.layout, context, light_obj)
+
+
 panel_list = [
     LLT_PT_light_control_panel,
     LLT_PT_obj_control_panel,
+    LLT_PT_light_settings,
 ]
 register_class, unregister_class = bpy.utils.register_classes_factory(panel_list)
 _registered_category = None
