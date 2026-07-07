@@ -2,31 +2,27 @@ import bpy
 from bpy.types import PropertyGroup
 
 
-def update_lightlinking_state(self, context):
-    if not context.scene.light_helper_property.force_light_linking_state:
-        return
-    light = self.id_data
-    coll = light.light_linking.receiver_collection
-    if coll is None:
-        return
-    for coll_obj in coll.collection_objects:
-        coll_obj.light_linking.link_state = self.light_linking_state
+def update_linking_mode(self, context):
+    from .utils import apply_linking_mode_to_light
+    apply_linking_mode_to_light(self.id_data, self.linking_mode)
 
 
 def check_light_object(obj: bpy.types.Object) -> bool:
-    from .utils import ILLUMINATED_OBJECT_TYPE_LIST, is_safe_helper_object
-    type_ok = obj.type in ILLUMINATED_OBJECT_TYPE_LIST
-    return type_ok and not is_safe_helper_object(obj)
+    from .utils import ILLUMINATED_OBJECT_TYPE_LIST
+    return obj.type in ILLUMINATED_OBJECT_TYPE_LIST
 
 
 class ObjectProperty(PropertyGroup):
-    light_linking_state: bpy.props.EnumProperty(
+    linking_mode: bpy.props.EnumProperty(
+        name="Linking Mode",
+        description="Exclude: listed objects are excluded from this light. Include: only listed objects receive this light",
+        translation_context="light_helper_zh_CN",
         items=[
-            ("EXCLUDE", "Exclude", ""),
-            ("INCLUDE", "Include", "")
+            ("EXCLUDE", "Exclude", "Listed objects are excluded from illumination and shadow linking"),
+            ("INCLUDE", "Include", "Only listed objects receive illumination and shadow linking"),
         ],
-        update=update_lightlinking_state,
-        default="EXCLUDE"
+        default="EXCLUDE",
+        update=update_linking_mode,
     )
 
     def get_show(self):
@@ -45,17 +41,13 @@ class ObjectProperty(PropertyGroup):
 
 
 def poll_light_linking_pin_object(_self, obj: bpy.types.Object) -> bool:
-    from .utils import ILLUMINATED_OBJECT_TYPE_LIST, is_safe_helper_object
-    return obj.type in ILLUMINATED_OBJECT_TYPE_LIST and not is_safe_helper_object(obj)
+    from .utils import ILLUMINATED_OBJECT_TYPE_LIST
+    return obj.type in ILLUMINATED_OBJECT_TYPE_LIST
 
 
 def poll_object_linking_pin_object(_self, obj: bpy.types.Object) -> bool:
-    from .utils import ILLUMINATED_OBJECT_TYPE_LIST, is_safe_helper_object
-    return (
-        obj.type in ILLUMINATED_OBJECT_TYPE_LIST
-        and obj.type != "LIGHT"
-        and not is_safe_helper_object(obj)
-    )
+    from .utils import ILLUMINATED_OBJECT_TYPE_LIST
+    return obj.type in ILLUMINATED_OBJECT_TYPE_LIST and obj.type != "LIGHT"
 
 
 class SceneProperty(PropertyGroup):
@@ -83,20 +75,14 @@ class SceneProperty(PropertyGroup):
         else:
             scene.light_helper_property.object_linking_pin_object = None
 
-    # pin object, use to change context layout object
     light_linking_pin_object: bpy.props.PointerProperty(
         poll=poll_light_linking_pin_object, type=bpy.types.Object,
     )
     object_linking_pin_object: bpy.props.PointerProperty(
         poll=poll_object_linking_pin_object, type=bpy.types.Object,
     )
-    # pin property to change context draw layout
     light_linking_pin: bpy.props.BoolProperty(name='Pin', update=update_pin_object)
     object_linking_pin: bpy.props.BoolProperty(name='Pin', update=update_pin_object2)
-
-    force_light_linking_state: bpy.props.BoolProperty(
-        name='Update',
-        default=False)
 
     def update_active_object_index(self, context):
         from .utils import view_selected
@@ -122,11 +108,9 @@ class WindowManagerProperty(PropertyGroup):
     drop_object_obj: bpy.props.PointerProperty(type=bpy.types.Object)
 
     def update_add_collection(self, context):
-        """Add collection to light's receiver and blocker collection
-        Most of the time, use drag and drop in the property layout to add
-        """
         wm = context.window_manager
-        if wm.light_helper_property.light_linking_add_collection is None: return
+        if wm.light_helper_property.light_linking_add_collection is None:
+            return
 
         if context.scene.light_helper_property.light_linking_pin:
             obj = context.scene.light_helper_property.light_linking_pin_object
@@ -136,23 +120,15 @@ class WindowManagerProperty(PropertyGroup):
             wm.light_helper_property.light_linking_add_collection = None
             return
 
+        from .utils import link_item_both_channels
         coll = wm.light_helper_property.light_linking_add_collection
-        # add collection to light's receiver and blocker collection
-        if obj.light_linking.receiver_collection:
-            if coll.name not in obj.light_linking.receiver_collection.children:
-                obj.light_linking.receiver_collection.children.link(coll)
-        if obj.light_linking.blocker_collection:
-            if coll.name not in obj.light_linking.blocker_collection.children:
-                obj.light_linking.blocker_collection.children.link(coll)
-        # restore
+        link_item_both_channels(obj, coll, context)
         wm.light_helper_property["light_linking_add_collection"] = None
 
     def update_add_obj(self, context):
-        """Add object to light's receiver and blocker collection
-        Most of the time, use drag and drop in the property layout to add
-        """
         wm = context.window_manager
-        if wm.light_helper_property.light_linking_add_object is None: return
+        if wm.light_helper_property.light_linking_add_object is None:
+            return
 
         if context.scene.light_helper_property.light_linking_pin:
             obj = context.scene.light_helper_property.light_linking_pin_object
@@ -162,19 +138,12 @@ class WindowManagerProperty(PropertyGroup):
             wm.light_helper_property.light_linking_add_object = None
             return
 
+        from .utils import link_item_both_channels
         obj2 = wm.light_helper_property.light_linking_add_object
-        # add collection to light's receiver and blocker collection
-        if obj.light_linking.receiver_collection:
-            if obj2.name not in obj.light_linking.receiver_collection.objects:
-                obj.light_linking.receiver_collection.objects.link(obj2)
-        if obj.light_linking.blocker_collection:
-            if obj2.name not in obj.light_linking.blocker_collection.objects:
-                obj.light_linking.blocker_collection.objects.link(obj2)
-        # restore
+        link_item_both_channels(obj, obj2, context)
         wm.light_helper_property["light_linking_add_object"] = None
 
     def update_add_light(self, context):
-
         wm = context.window_manager
 
         if wm.light_helper_property.object_linking_add_object is None:
@@ -189,22 +158,11 @@ class WindowManagerProperty(PropertyGroup):
 
         light = wm.light_helper_property.object_linking_add_object
 
-        from .utils import ensure_linking_coll, CollectionType
-        ensure_linking_coll(CollectionType.RECEIVER, light)
-        ensure_linking_coll(CollectionType.BLOCKER, light)
-
-        coll1 = light.light_linking.receiver_collection
-        coll2 = light.light_linking.blocker_collection
-
-        if coll1 and obj.name not in coll1.objects:
-            coll1.objects.link(obj)
-        if coll2 and obj.name not in coll2.objects:
-            coll2.objects.link(obj)
-
-        # restore
+        from .utils import init_light_linking, link_item_both_channels
+        init_light_linking(light, context)
+        link_item_both_channels(light, obj, context)
         wm.light_helper_property["object_linking_add_object"] = None
 
-    # poll
     def poll_object_linking_add_collection(self, coll: bpy.types.Collection):
         from .utils import get_all_light_effect_items_state, get_view_layer_collections_cache, is_managed_linking_collection
         light_obj = self.drop_light_obj
@@ -230,7 +188,6 @@ class WindowManagerProperty(PropertyGroup):
         light_ok = obj not in get_lights_from_effect_obj(item)
         return check_light_object(obj) and light_ok
 
-    # drag & drop to add
     light_linking_add_collection: bpy.props.PointerProperty(name='Drag and Drop to Add',
                                                             type=bpy.types.Collection,
                                                             update=update_add_collection,

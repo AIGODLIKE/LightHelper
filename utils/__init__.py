@@ -3,41 +3,10 @@ from enum import Enum, unique
 import bpy
 
 LIGHT_HELPER_MANAGED_KEY = "light_helper_managed"
-LIGHT_HELPER_SAFE_KEY = "light_helper_safe"
 ILLUMINATED_OBJECT_TYPE_LIST = [
     "LIGHT", "MESH", "CURVE", "SURFACE", "META", "FONT", "GPENCIL", "GREASEPENCIL", "EMPTY",
 ]
 from .. import __package__ as base_package
-
-
-def get_safe_obj_name(light: bpy.types.Object) -> str:
-    return f"LLP_SAFE_{light.name}"
-
-
-def get_safe_obj(light: bpy.types.Object) -> bpy.types.Object | None:
-    return bpy.data.objects.get(get_safe_obj_name(light))
-
-
-def is_safe_helper_object(obj: bpy.types.Object) -> bool:
-    return bool(obj.get(LIGHT_HELPER_SAFE_KEY))
-
-
-def mark_managed_linking_collection(coll: bpy.types.Collection) -> None:
-    coll[LIGHT_HELPER_MANAGED_KEY] = True
-
-
-def is_managed_linking_collection(coll: bpy.types.Collection) -> bool:
-    if coll.get(LIGHT_HELPER_MANAGED_KEY):
-        return True
-    name = coll.name
-    return name.startswith("Light Linking for ") or name.startswith("Shadow Linking for ")
-
-
-def linking_coll_has_safe_obj(light: bpy.types.Object, coll: bpy.types.Collection | None) -> bool:
-    if coll is None:
-        return False
-    safe_obj = get_safe_obj(light)
-    return safe_obj is not None and safe_obj.name in coll.objects
 
 
 @unique
@@ -54,19 +23,134 @@ class CollectionType(Enum):
     BLOCKER = 'blocker'
 
 
+def mark_managed_linking_collection(coll: bpy.types.Collection) -> None:
+    coll[LIGHT_HELPER_MANAGED_KEY] = True
+
+
+def is_managed_linking_collection(coll: bpy.types.Collection) -> bool:
+    if coll.get(LIGHT_HELPER_MANAGED_KEY):
+        return True
+    name = coll.name
+    return name.startswith("Light Linking for ") or name.startswith("Shadow Linking for ")
+
+
 def get_pref(context=None):
     ctx = context if context is not None else bpy.context
     return ctx.preferences.addons[base_package].preferences
 
 
-def remove_safe_helper_for_light(light: bpy.types.Object) -> None:
-    safe_obj = get_safe_obj(light)
-    if safe_obj is None:
-        return
-    mesh = safe_obj.data
-    bpy.data.objects.remove(safe_obj, do_unlink=True)
-    if mesh and mesh.users == 0:
-        bpy.data.meshes.remove(mesh)
+def is_linking_initialized(light: bpy.types.Object) -> bool:
+    if not hasattr(light, "light_linking"):
+        return False
+    linking = light.light_linking
+    return linking.receiver_collection is not None and linking.blocker_collection is not None
+
+
+def get_linking_mode(light: bpy.types.Object) -> str:
+    if hasattr(light, "light_helper_property"):
+        return light.light_helper_property.linking_mode
+    return StateValue.EXCLUDE.value
+
+
+def get_linking_coll(obj: bpy.types.Object, type: CollectionType) -> bpy.types.Collection:
+    if type == CollectionType.RECEIVER:
+        return obj.light_linking.receiver_collection
+    elif type == CollectionType.BLOCKER:
+        return obj.light_linking.blocker_collection
+    raise ValueError(f"CollectionType {type} is not supported")
+
+
+def enum_coll_objs_from_coll(coll: bpy.types.Collection) -> dict:
+    return {obj: coll.collection_objects[i] for i, obj in enumerate(coll.objects)}
+
+
+def enum_coll_children_from_coll(coll: bpy.types.Collection) -> dict:
+    return {child: coll.collection_children[i] for i, child in enumerate(coll.children)}
+
+
+def _set_item_link_state(coll: bpy.types.Collection, item, mode: str) -> None:
+    if isinstance(item, bpy.types.Object):
+        coll_objs = enum_coll_objs_from_coll(coll)
+        coll_obj = coll_objs.get(item)
+        if coll_obj:
+            coll_obj.light_linking.link_state = mode
+    elif isinstance(item, bpy.types.Collection):
+        coll_children = enum_coll_children_from_coll(coll)
+        coll_child = coll_children.get(item)
+        if coll_child:
+            coll_child.light_linking.link_state = mode
+
+
+def apply_linking_mode_to_light(light: bpy.types.Object, mode: str | None = None) -> None:
+    if mode is None:
+        mode = get_linking_mode(light)
+    for coll_type in (CollectionType.RECEIVER, CollectionType.BLOCKER):
+        coll = get_linking_coll(light, coll_type)
+        if coll is None:
+            continue
+        for coll_obj in coll.collection_objects:
+            coll_obj.light_linking.link_state = mode
+        for coll_child in coll.collection_children:
+            coll_child.light_linking.link_state = mode
+
+
+def init_light_linking(light: bpy.types.Object, context: bpy.types.Context | None = None) -> None:
+    ctx = context if context is not None else bpy.context
+    with ctx.temp_override(object=light, active_object=light, selected_objects=[light]):
+        if light.light_linking.receiver_collection is None:
+            bpy.ops.object.light_linking_receiver_collection_new()
+        if light.light_linking.blocker_collection is None:
+            bpy.ops.object.light_linking_blocker_collection_new()
+    for coll_type in (CollectionType.RECEIVER, CollectionType.BLOCKER):
+        coll = get_linking_coll(light, coll_type)
+        if coll is not None:
+            mark_managed_linking_collection(coll)
+
+
+def ensure_linking_coll(coll_type: CollectionType, light: bpy.types.Object,
+                        context: bpy.types.Context | None = None) -> bpy.types.Collection:
+    if not is_linking_initialized(light):
+        init_light_linking(light, context)
+    return get_linking_coll(light, coll_type)
+
+
+def is_item_in_channel(light: bpy.types.Object, item,
+                       coll_type: CollectionType) -> bool:
+    coll = get_linking_coll(light, coll_type)
+    if coll is None:
+        return False
+    if isinstance(item, bpy.types.Object):
+        return item.name in coll.objects
+    if isinstance(item, bpy.types.Collection):
+        return item.name in coll.children
+    return False
+
+
+def link_item_to_channel(light: bpy.types.Object, item,
+                         coll_type: CollectionType, enabled: bool,
+                         context: bpy.types.Context | None = None) -> None:
+    coll = ensure_linking_coll(coll_type, light, context)
+    mode = get_linking_mode(light)
+    if isinstance(item, bpy.types.Object):
+        if enabled:
+            if item.name not in coll.objects:
+                coll.objects.link(item)
+            _set_item_link_state(coll, item, mode)
+        elif item.name in coll.objects:
+            coll.objects.unlink(item)
+    elif isinstance(item, bpy.types.Collection):
+        if enabled:
+            if item.name not in coll.children:
+                coll.children.link(item)
+            _set_item_link_state(coll, item, mode)
+        elif item.name in coll.children:
+            coll.children.unlink(item)
+
+
+def link_item_both_channels(light: bpy.types.Object, item,
+                            context: bpy.types.Context | None = None) -> None:
+    link_item_to_channel(light, item, CollectionType.RECEIVER, True, context)
+    link_item_to_channel(light, item, CollectionType.BLOCKER, True, context)
 
 
 def remove_orphaned_managed_collection(coll: bpy.types.Collection | None) -> None:
@@ -87,195 +171,55 @@ def restore_light_linking(light: bpy.types.Object) -> None:
     blocker = linking.blocker_collection
     linking.receiver_collection = None
     linking.blocker_collection = None
-    remove_safe_helper_for_light(light)
     remove_orphaned_managed_collection(receiver)
     remove_orphaned_managed_collection(blocker)
 
 
-def ensure_linking_coll(coll_type: CollectionType, light: bpy.types.Object, make_safe_obj: bool = True):
-    """ensure the collection exists
-    """
-
-    prefix = 'Light Linking for ' if coll_type == CollectionType.RECEIVER else 'Shadow Linking for '
-    coll_name = prefix + light.name
-
-    if coll_type == CollectionType.RECEIVER:
-        if light.light_linking.receiver_collection is None:
-            coll = bpy.data.collections.new(coll_name)
-            mark_managed_linking_collection(coll)
-            light.light_linking.receiver_collection = coll
-        else:
-            coll = light.light_linking.receiver_collection
-    else:
-        if light.light_linking.blocker_collection is None:
-            coll = bpy.data.collections.new(coll_name)
-            mark_managed_linking_collection(coll)
-            light.light_linking.blocker_collection = coll
-        else:
-            coll = light.light_linking.blocker_collection
-    # make an empty mesh obj in this collection to avoid the annoying logic inverse between the exclude and include
-    if make_safe_obj:
-        safe_name = get_safe_obj_name(light)
-        empty_mesh = bpy.data.meshes.get(safe_name)
-        if empty_mesh is None:
-            empty_mesh = bpy.data.meshes.new(safe_name)
-        obj = bpy.data.objects.get(safe_name)
-        if obj is None:
-            obj = bpy.data.objects.new(safe_name, empty_mesh)
-            obj[LIGHT_HELPER_SAFE_KEY] = light.name
-        if obj.name not in coll.objects:
-            coll.objects.link(obj)
-
-    return coll
-
-
-def get_linking_coll(obj: bpy.types.Object, type: CollectionType) -> bpy.types.Collection:
-    """get the linking collection from the object"""
-
-    if type == CollectionType.RECEIVER:
-        return obj.light_linking.receiver_collection
-    elif type == CollectionType.BLOCKER:
-        return obj.light_linking.blocker_collection
-    else:
-        raise ValueError(f"CollectionType {type} is not supported")
-
-
-def get_coll_item_linking_state(coll_obj: bpy.types.CollectionObject | bpy.types.CollectionChildren) -> StateValue:
-    """returns the linking state of the collection object
-    :returns str value in StateValue: 'EXCLUDE' or 'INCLUDE'
-    """
-    if coll_obj.light_linking.link_state == 'EXCLUDE':
-        return StateValue.EXCLUDE
-    else:
-        return StateValue.INCLUDE
-
-
-def enum_coll_objs_from_coll(coll: bpy.types.Collection) -> dict[bpy.types.Object:bpy.types.CollectionObject]:
-    """Since that the CollectionObject can not be accessed directly by name from the Collection, this function is used to
-    :returns dict[bpy.types.Object:bpy.types.CollectionObject]: {obj:coll_obj}
-    """
-    return {obj: coll.collection_objects[i] for i, obj in enumerate(coll.objects)}
-
-
-def enum_coll_children_from_coll(coll: bpy.types.Collection) -> dict[bpy.types.Collection:bpy.types.CollectionChildren]:
-    """Since that the CollectionObject can not be accessed directly by name from the Collection, this function is used to
-    :returns dict[bpy.types.Object:bpy.types.CollectionObject]: {obj:coll_obj}
-    """
-    return {child: coll.collection_children[i] for i, child in enumerate(coll.children)}
-
-
-def get_light_effect_obj_state(light: bpy.types.Object, obj: bpy.types.Object) -> dict[str:str]:
-    """get the light effect state of the object from the light,both the receiver and the block collection, return a dict that contains the light linking state of the object
-
-    :return dict[str:str]: {CollectionType.RECEIVER.value:str|None, CollectionType.BLOCKER.value:str|None
-    """
-
-    # first get the receiver collection and the block collection
-    receiver_coll = get_linking_coll(light, CollectionType.RECEIVER)
-    blocker_coll = get_linking_coll(light, CollectionType.BLOCKER)
-
+def get_light_effect_obj_state(light: bpy.types.Object, obj: bpy.types.Object) -> dict:
     state = {
         CollectionType.RECEIVER: None,
-        CollectionType.BLOCKER: None
+        CollectionType.BLOCKER: None,
     }
-
-    def get_obj_state_from_coll(coll: bpy.types.Collection) -> StateValue | None:
-        """get the state of the object from the collection"""
-        coll_objs = enum_coll_objs_from_coll(coll)
-        coll_obj = coll_objs.get(obj)
-        if coll_obj:
-            return get_coll_item_linking_state(coll_obj)
-        return None
-
-    # if the receiver collection exists, get the state of the object from the receiver collection
-
-    if receiver_coll:
-        state[CollectionType.RECEIVER] = get_obj_state_from_coll(receiver_coll)
-    if blocker_coll:
-        state[CollectionType.BLOCKER] = get_obj_state_from_coll(blocker_coll)
-
+    if is_item_in_channel(light, obj, CollectionType.RECEIVER):
+        state[CollectionType.RECEIVER] = True
+    if is_item_in_channel(light, obj, CollectionType.BLOCKER):
+        state[CollectionType.BLOCKER] = True
     return state
 
 
-def get_light_effect_coll_state(light: bpy.types.Object, coll: bpy.types.Collection) -> dict[str:str]:
-    """get the light effect state of the object from the light,both the receiver and the block collection, return a dict that contains the light linking state of the object
-
-    :return dict[str:str]: {CollectionType.RECEIVER.value:str|None, CollectionType.BLOCKER.value:str|None
-    """
-
-    # first get the receiver collection and the block collection
-    receiver_coll = get_linking_coll(light, CollectionType.RECEIVER)
-    blocker_coll = get_linking_coll(light, CollectionType.BLOCKER)
-
+def get_light_effect_coll_state(light: bpy.types.Object, coll: bpy.types.Collection) -> dict:
     state = {
         CollectionType.RECEIVER: None,
-        CollectionType.BLOCKER: None
+        CollectionType.BLOCKER: None,
     }
-
-    def get_obj_state_from_coll(_coll: bpy.types.Collection) -> StateValue | None:
-        """get the state of the object from the collection"""
-        coll_objs = enum_coll_children_from_coll(_coll)
-        coll_obj = coll_objs.get(coll)
-        if coll_obj:
-            return get_coll_item_linking_state(coll_obj)
-        return None
-
-    # if the receiver collection exists, get the state of the object from the receiver collection
-
-    if receiver_coll:
-        state[CollectionType.RECEIVER] = get_obj_state_from_coll(receiver_coll)
-    if blocker_coll:
-        state[CollectionType.BLOCKER] = get_obj_state_from_coll(blocker_coll)
-
+    if is_item_in_channel(light, coll, CollectionType.RECEIVER):
+        state[CollectionType.RECEIVER] = True
+    if is_item_in_channel(light, coll, CollectionType.BLOCKER):
+        state[CollectionType.BLOCKER] = True
     return state
 
 
-def get_all_light_effect_items_state(light: bpy.types.Object) -> dict[
-                                                                 bpy.types.Object | bpy.types.Collection:dict[str:str]]:
-    """get all the objects that are affected by the light and their receiver and blocker state
-    version for all object because the function above runs multiple times function:enum_coll_objs_from_coll is not efficient
-    :return dict{bpy.types.Object:dict: {'receiver':str|None, 'blocker':str|None}}
-    """
+def get_all_light_effect_items_state(light: bpy.types.Object) -> dict:
     receiver_coll = get_linking_coll(light, CollectionType.RECEIVER)
     blocker_coll = get_linking_coll(light, CollectionType.BLOCKER)
 
-    items_state = {}  # {bpy.types.Object:dict: {'receiver':str|None, 'blocker':str|None}} Note: the str is the link state, None means the object is not in the collection
+    items_state = {}
 
-    #
     if receiver_coll:
-        coll_children = enum_coll_children_from_coll(receiver_coll)
-        for child in coll_children:
-            items_state[child] = {
-                CollectionType.RECEIVER: get_coll_item_linking_state(coll_children[child]),
-                CollectionType.BLOCKER: None
-            }
-        coll_objs = enum_coll_objs_from_coll(receiver_coll)
-        for obj in coll_objs:
-            items_state[obj] = {
-                CollectionType.RECEIVER: get_coll_item_linking_state(coll_objs[obj]),
-                CollectionType.BLOCKER: None
-            }
+        for child in enum_coll_children_from_coll(receiver_coll):
+            items_state.setdefault(child, {CollectionType.RECEIVER: None, CollectionType.BLOCKER: None})
+            items_state[child][CollectionType.RECEIVER] = True
+        for obj in enum_coll_objs_from_coll(receiver_coll):
+            items_state.setdefault(obj, {CollectionType.RECEIVER: None, CollectionType.BLOCKER: None})
+            items_state[obj][CollectionType.RECEIVER] = True
 
     if blocker_coll:
-        coll_children = enum_coll_children_from_coll(blocker_coll)
-        for child in coll_children:
-            if items_state.get(child):
-                items_state[child][CollectionType.BLOCKER] = get_coll_item_linking_state(coll_children[child])
-            else:
-                items_state[child] = {
-                    CollectionType.RECEIVER: None,
-                    CollectionType.BLOCKER: get_coll_item_linking_state(coll_children[child])
-                }
-
-        coll_objs = enum_coll_objs_from_coll(blocker_coll)
-        for obj in coll_objs:
-            if items_state.get(obj):
-                items_state[obj][CollectionType.BLOCKER] = get_coll_item_linking_state(coll_objs[obj])
-            else:
-                items_state[obj] = {
-                    CollectionType.RECEIVER: None,
-                    CollectionType.BLOCKER: get_coll_item_linking_state(coll_objs[obj])
-                }
+        for child in enum_coll_children_from_coll(blocker_coll):
+            items_state.setdefault(child, {CollectionType.RECEIVER: None, CollectionType.BLOCKER: None})
+            items_state[child][CollectionType.BLOCKER] = True
+        for obj in enum_coll_objs_from_coll(blocker_coll):
+            items_state.setdefault(obj, {CollectionType.RECEIVER: None, CollectionType.BLOCKER: None})
+            items_state[obj][CollectionType.BLOCKER] = True
 
     return items_state
 
@@ -322,7 +266,6 @@ def get_view_layer_collections_cache():
 
 
 def get_lights_from_effect_obj(obj: bpy.types.Object, context: bpy.types.Context | None = None) -> dict:
-    """get all the lights that affect the object and their receiver and blocker state"""
     colls = obj.users_collection
     light_state = {}
     if _cached_linking_lights:
@@ -333,8 +276,10 @@ def get_lights_from_effect_obj(obj: bpy.types.Object, context: bpy.types.Context
         return light_state
 
     for light_obj in lights:
-        if not hasattr(light_obj, 'light_linking'): continue
-        if not light_obj.light_linking.receiver_collection and not light_obj.light_linking.blocker_collection: continue
+        if not hasattr(light_obj, 'light_linking'):
+            continue
+        if not light_obj.light_linking.receiver_collection and not light_obj.light_linking.blocker_collection:
+            continue
 
         receiver_coll = light_obj.light_linking.receiver_collection
         blocker_coll = light_obj.light_linking.blocker_collection
@@ -342,70 +287,14 @@ def get_lights_from_effect_obj(obj: bpy.types.Object, context: bpy.types.Context
         if receiver_coll in colls or blocker_coll in colls:
             light_state[light_obj] = {
                 CollectionType.RECEIVER: None,
-                CollectionType.BLOCKER: None
+                CollectionType.BLOCKER: None,
             }
-            if receiver_coll:
-                for i, o in enumerate(receiver_coll.objects):
-                    if o is obj:
-                        light_state[light_obj][CollectionType.RECEIVER] = get_coll_item_linking_state(
-                            receiver_coll.collection_objects[i])
-                        break
-            if blocker_coll:
-                for i, o in enumerate(blocker_coll.objects):
-                    if o is obj:
-                        light_state[light_obj][CollectionType.BLOCKER] = get_coll_item_linking_state(
-                            blocker_coll.collection_objects[i])
-                        break
+            if receiver_coll and obj.name in receiver_coll.objects:
+                light_state[light_obj][CollectionType.RECEIVER] = True
+            if blocker_coll and obj.name in blocker_coll.objects:
+                light_state[light_obj][CollectionType.BLOCKER] = True
 
     return light_state
-
-
-def set_light_effect_obj_state(light: bpy.types.Object, obj: bpy.types.Object,
-                               state: tuple[CollectionType, StateValue]) -> None:
-    """set the light effect state of the object from the light,in the receiver or the block collection
-
-    :param light: the light object
-    :param obj: the object that is affected by the light
-    :param state: the state to set for the object, dict[CollectionType.value:StateValue.value]
-    """
-
-    def set_obj_state_from_coll(coll: bpy.types.Collection, state_value: StateValue):
-        """set the state of the object from the collection"""
-        coll_objs = enum_coll_objs_from_coll(coll)
-        coll_obj = coll_objs.get(obj)
-        if coll_obj:
-            coll_obj.light_linking.link_state = state_value.value
-
-    if state[0] == CollectionType.RECEIVER:
-        set_obj_state_from_coll(get_linking_coll(light, CollectionType.RECEIVER), state[1])
-    elif state[0] == CollectionType.BLOCKER:
-        set_obj_state_from_coll(get_linking_coll(light, CollectionType.BLOCKER), state[1])
-
-    return
-
-
-def set_light_effect_coll_state(light: bpy.types.Object, coll: bpy.types.Collection,
-                                state: tuple[CollectionType, StateValue]) -> None:
-    """set the light effect state of the object from the light,in the receiver or the block collection
-
-    :param light: the light object
-    :param obj: the object that is affected by the light
-    :param state: the state to set for the object, dict[CollectionType.value:StateValue.value]
-    """
-
-    def set_obj_state_from_coll(_coll: bpy.types.Collection, state_value: StateValue):
-        """set the state of the object from the collection"""
-        coll_objs = enum_coll_children_from_coll(_coll)
-        coll_obj = coll_objs.get(coll)
-        if coll_obj:
-            coll_obj.light_linking.link_state = state_value.value
-
-    if state[0] == CollectionType.RECEIVER:
-        set_obj_state_from_coll(get_linking_coll(light, CollectionType.RECEIVER), state[1])
-    elif state[0] == CollectionType.BLOCKER:
-        set_obj_state_from_coll(get_linking_coll(light, CollectionType.BLOCKER), state[1])
-
-    return
 
 
 def check_material_including_emission(
@@ -418,23 +307,23 @@ def check_material_including_emission(
         if cache_key in cache:
             return cache[cache_key]
 
-    def node_tree_search(node: bpy.types.Node, depth=0) -> [bpy.types.Node | None]:
+    def node_tree_search(node: bpy.types.Node, depth=0):
         if depth > check_depth:
             return None
-        for input_point in node.inputs:  # 当前节点的输入节点
-            for link in input_point.links:  # 输入链接的节点
-                from_node = link.from_node  # 链接 从
+        for input_point in node.inputs:
+            for link in input_point.links:
+                from_node = link.from_node
                 if from_node.type in {"ADD_SHADER", "MIX_SHADER"}:
                     find = node_tree_search(from_node, depth + 1)
                     if find:
                         return find
-                elif from_node.type == "EMISSION":  # 就是一个自发光节点
+                elif from_node.type == "EMISSION":
                     return True
-                elif from_node.type == "BSDF_PRINCIPLED":  # 原理化节点
+                elif from_node.type == "BSDF_PRINCIPLED":
                     for i in from_node.inputs:
                         if i.identifier == "Emission Strength" and i.default_value > 0:
                             return True
-                elif from_node.type == "GROUP":  # 处理节点组
+                elif from_node.type == "GROUP":
                     group_out_node = find_material_output_node(from_node.node_tree.nodes)
                     if group_out_node:
                         find = node_tree_search(group_out_node) is not None
@@ -458,7 +347,7 @@ def check_material_including_emission(
     return result
 
 
-def find_material_output_node(nodes: [bpy.types.Node]) -> [bpy.types.Material | None]:
+def find_material_output_node(nodes):
     for node in nodes:
         if node.type in ("OUTPUT_MATERIAL", "GROUP_OUTPUT") and node.is_active_output:
             return node
@@ -482,4 +371,4 @@ def view_selected(context: bpy.types.Context):
 
 
 def check_link(obj: bpy.types.Object) -> bool:
-    return obj.light_linking.receiver_collection or obj.light_linking.blocker_collection
+    return bool(obj.light_linking.receiver_collection or obj.light_linking.blocker_collection)

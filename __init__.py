@@ -1,10 +1,10 @@
-from . import ui, property, ops, translation, preferences
+from . import ui, property, ops, translation, preferences, migration
 
 bl_info = {
     "name": "LightHelper",
     "author": "ACGGit Community,Atticus,小萌新",
     "blender": (4, 0, 0),
-    "version": (0, 4, 6),
+    "version": (0, 4, 7),
     "category": "Lighting",
     "support": "COMMUNITY",
     "doc_url": "",
@@ -18,8 +18,8 @@ module_list = [
     property,
     ops,
     ui,
-
     translation,
+    migration,
 ]
 
 

@@ -89,11 +89,11 @@ class LLT_AddonPreferences(AddonPreferences):
         column.prop(self, "moving_view_type")
         column.separator()
         column.label(
-            text="Light linking init creates a hidden placeholder mesh (LLP_SAFE_*) per light.",
+            text="Use Exclude mode to omit listed objects from a light, or Include mode to affect only listed objects.",
             icon='INFO',
         )
         column.label(
-            text="Restore clears linking collections; placeholders are removed with them.",
+            text="Restore clears light linking collections and resets default lighting behavior.",
         )
 
 

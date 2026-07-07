@@ -3,9 +3,11 @@ from bpy.app.translations import pgettext_iface as p_
 
 from ..utils import (
     CollectionType,
-    StateValue, get_all_light_effect_items_state, get_linking_coll,
-    get_lights_from_effect_obj, get_pref, get_safe_obj, is_safe_helper_object,
-    linking_coll_has_safe_obj, refresh_drop_poll_context,
+    get_all_light_effect_items_state,
+    get_lights_from_effect_obj,
+    get_pref,
+    is_linking_initialized,
+    refresh_drop_poll_context,
 )
 from ..utils.icon import get_item_icon, get_light_icon
 
@@ -24,7 +26,7 @@ def draw_toggle_btn(layout,
                     state_info: dict,
                     light_obj: bpy.types.Object,
                     item: bpy.types.Object | bpy.types.Collection):
-    """Draw toggle button for receiver / blocker collection"""
+    """Draw channel toggle buttons for receiver / blocker membership."""
     from ..ops import LLP_OT_toggle_light_linking
     row = layout.row()
     row.context_pointer_set("toggle_light_linking_light_obj", light_obj)
@@ -34,19 +36,22 @@ def draw_toggle_btn(layout,
     else:
         row.context_pointer_set("toggle_light_linking_collection", item)
 
-    if receive_value := state_info.get(CollectionType.RECEIVER):  # exist in receiver collection
-        icon = 'OUTLINER_OB_LIGHT' if receive_value == StateValue.INCLUDE else 'OUTLINER_DATA_LIGHT'
-        sub = row.row(align=True)
-        sub.alert = receive_value == StateValue.INCLUDE
-        op = sub.operator(LLP_OT_toggle_light_linking.bl_idname, text='', icon=icon)
-        op.coll_type = CollectionType.RECEIVER.value
+    receiver_on = bool(state_info.get(CollectionType.RECEIVER))
+    blocker_on = bool(state_info.get(CollectionType.BLOCKER))
 
-    if block_value := state_info.get(CollectionType.BLOCKER):  # exist in exclude collection
-        icon = 'SHADING_SOLID' if block_value == StateValue.INCLUDE else 'SHADING_RENDERED'
-        sub = row.row(align=True)
-        sub.alert = block_value == StateValue.INCLUDE
-        op = sub.operator(LLP_OT_toggle_light_linking.bl_idname, text='', icon=icon)
-        op.coll_type = CollectionType.BLOCKER.value
+    sub = row.row(align=True)
+    op = sub.operator(
+        LLP_OT_toggle_light_linking.bl_idname, text='', icon='OUTLINER_OB_LIGHT',
+        depress=receiver_on,
+    )
+    op.coll_type = CollectionType.RECEIVER.value
+
+    sub = row.row(align=True)
+    op = sub.operator(
+        LLP_OT_toggle_light_linking.bl_idname, text='', icon='SHADING_SOLID',
+        depress=blocker_on,
+    )
+    op.coll_type = CollectionType.BLOCKER.value
 
 
 def draw_remove_button(layout,
@@ -61,6 +66,20 @@ def draw_remove_button(layout,
         row.context_pointer_set("remove_light_linking_collection", item)
     op = row.operator(LLP_OT_remove_light_linking.bl_idname, text='', icon="X", translate=False)
     op.remove_all = True
+
+
+def draw_add_box(col, context, light_obj):
+    from ..ops import LLP_OT_link_selected_objs
+    box = col.box()
+    row = box.row()
+    row.label(text='', icon='ADD')
+    row.prop(context.window_manager.light_helper_property, 'light_linking_add_collection', text='',
+             icon='OUTLINER_COLLECTION')
+    row.prop(context.window_manager.light_helper_property, 'light_linking_add_object', text='',
+             icon='OBJECT_DATA')
+    row = box.row()
+    row.context_pointer_set("link_light_obj", light_obj)
+    row.operator(LLP_OT_link_selected_objs.bl_idname, icon='ADD')
 
 
 class LLT_PT_light_control_panel(bpy.types.Panel):
@@ -85,17 +104,13 @@ class LLT_PT_light_control_panel(bpy.types.Panel):
         tips.data = p_(
             """Light Linking Panel
 This Panel Lists all the objects that are affected by the selected/pinned light.
-Provides buttons to toggle the light effecting state of the objects."""
+Use Exclude/Include mode to control list semantics, and toggle light or shadow per object."""
         )
-
         row.separator()
 
     @staticmethod
     def check_support_light_linking(context):
-        """仅cycles渲染器支持灯光排除
-        eevee在5.0支持
-        """
-        if bpy.app.version >= (4, 3, 0):  # 大于4.3.0版本之后有eevee_next,5.0以后eevee_next改名了
+        if bpy.app.version >= (4, 3, 0):
             return context.scene.render.engine in {"CYCLES", "BLENDER_EEVEE_NEXT", "BLENDER_EEVEE"}
         return context.scene.render.engine in {"CYCLES"}
 
@@ -113,8 +128,7 @@ Provides buttons to toggle the light effecting state of the objects."""
         self.draw_light_objs_control(context, layout)
 
     def draw_light_objs_control(self, context, layout):
-        from ..ops import LLP_OT_add_light_linking, LLP_OT_link_selected_objs, LLP_OT_clear_light_linking, \
-            LLP_OT_instances_data
+        from ..ops import LLP_OT_add_light_linking, LLP_OT_clear_light_linking, LLP_OT_instances_data
 
         refresh_drop_poll_context(context)
 
@@ -125,13 +139,9 @@ Provides buttons to toggle the light effecting state of the objects."""
         if not light_obj:
             return
 
-        coll_receiver = get_linking_coll(light_obj, CollectionType.RECEIVER)
-        coll_blocker = get_linking_coll(light_obj, CollectionType.BLOCKER)
-        not_init = (not linking_coll_has_safe_obj(light_obj, coll_receiver)
-                    or not linking_coll_has_safe_obj(light_obj, coll_blocker))
+        not_init = not is_linking_initialized(light_obj)
 
         col = layout.column()
-        # top line
         row = col.row(align=True)
         row.label(text=f"{light_obj.name}", icon=get_light_icon(light_obj), translate=False)
         row.separator()
@@ -141,13 +151,11 @@ Provides buttons to toggle the light effecting state of the objects."""
         if not not_init:
             row.operator(LLP_OT_clear_light_linking.bl_idname, text="", icon="PANEL_CLOSE")
 
-        # return if no receiver/blocker collection (exclude the safe obj)
         if not_init:
             with context.temp_override(add_light_linking_light_obj=light_obj):
-                from bpy.app.translations import pgettext_iface
                 col.context_pointer_set("add_light_linking_light_obj", light_obj)
                 col.label(
-                    text=p_("Init creates a hidden placeholder mesh (LLP_SAFE_*) per light. Restore clears linking."),
+                    text=p_("Init light linking collections. In Exclude mode, listed objects are excluded from this light."),
                     icon='INFO',
                 )
                 op = col.operator(LLP_OT_add_light_linking.bl_idname, text='Init', icon='ADD')
@@ -156,66 +164,39 @@ Provides buttons to toggle the light effecting state of the objects."""
                     cc = col.column()
                     cc.alert = True
                     cc.label(text="Please select light or can be illuminated object")
-                    cc.label(
-                        text=pgettext_iface("Current type: ") + context.object.type)
-                return
-
-        obj_state_dict = get_all_light_effect_items_state(light_obj)
-
-        safe_obj = get_safe_obj(light_obj)
-        if len(obj_state_dict) == 1 and safe_obj in obj_state_dict.keys():
-            box = col.box()
-
-            row = box.row()
-            row.label(text='', icon='ADD')
-            row.prop(context.window_manager.light_helper_property, 'light_linking_add_collection', text='',
-                     icon='OUTLINER_COLLECTION')
-            row.prop(context.window_manager.light_helper_property, 'light_linking_add_object', text='',
-                     icon='OBJECT_DATA')
-
-            row = box.row()
-            row.context_pointer_set("link_light_obj", light_obj)
-            row.operator(LLP_OT_link_selected_objs.bl_idname, icon='ADD')
+                    cc.label(text=pgettext_iface("Current type: ") + context.object.type)
             return
 
         col.separator()
+        col.row(align=True).prop(light_obj.light_helper_property, 'linking_mode', expand=True,
+                                  text_ctxt="light_helper_zh_CN")
 
+        obj_state_dict = get_all_light_effect_items_state(light_obj)
         objects = context.scene.objects[:]
+
+        if not obj_state_dict:
+            draw_add_box(col, context, light_obj)
+            return
+
         for (item, state_info) in obj_state_dict.items():
-            if is_safe_helper_object(item):
-                continue  # skip safe obj
-            elif isinstance(item, bpy.types.Object):
-                if item not in objects:
-                    continue  # skip scene delete object
+            if isinstance(item, bpy.types.Object) and item not in objects:
+                continue
             row = col.row(align=False)
             row.scale_x = 1.1
             row.scale_y = 1.1
-
             draw_select_btn(row, item)
             draw_toggle_btn(row, state_info, light_obj, item)
             row.separator()
             draw_remove_button(row, light_obj, item)
 
-        # extra op
         col.separator()
-        box = col.box()
-        row = box.row()
-        row.label(text='', icon='ADD')
-        row.prop(context.window_manager.light_helper_property, 'light_linking_add_collection', text='',
-                 icon='OUTLINER_COLLECTION')
-        row.prop(context.window_manager.light_helper_property, 'light_linking_add_object', text='', icon='OBJECT_DATA')
-
-        row = box.row()
-        row.context_pointer_set("link_light_obj", light_obj)
-        row.operator(LLP_OT_link_selected_objs.bl_idname, icon='ADD')
+        draw_add_box(col, context, light_obj)
 
     def draw_light_list(self, context, layout):
         from ..ops import LLP_OT_switch_filter_show
-        from ..utils import get_pref
         from .ui_list import LLT_UL_light
 
         pref = get_pref(context)
-
         icon, _ = LLP_OT_switch_filter_show.get_icon(context)
 
         column = layout.column(align=True)
@@ -248,8 +229,8 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
         if tips:
             tips.data = p_(
                 """Object Linking Panel
-    This Panel Lists all the lights that affected the selected/pinned object.
-    Provides buttons to toggle the light effecting state of the objects."""
+This Panel Lists all the lights that affected the selected/pinned object.
+Provides buttons to toggle light or shadow channel per light."""
             )
         row.separator()
 
@@ -271,7 +252,6 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
             return
 
         col = layout.column()
-        # top line
         row = col.row(align=True)
         row.label(text=f"{item.name}", icon=get_light_icon(item), translate=False)
         row.separator()
@@ -288,11 +268,12 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
 
         objects = context.scene.objects[:]
         for (light_obj, state_info) in obj_state_dict.items():
-            if is_safe_helper_object(light_obj):
-                continue  # skip safe obj
-            elif light_obj not in objects:
-                continue  # skip scene delete object
+            if light_obj not in objects:
+                continue
             row = col.row()
+            sub = row.row(align=True)
+            sub.label(text='', icon=get_light_icon(light_obj))
+            sub.prop(light_obj.light_helper_property, 'linking_mode', text='', text_ctxt="light_helper_zh_CN")
             draw_select_btn(row, light_obj)
             draw_toggle_btn(row, state_info, light_obj, item)
             row.separator()
