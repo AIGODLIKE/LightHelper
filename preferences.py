@@ -76,6 +76,11 @@ class LLT_AddonPreferences(AddonPreferences):
             ("ANIMATION", "Animation", "Animation switching, no fixed zoom", "ANIM", 2),
         ]
     )
+    auto_fix_shared_linking: bpy.props.BoolProperty(
+        name="Auto Fix Shared Linking",
+        description="Automatically split shared light linking collections when lights are duplicated, and inherit linking for duplicated objects",
+        default=True,
+    )
 
     def draw(self, context):
         layout = self.layout
@@ -87,6 +92,7 @@ class LLT_AddonPreferences(AddonPreferences):
         column.prop(self, "light_list_filter_type")
         column.prop(self, "light_link_filter_type", text_ctxt="light_helper_zh_CN")
         column.prop(self, "moving_view_type")
+        column.prop(self, "auto_fix_shared_linking")
         column.separator()
         column.label(
             text="Use Exclude mode to omit listed objects from a light, or Include mode to affect only listed objects.",

@@ -16,7 +16,6 @@ from .utils import (
     link_item_to_channel,
     is_item_in_channel,
     is_linking_initialized,
-    apply_linking_mode_to_light,
     mark_managed_linking_collection,
 )
 
@@ -366,18 +365,15 @@ class LLP_OT_instances_data(LightHelperOperator, bpy.types.Operator):
         return False
 
     def execute(self, context):
+        from .utils import make_light_linking_single_user
         light_obj = get_light_obj(context)
         if light_obj is None:
             self.report({'ERROR'}, p_("No light selected"))
             return {"CANCELLED"}
-        light = light_obj.light_linking
-        receiver = getattr(light, "receiver_collection", None)
-        if receiver and receiver.users > 1:
-            setattr(light, "receiver_collection", receiver.copy())
-        blocker = getattr(light, "blocker_collection", None)
-        if blocker and blocker.users > 1:
-            setattr(light, "blocker_collection", blocker.copy())
-        apply_linking_mode_to_light(light_obj)
+        if not make_light_linking_single_user(light_obj):
+            self.report({'WARNING'}, p_("Light linking collections are not shared"))
+            return {"CANCELLED"}
+        self.report({'INFO'}, p_("Light linking collections are now single-user"))
         return {"FINISHED"}
 
 

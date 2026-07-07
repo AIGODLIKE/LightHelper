@@ -372,3 +372,139 @@ def view_selected(context: bpy.types.Context):
 
 def check_link(obj: bpy.types.Object) -> bool:
     return bool(obj.light_linking.receiver_collection or obj.light_linking.blocker_collection)
+
+
+LIGHT_HELPER_DUP_HANDLED_KEY = "light_helper_dup_handled"
+
+
+def _managed_linking_coll_name(light: bpy.types.Object, coll_type: CollectionType) -> str:
+    prefix = 'Light Linking for ' if coll_type == CollectionType.RECEIVER else 'Shadow Linking for '
+    return prefix + light.name
+
+
+def has_shared_linking_collections(light: bpy.types.Object) -> bool:
+    if not hasattr(light, "light_linking"):
+        return False
+    linking = light.light_linking
+    receiver = linking.receiver_collection
+    blocker = linking.blocker_collection
+    return (receiver is not None and receiver.users > 1) or (blocker is not None and blocker.users > 1)
+
+
+def split_shared_linking_collection(light: bpy.types.Object, coll_type: CollectionType) -> bool:
+    if not hasattr(light, "light_linking"):
+        return False
+    linking = light.light_linking
+    coll = get_linking_coll(light, coll_type)
+    if coll is None or coll.users <= 1:
+        return False
+    new_coll = coll.copy()
+    mark_managed_linking_collection(new_coll)
+    new_coll.name = _managed_linking_coll_name(light, coll_type)
+    if coll_type == CollectionType.RECEIVER:
+        linking.receiver_collection = new_coll
+    else:
+        linking.blocker_collection = new_coll
+    apply_linking_mode_to_light(light)
+    return True
+
+
+def make_light_linking_single_user(light: bpy.types.Object) -> bool:
+    if not hasattr(light, "light_linking"):
+        return False
+    changed = False
+    if split_shared_linking_collection(light, CollectionType.RECEIVER):
+        changed = True
+    if split_shared_linking_collection(light, CollectionType.BLOCKER):
+        changed = True
+    return changed
+
+
+def find_duplicate_source_object(obj: bpy.types.Object) -> bpy.types.Object | None:
+    name = obj.name
+    if '.' not in name:
+        return None
+    base, suffix = name.rsplit('.', 1)
+    if not suffix.isdigit():
+        return None
+    num = int(suffix)
+    if num <= 0:
+        return None
+    if num == 1:
+        source_name = base
+    else:
+        source_name = f"{base}.{num - 1:03d}"
+    source = bpy.data.objects.get(source_name)
+    if source is None or source == obj:
+        return None
+    return source
+
+
+def inherit_light_linking_from_object(
+        target: bpy.types.Object,
+        source: bpy.types.Object,
+        context: bpy.types.Context | None = None) -> bool:
+    if target == source:
+        return False
+    changed = False
+    ctx = context if context is not None else bpy.context
+    scene = ctx.scene
+    if scene is None:
+        return False
+
+    if (target.type == 'LIGHT' and source.type == 'LIGHT'
+            and hasattr(target, "light_helper_property")
+            and hasattr(source, "light_helper_property")):
+        target.light_helper_property.linking_mode = source.light_helper_property.linking_mode
+
+    for light_obj in scene.objects:
+        if not hasattr(light_obj, "light_linking"):
+            continue
+        linking = light_obj.light_linking
+        if not linking.receiver_collection and not linking.blocker_collection:
+            continue
+        for coll_type in (CollectionType.RECEIVER, CollectionType.BLOCKER):
+            if is_item_in_channel(light_obj, source, coll_type):
+                link_item_to_channel(light_obj, target, coll_type, True, context)
+                changed = True
+    return changed
+
+
+def is_duplicate_handled(obj: bpy.types.Object) -> bool:
+    return bool(obj.get(LIGHT_HELPER_DUP_HANDLED_KEY))
+
+
+def mark_duplicate_handled(obj: bpy.types.Object) -> None:
+    obj[LIGHT_HELPER_DUP_HANDLED_KEY] = True
+
+
+def process_duplicated_object(obj: bpy.types.Object, context: bpy.types.Context | None = None) -> bool:
+    if is_duplicate_handled(obj):
+        return False
+    changed = False
+    source = find_duplicate_source_object(obj)
+
+    if obj.type == 'LIGHT':
+        if has_shared_linking_collections(obj):
+            changed = make_light_linking_single_user(obj) or changed
+        if (source is not None and source.type == 'LIGHT'
+                and hasattr(obj, "light_helper_property")
+                and hasattr(source, "light_helper_property")):
+            obj.light_helper_property.linking_mode = source.light_helper_property.linking_mode
+            changed = True
+    elif source is not None:
+        changed = inherit_light_linking_from_object(obj, source, context) or changed
+
+    if changed:
+        mark_duplicate_handled(obj)
+    return changed
+
+
+def fix_all_shared_light_linking(scene: bpy.types.Scene) -> int:
+    fixed = 0
+    for obj in scene.objects:
+        if obj.type != 'LIGHT':
+            continue
+        if make_light_linking_single_user(obj):
+            fixed += 1
+    return fixed

@@ -57,6 +57,9 @@ def migrate_scene(scene: bpy.types.Scene) -> None:
         obj.light_helper_property.linking_mode = mode
         apply_linking_mode_to_light(obj, mode)
 
+    from .utils import fix_all_shared_light_linking
+    fix_all_shared_light_linking(scene)
+
     scene[LIGHT_HELPER_MIGRATED_KEY] = True
 
 
