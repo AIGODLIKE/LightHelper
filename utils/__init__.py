@@ -224,6 +224,19 @@ def get_all_light_effect_items_state(light: bpy.types.Object) -> dict:
     return items_state
 
 
+def linking_item_sort_key(item: bpy.types.Object | bpy.types.Collection) -> tuple:
+    type_order = 0 if isinstance(item, bpy.types.Collection) else 1
+    return type_order, item.name.casefold()
+
+
+def iter_sorted_linking_items(items_state: dict):
+    yield from sorted(items_state.items(), key=lambda pair: linking_item_sort_key(pair[0]))
+
+
+def iter_sorted_linking_lights(light_state: dict):
+    yield from sorted(light_state.items(), key=lambda pair: pair[0].name.casefold())
+
+
 _view_layer_collections_cache = frozenset()
 _cached_linking_lights = ()
 

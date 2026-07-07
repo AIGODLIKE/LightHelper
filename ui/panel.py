@@ -7,6 +7,8 @@ from ..utils import (
     get_lights_from_effect_obj,
     get_pref,
     is_linking_initialized,
+    iter_sorted_linking_items,
+    iter_sorted_linking_lights,
     refresh_drop_poll_context,
 )
 from ..utils.icon import get_item_icon, get_light_icon
@@ -228,7 +230,7 @@ Use Exclude/Include mode to control list semantics, and toggle light or shadow p
             draw_add_box(col, context, light_obj)
             return
 
-        for (item, state_info) in obj_state_dict.items():
+        for (item, state_info) in iter_sorted_linking_items(obj_state_dict):
             if isinstance(item, bpy.types.Object) and item not in objects:
                 continue
             row = col.row(align=False)
@@ -317,7 +319,7 @@ Provides buttons to toggle light or shadow channel per light."""
             return
 
         objects = context.scene.objects[:]
-        for (light_obj, state_info) in obj_state_dict.items():
+        for (light_obj, state_info) in iter_sorted_linking_lights(obj_state_dict):
             if light_obj not in objects:
                 continue
             row = col.row()
