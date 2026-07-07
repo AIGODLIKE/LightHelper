@@ -18,7 +18,7 @@ class LLT_UL_light(bpy.types.UIList):
         from ..utils import get_pref
         from bpy.app.translations import pgettext_iface
 
-        pref = get_pref()
+        pref = get_pref(context)
 
         sp = layout.column(align=True).split(factor=0.2, align=True)
 
@@ -39,7 +39,7 @@ class LLT_UL_light(bpy.types.UIList):
         row.prop(self, "show_in_view", emboss=True, toggle=True)
 
         sc.row(align=True).prop(pref, "moving_view_type", expand=True)
-        sc.row(align=True).prop(pref, "node_search_depth", expand=True)
+        sc.prop(pref, "node_search_depth")
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
         from ..utils import check_link

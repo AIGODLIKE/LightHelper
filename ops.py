@@ -2,7 +2,7 @@ import bpy
 from bpy.app.translations import pgettext_iface as p_
 
 from .utils import get_light_effect_obj_state, get_light_effect_coll_state
-from .utils import set_light_effect_obj_state, set_light_effect_coll_state, CollectionType, StateValue
+from .utils import set_light_effect_obj_state, set_light_effect_coll_state, CollectionType, StateValue, restore_light_linking
 
 
 def enum_coll_type(self, context):
@@ -65,6 +65,7 @@ class LLP_OT_question(bpy.types.Operator):
 class LLP_OT_remove_light_linking(bpy.types.Operator):
     bl_idname = 'object.light_helper_remove_light_linking'
     bl_label = "Remove"
+    bl_description = "Remove the object or collection from light linking lists"
     bl_options = {'REGISTER', 'UNDO'}
 
     coll_type: bpy.props.EnumProperty(
@@ -127,6 +128,7 @@ class LLP_OT_remove_light_linking(bpy.types.Operator):
 class LLP_OT_clear_light_linking(bpy.types.Operator):
     bl_idname = 'object.light_helper_clear_light_linking'
     bl_label = "Clear"
+    bl_description = "Clear light linking collections and restore default lighting behavior"
     bl_options = {'REGISTER', 'UNDO'}
     index: bpy.props.IntProperty(default=-1, options={'SKIP_SAVE'})
 
@@ -151,9 +153,7 @@ class LLP_OT_clear_light_linking(bpy.types.Operator):
         if light is None:
             self.report({'ERROR'}, "No light selected")
             return {"CANCELLED"}
-        light_linking = light.light_linking
-        light_linking.receiver_collection = None
-        light_linking.blocker_collection = None
+        restore_light_linking(light)
         self.report({'INFO'}, light.name + " " + p_("Restored"))
 
         if self.index != -1:
@@ -233,6 +233,7 @@ class LLP_OT_add_light_linking(bpy.types.Operator):
 class LLP_OT_toggle_light_linking(bpy.types.Operator):
     bl_idname = 'object.light_helper_toggle_light_linking'
     bl_label = "Toggle"
+    bl_description = "Toggle include or exclude state for light or shadow linking"
     bl_options = {'REGISTER', 'UNDO'}
 
     coll_type: bpy.props.EnumProperty(
@@ -292,6 +293,7 @@ class LLP_OT_toggle_light_linking(bpy.types.Operator):
 class LLP_OT_link_selected_objs(bpy.types.Operator):
     bl_idname = 'object.light_helper_link_selected_objs'
     bl_label = "Add Selected Objects"
+    bl_description = "Add the currently selected objects to the light linking collections"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -321,6 +323,7 @@ class LLP_OT_link_selected_objs(bpy.types.Operator):
 class LLP_OT_select_item(bpy.types.Operator):
     bl_idname = 'object.light_helper_select_item'
     bl_label = "Select"
+    bl_description = "Select the object in the viewport or the collection in the outliner"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -376,6 +379,7 @@ class LLP_OT_select_item(bpy.types.Operator):
 class LLP_OT_instances_data(bpy.types.Operator):
     bl_idname = 'object.light_helper_instances_data'
     bl_label = "Instances Data"
+    bl_description = "Make shared light linking collections single-user for this light"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -412,6 +416,7 @@ class LLP_OT_instances_data(bpy.types.Operator):
 class LLP_OT_switch_filter_show(bpy.types.Operator):
     bl_idname = 'object.light_helper_switch_filter_show'
     bl_label = "Switch Filter Show"
+    bl_description = "Toggle viewport visibility for all filtered lights in the list"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod

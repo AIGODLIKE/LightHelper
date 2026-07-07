@@ -51,4 +51,11 @@ data = {
     "Init creates a hidden placeholder mesh (LLP_SAFE_*) per light. Restore clears linking.": "初始化会为每个灯光创建隐藏的占位网格（LLP_SAFE_*）。还原会清除链接设置。",
     "Light linking init creates a hidden placeholder mesh (LLP_SAFE_*) per light.": "灯光链接初始化会为每个灯光创建隐藏的占位网格（LLP_SAFE_*）。",
     "Restore clears linking collections; placeholders are removed with them.": "还原会清除链接集合，占位对象会一并移除。",
+    "Remove the object or collection from light linking lists": "从灯光链接列表中移除物体或集合",
+    "Clear light linking collections and restore default lighting behavior": "清除灯光链接集合并恢复默认照明行为",
+    "Toggle include or exclude state for light or shadow linking": "切换灯光或阴影链接的包含/排除状态",
+    "Add the currently selected objects to the light linking collections": "将当前选中的物体添加到灯光链接集合",
+    "Select the object in the viewport or the collection in the outliner": "在视口中选中物体，或在大纲视图中选中集合",
+    "Make shared light linking collections single-user for this light": "将此灯光的共享链接集合变为单用户",
+    "Toggle viewport visibility for all filtered lights in the list": "切换列表中所有筛选灯光的视口可见性",
 }

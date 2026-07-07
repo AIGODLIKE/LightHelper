@@ -44,6 +44,20 @@ class ObjectProperty(PropertyGroup):
     show_in_view: bpy.props.BoolProperty(name="Show", get=get_show, set=set_show, )
 
 
+def poll_light_linking_pin_object(_self, obj: bpy.types.Object) -> bool:
+    from .utils import ILLUMINATED_OBJECT_TYPE_LIST, is_safe_helper_object
+    return obj.type in ILLUMINATED_OBJECT_TYPE_LIST and not is_safe_helper_object(obj)
+
+
+def poll_object_linking_pin_object(_self, obj: bpy.types.Object) -> bool:
+    from .utils import ILLUMINATED_OBJECT_TYPE_LIST, is_safe_helper_object
+    return (
+        obj.type in ILLUMINATED_OBJECT_TYPE_LIST
+        and obj.type != "LIGHT"
+        and not is_safe_helper_object(obj)
+    )
+
+
 class SceneProperty(PropertyGroup):
     def update_pin_object(self, context):
         """Update pin object, effect the context layout object"""
@@ -71,10 +85,10 @@ class SceneProperty(PropertyGroup):
 
     # pin object, use to change context layout object
     light_linking_pin_object: bpy.props.PointerProperty(
-        poll=lambda self, obj: obj.type in {'LIGHT', 'MESH'}, type=bpy.types.Object,
+        poll=poll_light_linking_pin_object, type=bpy.types.Object,
     )
     object_linking_pin_object: bpy.props.PointerProperty(
-        poll=lambda self, obj: obj.type in {'MESH'}, type=bpy.types.Object,
+        poll=poll_object_linking_pin_object, type=bpy.types.Object,
     )
     # pin property to change context draw layout
     light_linking_pin: bpy.props.BoolProperty(name='Pin', update=update_pin_object)

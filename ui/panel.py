@@ -74,7 +74,7 @@ class LLT_PT_light_control_panel(bpy.types.Panel):
     def draw_header(self, context):
         from ..ops import LLP_OT_question
 
-        pref = get_pref()
+        pref = get_pref(context)
 
         layout = self.layout
         row = layout.row(align=True)
@@ -214,7 +214,7 @@ Provides buttons to toggle the light effecting state of the objects."""
         from ..utils import get_pref
         from .ui_list import LLT_UL_light
 
-        pref = get_pref()
+        pref = get_pref(context)
 
         icon, _ = LLP_OT_switch_filter_show.get_icon(context)
 
@@ -307,13 +307,27 @@ panel_list = [
     LLT_PT_obj_control_panel,
 ]
 register_class, unregister_class = bpy.utils.register_classes_factory(panel_list)
+_registered_category = None
+
+
+def _tag_ui_redraw(context):
+    if context is None:
+        return
+    for window in context.window_manager.windows:
+        for area in window.screen.areas:
+            area.tag_redraw()
 
 
 def register():
+    global _registered_category
     from ..utils import get_pref
-    pref = get_pref()
+    try:
+        category = get_pref(bpy.context).panel_name
+    except KeyError:
+        category = "LH"
+    _registered_category = category
     for panel in panel_list:
-        panel.bl_category = pref.panel_name
+        panel.bl_category = category
     register_class()
 
 
@@ -321,6 +335,16 @@ def unregister():
     unregister_class()
 
 
-def refresh_panel():
-    unregister()
-    register()
+def refresh_panel(context):
+    global _registered_category
+    from ..utils import get_pref
+    category = get_pref(context).panel_name
+    if category == _registered_category:
+        _tag_ui_redraw(context)
+        return
+    _registered_category = category
+    unregister_class()
+    for panel in panel_list:
+        panel.bl_category = category
+    register_class()
+    _tag_ui_redraw(context)

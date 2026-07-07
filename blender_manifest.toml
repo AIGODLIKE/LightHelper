@@ -9,6 +9,7 @@ schema_version = "1.0.0"
 tags = ["Lighting"]
 license = ["SPDX:GPL-3.0-or-later"]
 support = "https://github.com/AIGODLIKE/LightHelper/issues"
+website = "https://github.com/AIGODLIKE/LightHelper"
 
 [build]
 paths_exclude_pattern = ["__pycache__/", "/.git/", "/.idea/", "/*.zip", "README.md"]

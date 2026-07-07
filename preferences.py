@@ -5,21 +5,27 @@ from bpy.types import AddonPreferences
 is_50 = bpy.app.version >= (5, 0, 0)
 
 
+def update_filter_settings(_self, context):
+    from .filter import invalidate_filter_cache
+    invalidate_filter_cache()
+
+
 class LLT_AddonPreferences(AddonPreferences):
     bl_idname = __package__
 
     def update_panel(self, context):
         from .ui.panel import refresh_panel
-        refresh_panel()
+        refresh_panel(context)
 
     panel_name: StringProperty(name="Panel Name", default="LH", update=update_panel)
     node_search_depth: IntProperty(name="Node search depth",
                                    description="If the setting is too high or the materials in the scene are too complex, stuttering may occur",
-                                   default=10, max=50, min=3)
+                                   default=10, max=50, min=3, update=update_filter_settings)
     light_list_filter_type: EnumProperty(
         name="List Filter Type",
         default="ALL",
         translation_context="light_helper_zh_CN",
+        update=update_filter_settings,
         items=[
             ("ALL", "All", "Display lights and objects that can emit light", "SCENE_DATA", 0),
             ("LIGHT", "Light", "Only show the lights", "OUTLINER_DATA_LIGHT", 1),
@@ -59,6 +65,7 @@ class LLT_AddonPreferences(AddonPreferences):
         ],
         get=get_link,
         set=set_link,
+        update=update_filter_settings,
     )
     moving_view_type: EnumProperty(
         name="Moving View Type",

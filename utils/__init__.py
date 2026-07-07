@@ -54,8 +54,42 @@ class CollectionType(Enum):
     BLOCKER = 'blocker'
 
 
-def get_pref():
-    return bpy.context.preferences.addons[base_package].preferences
+def get_pref(context=None):
+    ctx = context if context is not None else bpy.context
+    return ctx.preferences.addons[base_package].preferences
+
+
+def remove_safe_helper_for_light(light: bpy.types.Object) -> None:
+    safe_obj = get_safe_obj(light)
+    if safe_obj is None:
+        return
+    mesh = safe_obj.data
+    bpy.data.objects.remove(safe_obj, do_unlink=True)
+    if mesh and mesh.users == 0:
+        bpy.data.meshes.remove(mesh)
+
+
+def remove_orphaned_managed_collection(coll: bpy.types.Collection | None) -> None:
+    if coll is None or not is_managed_linking_collection(coll):
+        return
+    for obj in bpy.data.objects:
+        if not hasattr(obj, "light_linking"):
+            continue
+        linking = obj.light_linking
+        if linking.receiver_collection == coll or linking.blocker_collection == coll:
+            return
+    bpy.data.collections.remove(coll)
+
+
+def restore_light_linking(light: bpy.types.Object) -> None:
+    linking = light.light_linking
+    receiver = linking.receiver_collection
+    blocker = linking.blocker_collection
+    linking.receiver_collection = None
+    linking.blocker_collection = None
+    remove_safe_helper_for_light(light)
+    remove_orphaned_managed_collection(receiver)
+    remove_orphaned_managed_collection(blocker)
 
 
 def ensure_linking_coll(coll_type: CollectionType, light: bpy.types.Object, make_safe_obj: bool = True):
@@ -431,8 +465,7 @@ def find_material_output_node(nodes: [bpy.types.Node]) -> [bpy.types.Material | 
 
 
 def view_selected(context: bpy.types.Context):
-    # 视图到所选
-    mt = get_pref().moving_view_type
+    mt = get_pref(context).moving_view_type
     if mt == "NONE":
         return
     for area in context.screen.areas:
