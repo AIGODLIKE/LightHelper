@@ -3,8 +3,9 @@ from bpy.app.translations import pgettext_iface as p_
 
 from ..utils import (
     CollectionType,
-    StateValue, SAFE_OBJ_NAME, get_all_light_effect_items_state, get_linking_coll,
-    get_lights_from_effect_obj, get_pref
+    StateValue, get_all_light_effect_items_state, get_linking_coll,
+    get_lights_from_effect_obj, get_pref, get_safe_obj, is_safe_helper_object,
+    linking_coll_has_safe_obj, refresh_drop_poll_context,
 )
 from ..utils.icon import get_item_icon, get_light_icon
 
@@ -62,37 +63,6 @@ def draw_remove_button(layout,
     op.remove_all = True
 
 
-def draw_light_link(obj, layout, use_pin=False):
-    if obj is None:
-        return
-    scene = bpy.context.scene
-    col = layout.column()
-    light_linking = obj.light_linking
-
-    row = col.row(align=True)
-
-    row.label(text=obj.name, icon='LIGHT')
-    if use_pin:
-        row.prop(scene.light_helper_property, 'light_linking_pin', text='', icon='PINNED')
-
-    if not light_linking.receiver_collection:
-        col.operator('object.light_linking_receiver_collection_new', text='', icon='ADD')
-        return
-
-    row = col.row(align=True)
-    row.prop(obj.light_helper_property, 'light_linking_state', expand=True)
-    row.prop(scene.light_helper_property, 'force_light_linking_state', icon='FILE_REFRESH', toggle=True, text='')
-
-    if not obj.light_helper_property.show_light_linking_collection:
-        return
-
-    col.separator()
-
-    row = col.row(align=True)
-    row.template_light_linking_collection(row, light_linking, "receiver_collection")
-    row.operator('object.light_linking_unlink_from_collection', text='', icon='REMOVE')
-
-
 class LLT_PT_light_control_panel(bpy.types.Panel):
     bl_label = ""
     bl_idname = "LLT_PT_light_control_panel"
@@ -146,6 +116,8 @@ Provides buttons to toggle the light effecting state of the objects."""
         from ..ops import LLP_OT_add_light_linking, LLP_OT_link_selected_objs, LLP_OT_clear_light_linking, \
             LLP_OT_instances_data
 
+        refresh_drop_poll_context(context)
+
         if context.scene.light_helper_property.light_linking_pin:
             light_obj = context.scene.light_helper_property.light_linking_pin_object
         else:
@@ -155,16 +127,15 @@ Provides buttons to toggle the light effecting state of the objects."""
 
         coll_receiver = get_linking_coll(light_obj, CollectionType.RECEIVER)
         coll_blocker = get_linking_coll(light_obj, CollectionType.BLOCKER)
-        not_init = (not coll_receiver and not coll_blocker) or (
-                coll_receiver and SAFE_OBJ_NAME not in coll_receiver.objects) or (
-                           coll_blocker and SAFE_OBJ_NAME not in coll_blocker.objects)
+        not_init = (not linking_coll_has_safe_obj(light_obj, coll_receiver)
+                    or not linking_coll_has_safe_obj(light_obj, coll_blocker))
 
         col = layout.column()
         # top line
         row = col.row(align=True)
         row.label(text=f"{light_obj.name}", icon=get_light_icon(light_obj), translate=False)
         row.separator()
-        row.prop(bpy.context.scene.light_helper_property, 'light_linking_pin', text='', icon='PINNED')
+        row.prop(context.scene.light_helper_property, 'light_linking_pin', text='', icon='PINNED')
         if LLP_OT_instances_data.poll(context):
             row.operator(LLP_OT_instances_data.bl_idname, text="", icon='RESTRICT_INSTANCED_ON')
         if not not_init:
@@ -175,6 +146,10 @@ Provides buttons to toggle the light effecting state of the objects."""
             with context.temp_override(add_light_linking_light_obj=light_obj):
                 from bpy.app.translations import pgettext_iface
                 col.context_pointer_set("add_light_linking_light_obj", light_obj)
+                col.label(
+                    text=p_("Init creates a hidden placeholder mesh (LLP_SAFE_*) per light. Restore clears linking."),
+                    icon='INFO',
+                )
                 op = col.operator(LLP_OT_add_light_linking.bl_idname, text='Init', icon='ADD')
                 op.init = True
                 if LLP_OT_add_light_linking.poll(context) is False:
@@ -187,7 +162,7 @@ Provides buttons to toggle the light effecting state of the objects."""
 
         obj_state_dict = get_all_light_effect_items_state(light_obj)
 
-        safe_obj = bpy.data.objects.get(SAFE_OBJ_NAME)
+        safe_obj = get_safe_obj(light_obj)
         if len(obj_state_dict) == 1 and safe_obj in obj_state_dict.keys():
             box = col.box()
 
@@ -207,7 +182,7 @@ Provides buttons to toggle the light effecting state of the objects."""
 
         objects = context.scene.objects[:]
         for (item, state_info) in obj_state_dict.items():
-            if item.name == SAFE_OBJ_NAME:
+            if is_safe_helper_object(item):
                 continue  # skip safe obj
             elif isinstance(item, bpy.types.Object):
                 if item not in objects:
@@ -283,6 +258,8 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
         self.draw_object(context, layout)
 
     def draw_object(self, context, layout):
+        refresh_drop_poll_context(context)
+
         if context.scene.light_helper_property.object_linking_pin:
             item = context.scene.light_helper_property.object_linking_pin_object
         else:
@@ -298,11 +275,11 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
         row = col.row(align=True)
         row.label(text=f"{item.name}", icon=get_light_icon(item), translate=False)
         row.separator()
-        row.prop(bpy.context.scene.light_helper_property, 'object_linking_pin', text='', icon='PINNED')
+        row.prop(context.scene.light_helper_property, 'object_linking_pin', text='', icon='PINNED')
 
         col.separator()
 
-        obj_state_dict = get_lights_from_effect_obj(item)
+        obj_state_dict = get_lights_from_effect_obj(item, context)
         if len(obj_state_dict) == 0:
             col.label(text='No Link type lights effecting this object', icon='LIGHT')
             box = col.box()
@@ -311,7 +288,7 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
 
         objects = context.scene.objects[:]
         for (light_obj, state_info) in obj_state_dict.items():
-            if light_obj.name == SAFE_OBJ_NAME:
+            if is_safe_helper_object(light_obj):
                 continue  # skip safe obj
             elif light_obj not in objects:
                 continue  # skip scene delete object

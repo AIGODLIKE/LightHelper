@@ -2,9 +2,42 @@ from enum import Enum, unique
 
 import bpy
 
-SAFE_OBJ_NAME = "LLP_SAFE_OBJ"
-ILLUMINATED_OBJECT_TYPE_LIST = ["LIGHT", "MESH", "CURVE", "SURFACE", "META", "FONT", "GPENCIL", "EMPTY"]
+LIGHT_HELPER_MANAGED_KEY = "light_helper_managed"
+LIGHT_HELPER_SAFE_KEY = "light_helper_safe"
+ILLUMINATED_OBJECT_TYPE_LIST = [
+    "LIGHT", "MESH", "CURVE", "SURFACE", "META", "FONT", "GPENCIL", "GREASEPENCIL", "EMPTY",
+]
 from .. import __package__ as base_package
+
+
+def get_safe_obj_name(light: bpy.types.Object) -> str:
+    return f"LLP_SAFE_{light.name}"
+
+
+def get_safe_obj(light: bpy.types.Object) -> bpy.types.Object | None:
+    return bpy.data.objects.get(get_safe_obj_name(light))
+
+
+def is_safe_helper_object(obj: bpy.types.Object) -> bool:
+    return bool(obj.get(LIGHT_HELPER_SAFE_KEY))
+
+
+def mark_managed_linking_collection(coll: bpy.types.Collection) -> None:
+    coll[LIGHT_HELPER_MANAGED_KEY] = True
+
+
+def is_managed_linking_collection(coll: bpy.types.Collection) -> bool:
+    if coll.get(LIGHT_HELPER_MANAGED_KEY):
+        return True
+    name = coll.name
+    return name.startswith("Light Linking for ") or name.startswith("Shadow Linking for ")
+
+
+def linking_coll_has_safe_obj(light: bpy.types.Object, coll: bpy.types.Collection | None) -> bool:
+    if coll is None:
+        return False
+    safe_obj = get_safe_obj(light)
+    return safe_obj is not None and safe_obj.name in coll.objects
 
 
 @unique
@@ -35,25 +68,27 @@ def ensure_linking_coll(coll_type: CollectionType, light: bpy.types.Object, make
     if coll_type == CollectionType.RECEIVER:
         if light.light_linking.receiver_collection is None:
             coll = bpy.data.collections.new(coll_name)
+            mark_managed_linking_collection(coll)
             light.light_linking.receiver_collection = coll
         else:
             coll = light.light_linking.receiver_collection
     else:
         if light.light_linking.blocker_collection is None:
             coll = bpy.data.collections.new(coll_name)
+            mark_managed_linking_collection(coll)
             light.light_linking.blocker_collection = coll
-
         else:
             coll = light.light_linking.blocker_collection
     # make an empty mesh obj in this collection to avoid the annoying logic inverse between the exclude and include
     if make_safe_obj:
-        empty_mesh = bpy.data.meshes.get(SAFE_OBJ_NAME)
+        safe_name = get_safe_obj_name(light)
+        empty_mesh = bpy.data.meshes.get(safe_name)
         if empty_mesh is None:
-            empty_mesh = bpy.data.meshes.new(SAFE_OBJ_NAME)
-        obj = bpy.data.objects.get(SAFE_OBJ_NAME)
+            empty_mesh = bpy.data.meshes.new(safe_name)
+        obj = bpy.data.objects.get(safe_name)
         if obj is None:
-            obj = bpy.data.objects.new(SAFE_OBJ_NAME, empty_mesh)
-            coll.objects.link(obj)
+            obj = bpy.data.objects.new(safe_name, empty_mesh)
+            obj[LIGHT_HELPER_SAFE_KEY] = light.name
         if obj.name not in coll.objects:
             coll.objects.link(obj)
 
@@ -211,15 +246,59 @@ def get_all_light_effect_items_state(light: bpy.types.Object) -> dict[
     return items_state
 
 
-def get_lights_from_effect_obj(obj: bpy.types.Object) -> dict:
+_view_layer_collections_cache = frozenset()
+_cached_linking_lights = ()
+
+
+def get_all_view_layout_collection(context: bpy.types.Context) -> list[bpy.types.Collection]:
+    layer_collection = context.view_layer.layer_collection
+    res = []
+
+    def get_lc(lc: bpy.types.LayerCollection):
+        res.append(lc.collection)
+        for child in lc.children:
+            get_lc(child)
+
+    get_lc(layer_collection)
+    return res
+
+
+def refresh_drop_poll_context(context: bpy.types.Context) -> None:
+    global _view_layer_collections_cache, _cached_linking_lights
+    wm_props = context.window_manager.light_helper_property
+    scene_props = context.scene.light_helper_property
+    if scene_props.light_linking_pin:
+        wm_props.drop_light_obj = scene_props.light_linking_pin_object
+    else:
+        wm_props.drop_light_obj = context.object
+    if scene_props.object_linking_pin:
+        wm_props.drop_object_obj = scene_props.object_linking_pin_object
+    else:
+        wm_props.drop_object_obj = context.object
+    _view_layer_collections_cache = frozenset(get_all_view_layout_collection(context))
+    _cached_linking_lights = tuple(
+        light_obj for light_obj in context.scene.objects
+        if hasattr(light_obj, "light_linking")
+        and (light_obj.light_linking.receiver_collection or light_obj.light_linking.blocker_collection)
+    )
+
+
+def get_view_layer_collections_cache():
+    return _view_layer_collections_cache
+
+
+def get_lights_from_effect_obj(obj: bpy.types.Object, context: bpy.types.Context | None = None) -> dict:
     """get all the lights that affect the object and their receiver and blocker state"""
-    # get obj parent collection first
-
     colls = obj.users_collection
-
     light_state = {}
+    if _cached_linking_lights:
+        lights = _cached_linking_lights
+    elif context is not None:
+        lights = context.scene.objects
+    else:
+        return light_state
 
-    for light_obj in iter(bpy.context.scene.objects):
+    for light_obj in lights:
         if not hasattr(light_obj, 'light_linking'): continue
         if not light_obj.light_linking.receiver_collection and not light_obj.light_linking.blocker_collection: continue
 
@@ -295,12 +374,15 @@ def set_light_effect_coll_state(light: bpy.types.Object, coll: bpy.types.Collect
     return
 
 
-def check_material_including_emission(obj: bpy.types.Object, check_depth=5) -> bool:
-    """检查材质是否有自发光
-    # bpy.data.materials["Material"].use_nodes
-    # bpy.context.object.material_slots['Material'].material.node_tree.nodes.active
-    # bpy.data.materials["Material"].node_tree.nodes["Material Output.001"].is_active_output
-    """
+def check_material_including_emission(
+        obj: bpy.types.Object,
+        check_depth=5,
+        cache: dict | None = None,
+) -> bool:
+    if cache is not None:
+        cache_key = (obj.name_full, check_depth)
+        if cache_key in cache:
+            return cache[cache_key]
 
     def node_tree_search(node: bpy.types.Node, depth=0) -> [bpy.types.Node | None]:
         if depth > check_depth:
@@ -329,13 +411,17 @@ def check_material_including_emission(obj: bpy.types.Object, check_depth=5) -> b
                     if find:
                         return find
 
+    result = False
     for material in obj.material_slots:
         mat = material.material
         if mat and mat.use_nodes:
             out_node = find_material_output_node(mat.node_tree.nodes)
-            if out_node:
-                return node_tree_search(out_node) is not None
-    return False
+            if out_node and node_tree_search(out_node):
+                result = True
+                break
+    if cache is not None:
+        cache[(obj.name_full, check_depth)] = result
+    return result
 
 
 def find_material_output_node(nodes: [bpy.types.Node]) -> [bpy.types.Material | None]:

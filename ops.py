@@ -21,9 +21,9 @@ def get_light_obj(context):
     return light_obj
 
 
-def get_area(area_type: str):
+def get_area(context, area_type: str):
     areas = []
-    for area in bpy.context.screen.areas:
+    for area in context.screen.areas:
         if area.type == area_type:
             areas.append(area)
     # get biggest area
@@ -33,8 +33,8 @@ def get_area(area_type: str):
     return None
 
 
-def get_layer_collection_by_coll(coll: bpy.types.Collection) -> bpy.types.LayerCollection:
-    layer_collection = bpy.context.view_layer.layer_collection
+def get_layer_collection_by_coll(context, coll: bpy.types.Collection) -> bpy.types.LayerCollection:
+    layer_collection = context.view_layer.layer_collection
 
     def get_lc(lc: bpy.types.LayerCollection):
         if lc.collection == coll:
@@ -48,7 +48,7 @@ def get_layer_collection_by_coll(coll: bpy.types.Collection) -> bpy.types.LayerC
 
 
 class LLP_OT_question(bpy.types.Operator):
-    bl_idname = 'llp.question'
+    bl_idname = 'wm.light_helper_question'
     bl_label = ""
     bl_options = {'INTERNAL'}
 
@@ -63,8 +63,9 @@ class LLP_OT_question(bpy.types.Operator):
 
 
 class LLP_OT_remove_light_linking(bpy.types.Operator):
-    bl_idname = 'llp.remove_light_linking'
+    bl_idname = 'object.light_helper_remove_light_linking'
     bl_label = "Remove"
+    bl_options = {'REGISTER', 'UNDO'}
 
     coll_type: bpy.props.EnumProperty(
         items=enum_coll_type, options={'SKIP_SAVE'}
@@ -74,10 +75,16 @@ class LLP_OT_remove_light_linking(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        obj = hasattr(context, "remove_light_linking_object")
-        coll = hasattr(context, "remove_light_linking_collection")
-        light = hasattr(context, "remove_light_linking_light_obj")
-        return light and (obj or coll)
+        light = getattr(context, "remove_light_linking_light_obj", None)
+        obj = getattr(context, "remove_light_linking_object", None)
+        coll = getattr(context, "remove_light_linking_collection", None)
+        if light is None:
+            cls.poll_message_set("No light selected for removal")
+            return False
+        if obj is None and coll is None:
+            cls.poll_message_set("No object or collection to remove")
+            return False
+        return True
 
     def execute(self, context):
         obj = getattr(context, "remove_light_linking_object", None)
@@ -96,7 +103,7 @@ class LLP_OT_remove_light_linking(bpy.types.Operator):
                                   remove_item: bpy.types.Object | bpy.types.Collection):
             if isinstance(remove_item, bpy.types.Object):
                 if remove_item.name in collection.objects:
-                    collection.objects.unlink(obj)
+                    collection.objects.unlink(remove_item)
             elif isinstance(remove_item, bpy.types.Collection):
                 if remove_item.name in collection.children:
                     collection.children.unlink(remove_item)
@@ -118,19 +125,32 @@ class LLP_OT_remove_light_linking(bpy.types.Operator):
 
 
 class LLP_OT_clear_light_linking(bpy.types.Operator):
-    bl_idname = 'llp.clear_light_linking'
+    bl_idname = 'object.light_helper_clear_light_linking'
     bl_label = "Clear"
+    bl_options = {'REGISTER', 'UNDO'}
     index: bpy.props.IntProperty(default=-1, options={'SKIP_SAVE'})
 
     @classmethod
     def poll(cls, context):
-        obj = hasattr(context, "clear_light_linking_object")
+        obj = getattr(context, "clear_light_linking_object", None)
+        if obj is not None:
+            return True
         light = get_light_obj(context)
-        return obj is not None or light is not None
+        if light is None:
+            cls.poll_message_set("No light selected")
+            return False
+        linking = light.light_linking
+        if linking.receiver_collection is None and linking.blocker_collection is None:
+            cls.poll_message_set("Light linking is not initialized")
+            return False
+        return True
 
     def execute(self, context):
         obj = getattr(context, "clear_light_linking_object", None)
         light = obj if obj is not None else get_light_obj(context)
+        if light is None:
+            self.report({'ERROR'}, "No light selected")
+            return {"CANCELLED"}
         light_linking = light.light_linking
         light_linking.receiver_collection = None
         light_linking.blocker_collection = None
@@ -142,8 +162,10 @@ class LLP_OT_clear_light_linking(bpy.types.Operator):
 
 
 class LLP_OT_add_light_linking(bpy.types.Operator):
-    bl_idname = 'llp.add_light_linking'
+    bl_idname = 'object.light_helper_add_light_linking'
     bl_label = "Add"
+    bl_description = "Initialize light linking collections and create a hidden placeholder mesh per light"
+    bl_options = {'REGISTER', 'UNDO'}
 
     coll_type: bpy.props.EnumProperty(
         items=enum_coll_type, options={'SKIP_SAVE'}
@@ -158,21 +180,22 @@ class LLP_OT_add_light_linking(bpy.types.Operator):
     def poll(cls, context):
         light = getattr(context, "add_light_linking_light_obj", None)
         from .utils import ILLUMINATED_OBJECT_TYPE_LIST
-        return (light is not None) and light.type in ILLUMINATED_OBJECT_TYPE_LIST
+        if light is None:
+            cls.poll_message_set("No light selected")
+            return False
+        if light.type not in ILLUMINATED_OBJECT_TYPE_LIST:
+            cls.poll_message_set("Selected object cannot use light linking")
+            return False
+        return True
 
     def execute(self, context):
+        from .utils import ensure_linking_coll, mark_managed_linking_collection
         obj = getattr(context, "add_light_linking_object", None)
         light = getattr(context, "add_light_linking_light_obj", None)
         if not light:
             self.report({'ERROR'}, "No light selected")
             return {"CANCELLED"}
-        if light:
-            self.info(light)
-        if obj:
-            self.info(obj)
         if self.init or self.add_all:
-            # create collection for light linking and shadow linking(create safe object)
-            from .utils import ensure_linking_coll
             ensure_linking_coll(CollectionType.RECEIVER, light)
             ensure_linking_coll(CollectionType.BLOCKER, light)
             # link to both collections
@@ -191,11 +214,13 @@ class LLP_OT_add_light_linking(bpy.types.Operator):
                 coll = light.light_linking.receiver_collection
                 if not coll:
                     coll = bpy.data.collections.new("Light Linking for " + light.name)
+                    mark_managed_linking_collection(coll)
                     light.light_linking.receiver_collection = coll
             elif self.coll_type == CollectionType.BLOCKER.value:
                 coll = light.light_linking.blocker_collection
                 if not coll:
                     coll = bpy.data.collections.new("Shadow Linking for " + light.name)
+                    mark_managed_linking_collection(coll)
                     light.light_linking.blocker_collection = coll
             if coll and obj:
                 coll.objects.link(obj)
@@ -204,13 +229,11 @@ class LLP_OT_add_light_linking(bpy.types.Operator):
             context.scene.light_helper_property.active_object_index = self.index
         return {"FINISHED"}
 
-    def info(self, obj):
-        self.report({'INFO'}, obj.name + " " + p_("Already initialized as linked type"))
-
 
 class LLP_OT_toggle_light_linking(bpy.types.Operator):
-    bl_idname = 'llp.toggle_light_linking'
+    bl_idname = 'object.light_helper_toggle_light_linking'
     bl_label = "Toggle"
+    bl_options = {'REGISTER', 'UNDO'}
 
     coll_type: bpy.props.EnumProperty(
         items=enum_coll_type, options={'SKIP_SAVE'}
@@ -218,10 +241,16 @@ class LLP_OT_toggle_light_linking(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        light = hasattr(context, "toggle_light_linking_light_obj")
-        obj = hasattr(context, "toggle_light_linking_object")
-        coll = hasattr(context, "toggle_light_linking_collection")
-        return (obj and coll) or light
+        light = getattr(context, "toggle_light_linking_light_obj", None)
+        obj = getattr(context, "toggle_light_linking_object", None)
+        coll = getattr(context, "toggle_light_linking_collection", None)
+        if light is None:
+            cls.poll_message_set("No light selected")
+            return False
+        if obj is None and coll is None:
+            cls.poll_message_set("No object or collection to toggle")
+            return False
+        return True
 
     @classmethod
     def description(cls, context, properties):
@@ -261,12 +290,16 @@ class LLP_OT_toggle_light_linking(bpy.types.Operator):
 
 
 class LLP_OT_link_selected_objs(bpy.types.Operator):
-    bl_idname = 'llp.link_selected_objs'
+    bl_idname = 'object.light_helper_link_selected_objs'
     bl_label = "Add Selected Objects"
+    bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(cls, context):
-        return hasattr(context, "link_light_obj")
+        if getattr(context, "link_light_obj", None) is None:
+            cls.poll_message_set("Light linking is not initialized")
+            return False
+        return True
 
     def execute(self, context):
         light = getattr(context, "link_light_obj", None)
@@ -286,14 +319,18 @@ class LLP_OT_link_selected_objs(bpy.types.Operator):
 
 
 class LLP_OT_select_item(bpy.types.Operator):
-    bl_idname = 'llp.select_item'
+    bl_idname = 'object.light_helper_select_item'
     bl_label = "Select"
+    bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(cls, context):
-        obj = hasattr(context, "select_item_object")
-        coll = hasattr(context, "select_item_collection")
-        return obj or coll
+        obj = getattr(context, "select_item_object", None)
+        coll = getattr(context, "select_item_collection", None)
+        if obj is None and coll is None:
+            cls.poll_message_set("No object or collection to select")
+            return False
+        return True
 
     def execute(self, context):
         from .utils import view_selected
@@ -304,43 +341,48 @@ class LLP_OT_select_item(bpy.types.Operator):
             return {"CANCELLED"}
 
         if obj:
-            area_3d = get_area('VIEW_3D')
-            if not area_3d: return {"CANCELLED"}
-            self.select_obj_in_view3d(obj)
+            area_3d = get_area(context, 'VIEW_3D')
+            if not area_3d:
+                return {"CANCELLED"}
+            self.select_obj_in_view3d(context, obj)
         elif coll:
-            area_outliner = get_area('OUTLINER')
+            area_outliner = get_area(context, 'OUTLINER')
             if not area_outliner:
                 return {"CANCELLED"}
 
             with context.temp_override(area=area_outliner, id=coll, region=area_outliner.regions[0]):
-                self.select_coll_in_outliner(coll)
+                self.select_coll_in_outliner(context, coll)
         view_selected(context)
         return {"FINISHED"}
 
-    def select_obj_in_view3d(self, obj: bpy.types.Object):
-        # deselect all
-        bpy.ops.object.select_all(action='DESELECT')
-        bpy.context.view_layer.objects.active = obj
+    def select_obj_in_view3d(self, context, obj: bpy.types.Object):
+        view_layer = context.view_layer
+        for selected_obj in view_layer.objects.selected:
+            selected_obj.select_set(False)
+        view_layer.objects.active = obj
         obj.select_set(True)
 
-    def select_coll_in_outliner(self, coll: bpy.types.Collection):
-        bpy.ops.object.select_all(action='DESELECT')
-        # bpy.ops.outliner.item_activate(deselect_all=True)
-        lc = get_layer_collection_by_coll(coll)
+    def select_coll_in_outliner(self, context, coll: bpy.types.Collection):
+        view_layer = context.view_layer
+        for selected_obj in view_layer.objects.selected:
+            selected_obj.select_set(False)
+        lc = get_layer_collection_by_coll(context, coll)
         if not lc:
             self.report({'ERROR'}, "Collection not in scene found")
             return
-        bpy.context.view_layer.active_layer_collection = lc
+        view_layer.active_layer_collection = lc
 
 
 class LLP_OT_instances_data(bpy.types.Operator):
-    bl_idname = 'llp.instances_data'
+    bl_idname = 'object.light_helper_instances_data'
     bl_label = "Instances Data"
+    bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(cls, context):
         light_obj = get_light_obj(context)
         if not light_obj:
+            cls.poll_message_set("No light selected")
             return False
         light = light_obj.light_linking
         receiver = getattr(light, "receiver_collection", None)
@@ -349,25 +391,36 @@ class LLP_OT_instances_data(bpy.types.Operator):
         blocker = getattr(light, "blocker_collection", None)
         if blocker and blocker.users > 1:
             return True
+        cls.poll_message_set("Light linking collections are not shared")
         return False
 
     def execute(self, context):
         light_obj = get_light_obj(context)
+        if light_obj is None:
+            self.report({'ERROR'}, "No light selected")
+            return {"CANCELLED"}
         light = light_obj.light_linking
         receiver = getattr(light, "receiver_collection", None)
         if receiver and receiver.users > 1:
             setattr(light, "receiver_collection", receiver.copy())
-            # bpy.ops.object.light_linking_receiver_collection_new()
         blocker = getattr(light, "blocker_collection", None)
         if blocker and blocker.users > 1:
             setattr(light, "blocker_collection", blocker.copy())
-            # bpy.ops.object.light_linking_blocker_collection_new()
         return {"FINISHED"}
 
 
 class LLP_OT_switch_filter_show(bpy.types.Operator):
-    bl_idname = 'llp.switch_filter_show'
+    bl_idname = 'object.light_helper_switch_filter_show'
     bl_label = "Switch Filter Show"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        from .filter import filter_objects
+        if not filter_objects(context):
+            cls.poll_message_set("No filtered lights in the list")
+            return False
+        return True
 
     def execute(self, context):
         from .filter import filter_objects

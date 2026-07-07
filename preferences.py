@@ -9,7 +9,7 @@ class LLT_AddonPreferences(AddonPreferences):
     bl_idname = __package__
 
     def update_panel(self, context):
-        from .panel import refresh_panel
+        from .ui.panel import refresh_panel
         refresh_panel()
 
     panel_name: StringProperty(name="Panel Name", default="LH", update=update_panel)
@@ -80,6 +80,14 @@ class LLT_AddonPreferences(AddonPreferences):
         column.prop(self, "light_list_filter_type")
         column.prop(self, "light_link_filter_type", text_ctxt="light_helper_zh_CN")
         column.prop(self, "moving_view_type")
+        column.separator()
+        column.label(
+            text="Light linking init creates a hidden placeholder mesh (LLP_SAFE_*) per light.",
+            icon='INFO',
+        )
+        column.label(
+            text="Restore clears linking collections; placeholders are removed with them.",
+        )
 
 
 def register():

@@ -47,5 +47,8 @@ data = {
     "Restored": "已还原",
     "Node search depth": "节点搜索深度",
     "This rendering engine does not support light linking": "此渲染引擎不支持灯光链接",
-    "If the setting is too high or the materials in the scene are too complex, stuttering may occur": "如果设置的过高或者场景内材质太过复杂,那么将会出现卡顿"
+    "If the setting is too high or the materials in the scene are too complex, stuttering may occur": "如果设置的过高或者场景内材质太过复杂,那么将会出现卡顿",
+    "Init creates a hidden placeholder mesh (LLP_SAFE_*) per light. Restore clears linking.": "初始化会为每个灯光创建隐藏的占位网格（LLP_SAFE_*）。还原会清除链接设置。",
+    "Light linking init creates a hidden placeholder mesh (LLP_SAFE_*) per light.": "灯光链接初始化会为每个灯光创建隐藏的占位网格（LLP_SAFE_*）。",
+    "Restore clears linking collections; placeholders are removed with them.": "还原会清除链接集合，占位对象会一并移除。",
 }

@@ -28,13 +28,14 @@ def get_item_icon(item: bpy.types.Object | bpy.types.Collection):
 
             from . import check_link
             return {"icon": "OUTLINER_OB_LIGHT" if check_link(item) else "OUTLINER_DATA_LIGHT"}
-        elif hasattr(item, 'data'):
+        elif hasattr(item, 'data') and item.data is not None:
             try:
                 icon_value = UILayout.icon(item.data)
+            except (TypeError, AttributeError):
+                pass
+            else:
                 if icon_value != 157:
                     return {"icon_value": icon_value}
-            except Exception:
-                ...
         if item.type == "EMPTY":
             return {"icon": "EMPTY_DATA"}
         else:

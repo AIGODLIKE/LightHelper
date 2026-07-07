@@ -15,21 +15,25 @@ def filter_list(context, bitflag=None):
     if not flt_flags:
         flt_flags = [bitflag] * len(objects)
 
+    emission_cache = {}
+
     for idx, obj in enumerate(objects):
         if filter_type == "ALL":
-            is_show = obj.type == "LIGHT" or check_material_including_emission(obj, search_deep)
+            is_show = obj.type == "LIGHT" or check_material_including_emission(
+                obj, search_deep, cache=emission_cache)
             flag = bitflag if is_show else EMPTY
         elif filter_type == "LIGHT":
             flag = bitflag if obj.type == 'LIGHT' else EMPTY
         elif filter_type == "EMISSION":
-            flag = bitflag if check_material_including_emission(obj, search_deep) else EMPTY
+            flag = bitflag if check_material_including_emission(
+                obj, search_deep, cache=emission_cache) else EMPTY
         else:
             flag = EMPTY
 
         if flag == bitflag and link_type != "ALL":
             is_link = check_link(obj)
 
-            is_ok = link_type == "LINK" and is_link or link_type == "NOT_LINK" and not is_link
+            is_ok = (link_type == "LINK" and is_link) or (link_type == "NOT_LINK" and not is_link)
             flag = bitflag if is_ok else EMPTY
         flt_flags[idx] = flag
     return flt_flags
