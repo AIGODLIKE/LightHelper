@@ -23,28 +23,43 @@ def get_panel_light_obj(context) -> bpy.types.Object | None:
     return None
 
 
-def draw_light_settings(layout, context, light_obj: bpy.types.Object) -> None:
-    light_data = light_obj.data
-    engine = context.scene.render.engine
+def get_cycles_light_settings_panel():
+    return getattr(bpy.types, 'CYCLES_LIGHT_PT_settings', None)
 
-    layout.use_property_split = True
-    layout.use_property_decorate = True
 
-    if engine == 'CYCLES' and hasattr(light_data, 'cycles'):
-        cycles = light_data.cycles
-        layout.prop(cycles, "max_bounces")
-        layout.prop(light_data, "use_shadow")
-        layout.prop(cycles, "use_multiple_importance_sampling")
-        if hasattr(cycles, "use_caustics"):
-            layout.prop(cycles, "use_caustics")
-        elif hasattr(cycles, "use_shadow_caustics"):
-            layout.prop(cycles, "use_shadow_caustics")
-    elif engine in {"BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"}:
-        layout.prop(light_data, "use_shadow")
-        if hasattr(light_data, "use_contact_shadow"):
-            layout.prop(light_data, "use_contact_shadow")
-    else:
-        layout.prop(light_data, "use_shadow")
+def _cycles_light_settings_context(context, light_obj: bpy.types.Object):
+    return context.temp_override(
+        object=light_obj,
+        active_object=light_obj,
+        selected_objects=[light_obj],
+        selected_editable_objects=[light_obj],
+        light=light_obj.data,
+        id=light_obj.data,
+        engine='CYCLES',
+    )
+
+
+def cycles_light_settings_poll(context, light_obj: bpy.types.Object) -> bool:
+    panel_cls = get_cycles_light_settings_panel()
+    if panel_cls is None:
+        return False
+    with _cycles_light_settings_context(context, light_obj):
+        return panel_cls.poll(context)
+
+
+def draw_cycles_light_settings(layout, context, light_obj: bpy.types.Object) -> None:
+    panel_cls = get_cycles_light_settings_panel()
+    if panel_cls is None:
+        return
+
+    class _PanelUI:
+        pass
+
+    _PanelUI.layout = layout
+    with _cycles_light_settings_context(context, light_obj):
+        if not panel_cls.poll(context):
+            return
+        panel_cls.draw(_PanelUI(), context)
 
 
 def draw_select_btn(layout, item):
@@ -328,13 +343,18 @@ class LLT_PT_light_settings(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return get_panel_light_obj(context) is not None
+        if context.scene.render.engine != 'CYCLES':
+            return False
+        light_obj = get_panel_light_obj(context)
+        if light_obj is None:
+            return False
+        return cycles_light_settings_poll(context, light_obj)
 
     def draw(self, context):
         light_obj = get_panel_light_obj(context)
         if light_obj is None:
             return
-        draw_light_settings(self.layout, context, light_obj)
+        draw_cycles_light_settings(self.layout, context, light_obj)
 
 
 panel_list = [
