@@ -27,7 +27,7 @@ class LLT_AddonPreferences(AddonPreferences):
         translation_context="light_helper_zh_CN",
         update=update_filter_settings,
         items=[
-            ("ALL", "All", "Display lights and objects that can emit light", "SCENE_DATA", 0),
+            ("ALL", "All", "Display lights and objects that can emit light", "ALIGN_LEFT", 0),
             ("LIGHT", "Light", "Only show the lights", "OUTLINER_DATA_LIGHT", 1),
             ("EMISSION", "Emission Material", "Only luminous material are displayed", "MATERIAL", 2),
         ]

@@ -41,8 +41,7 @@ class ObjectProperty(PropertyGroup):
 
 
 def poll_light_linking_pin_object(_self, obj: bpy.types.Object) -> bool:
-    from .utils import ILLUMINATED_OBJECT_TYPE_LIST
-    return obj.type in ILLUMINATED_OBJECT_TYPE_LIST
+    return obj.type == 'LIGHT'
 
 
 def poll_object_linking_pin_object(_self, obj: bpy.types.Object) -> bool:
@@ -185,8 +184,8 @@ class WindowManagerProperty(PropertyGroup):
         item = self.drop_object_obj
         if item is None:
             return False
-        light_ok = obj not in get_lights_from_effect_obj(item)
-        return check_light_object(obj) and light_ok
+        light_ok = obj not in get_lights_from_effect_obj(item, bpy.context)
+        return check_light_object(obj) and obj.type == 'LIGHT' and light_ok
 
     light_linking_add_collection: bpy.props.PointerProperty(name='Drag and Drop to Add',
                                                             type=bpy.types.Collection,

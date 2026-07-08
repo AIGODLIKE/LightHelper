@@ -114,15 +114,45 @@ def ensure_linking_coll(coll_type: CollectionType, light: bpy.types.Object,
     return get_linking_coll(light, coll_type)
 
 
+def collection_has_object(coll: bpy.types.Collection, obj: bpy.types.Object) -> bool:
+    return any(member == obj for member in coll.objects)
+
+
+def collection_has_child(coll: bpy.types.Collection, child: bpy.types.Collection) -> bool:
+    return any(member == child for member in coll.children)
+
+
 def is_item_in_channel(light: bpy.types.Object, item,
                        coll_type: CollectionType) -> bool:
     coll = get_linking_coll(light, coll_type)
     if coll is None:
         return False
     if isinstance(item, bpy.types.Object):
-        return item.name in coll.objects
+        return collection_has_object(coll, item)
     if isinstance(item, bpy.types.Collection):
-        return item.name in coll.children
+        return collection_has_child(coll, item)
+    return False
+
+
+def object_in_collection_tree(coll: bpy.types.Collection, obj: bpy.types.Object) -> bool:
+    if collection_has_object(coll, obj):
+        return True
+    for child in coll.children:
+        if object_in_collection_tree(child, obj):
+            return True
+    return False
+
+
+def is_object_affected_in_channel(light: bpy.types.Object, obj: bpy.types.Object,
+                                  coll_type: CollectionType) -> bool:
+    if is_item_in_channel(light, obj, coll_type):
+        return True
+    coll = get_linking_coll(light, coll_type)
+    if coll is None:
+        return False
+    for child in coll.children:
+        if object_in_collection_tree(child, obj):
+            return True
     return False
 
 
@@ -133,17 +163,17 @@ def link_item_to_channel(light: bpy.types.Object, item,
     mode = get_linking_mode(light)
     if isinstance(item, bpy.types.Object):
         if enabled:
-            if item.name not in coll.objects:
+            if not collection_has_object(coll, item):
                 coll.objects.link(item)
             _set_item_link_state(coll, item, mode)
-        elif item.name in coll.objects:
+        elif collection_has_object(coll, item):
             coll.objects.unlink(item)
     elif isinstance(item, bpy.types.Collection):
         if enabled:
-            if item.name not in coll.children:
+            if not collection_has_child(coll, item):
                 coll.children.link(item)
             _set_item_link_state(coll, item, mode)
-        elif item.name in coll.children:
+        elif collection_has_child(coll, item):
             coll.children.unlink(item)
 
 
@@ -279,7 +309,6 @@ def get_view_layer_collections_cache():
 
 
 def get_lights_from_effect_obj(obj: bpy.types.Object, context: bpy.types.Context | None = None) -> dict:
-    colls = obj.users_collection
     light_state = {}
     if _cached_linking_lights:
         lights = _cached_linking_lights
@@ -289,23 +318,20 @@ def get_lights_from_effect_obj(obj: bpy.types.Object, context: bpy.types.Context
         return light_state
 
     for light_obj in lights:
-        if not hasattr(light_obj, 'light_linking'):
+        if light_obj.type != 'LIGHT' or not hasattr(light_obj, 'light_linking'):
             continue
         if not light_obj.light_linking.receiver_collection and not light_obj.light_linking.blocker_collection:
             continue
 
-        receiver_coll = light_obj.light_linking.receiver_collection
-        blocker_coll = light_obj.light_linking.blocker_collection
+        receiver_on = is_object_affected_in_channel(light_obj, obj, CollectionType.RECEIVER)
+        blocker_on = is_object_affected_in_channel(light_obj, obj, CollectionType.BLOCKER)
+        if not receiver_on and not blocker_on:
+            continue
 
-        if receiver_coll in colls or blocker_coll in colls:
-            light_state[light_obj] = {
-                CollectionType.RECEIVER: None,
-                CollectionType.BLOCKER: None,
-            }
-            if receiver_coll and obj.name in receiver_coll.objects:
-                light_state[light_obj][CollectionType.RECEIVER] = True
-            if blocker_coll and obj.name in blocker_coll.objects:
-                light_state[light_obj][CollectionType.BLOCKER] = True
+        light_state[light_obj] = {
+            CollectionType.RECEIVER: True if receiver_on else None,
+            CollectionType.BLOCKER: True if blocker_on else None,
+        }
 
     return light_state
 
@@ -513,11 +539,35 @@ def process_duplicated_object(obj: bpy.types.Object, context: bpy.types.Context 
     return changed
 
 
-def fix_all_shared_light_linking(scene: bpy.types.Scene) -> int:
-    fixed = 0
+def fix_all_shared_light_linking(scene: bpy.types.Scene) -> list[bpy.types.Object]:
+    fixed = []
     for obj in scene.objects:
         if obj.type != 'LIGHT':
             continue
         if make_light_linking_single_user(obj):
-            fixed += 1
+            fixed.append(obj)
     return fixed
+
+
+def scene_has_uninitialized_lights(scene: bpy.types.Scene) -> bool:
+    for obj in scene.objects:
+        if obj.type != 'LIGHT':
+            continue
+        if hasattr(obj, "light_linking") and not is_linking_initialized(obj):
+            return True
+    return False
+
+
+def init_all_light_linking(scene: bpy.types.Scene,
+                           context: bpy.types.Context | None = None) -> list[bpy.types.Object]:
+    initialized = []
+    for obj in scene.objects:
+        if obj.type != 'LIGHT':
+            continue
+        if not hasattr(obj, "light_linking"):
+            continue
+        if is_linking_initialized(obj):
+            continue
+        init_light_linking(obj, context)
+        initialized.append(obj)
+    return initialized

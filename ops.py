@@ -46,6 +46,15 @@ def get_area(context, area_type: str):
     return None
 
 
+def format_lights_report(lights: list, message: str, more_message: str, max_display: int = 10) -> str:
+    shown = lights[:max_display]
+    names = ", ".join(light.name for light in shown)
+    extra = len(lights) - len(shown)
+    if extra > 0:
+        return more_message % (len(lights), names, extra)
+    return message % (len(lights), names)
+
+
 def get_layer_collection_by_coll(context, coll: bpy.types.Collection) -> bpy.types.LayerCollection:
     layer_collection = context.view_layer.layer_collection
 
@@ -377,6 +386,65 @@ class LLP_OT_instances_data(LightHelperOperator, bpy.types.Operator):
         return {"FINISHED"}
 
 
+class LLP_OT_init_all_light_linking(LightHelperOperator, bpy.types.Operator):
+    bl_idname = 'object.light_helper_init_all_light_linking'
+    bl_label = "Init All Lights"
+    bl_description = "Initialize light linking collections for all lights in the scene"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        from .utils import scene_has_uninitialized_lights
+        if scene_has_uninitialized_lights(context.scene):
+            return True
+        cls.poll_message_set(p_("All lights are already initialized"))
+        return False
+
+    def execute(self, context):
+        from .utils import init_all_light_linking
+        initialized = init_all_light_linking(context.scene, context)
+        if not initialized:
+            self.report({'WARNING'}, p_("All lights are already initialized"))
+            return {"CANCELLED"}
+        message = format_lights_report(
+            initialized,
+            p_("Initialized light linking for %d light(s): %s"),
+            p_("Initialized light linking for %d light(s): %s, and %d more"),
+        )
+        self.report({'INFO'}, message)
+        return {"FINISHED"}
+
+
+class LLP_OT_instances_data_all(LightHelperOperator, bpy.types.Operator):
+    bl_idname = 'object.light_helper_instances_data_all'
+    bl_label = "Make All Single-User"
+    bl_description = "Make shared light linking collections single-user for all lights in the scene"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        from .utils import has_shared_linking_collections
+        for obj in context.scene.objects:
+            if obj.type == 'LIGHT' and has_shared_linking_collections(obj):
+                return True
+        cls.poll_message_set(p_("No lights with shared linking collections"))
+        return False
+
+    def execute(self, context):
+        from .utils import fix_all_shared_light_linking
+        fixed_lights = fix_all_shared_light_linking(context.scene)
+        if not fixed_lights:
+            self.report({'WARNING'}, p_("No lights with shared linking collections"))
+            return {"CANCELLED"}
+        message = format_lights_report(
+            fixed_lights,
+            p_("Made %d light(s) single-user: %s"),
+            p_("Made %d light(s) single-user: %s, and %d more"),
+        )
+        self.report({'INFO'}, message)
+        return {"FINISHED"}
+
+
 class LLP_OT_switch_filter_show(LightHelperOperator, bpy.types.Operator):
     bl_idname = 'object.light_helper_switch_filter_show'
     bl_label = "Switch Filter Show"
@@ -415,6 +483,27 @@ class LLP_OT_switch_filter_show(LightHelperOperator, bpy.types.Operator):
         return 'HIDE_ON', False
 
 
+class LLP_OT_invert_filter_show(LightHelperOperator, bpy.types.Operator):
+    bl_idname = 'object.light_helper_invert_filter_show'
+    bl_label = "Invert"
+    bl_description = "Invert viewport visibility for each filtered light in the list"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        from .filter import filter_objects
+        if not filter_objects(context):
+            cls.poll_message_set(p_("No filtered lights in the list"))
+            return False
+        return True
+
+    def execute(self, context):
+        from .filter import filter_objects
+        for obj in filter_objects(context):
+            obj.light_helper_property.show_in_view = not obj.light_helper_property.show_in_view
+        return {"FINISHED"}
+
+
 ops_list = [
     LLP_OT_question,
     LLP_OT_remove_light_linking,
@@ -424,7 +513,10 @@ ops_list = [
     LLP_OT_link_selected_objs,
     LLP_OT_select_item,
     LLP_OT_instances_data,
+    LLP_OT_init_all_light_linking,
+    LLP_OT_instances_data_all,
     LLP_OT_switch_filter_show,
+    LLP_OT_invert_filter_show,
 ]
 register_class, unregister_class = bpy.utils.register_classes_factory(ops_list)
 

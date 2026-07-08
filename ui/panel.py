@@ -75,11 +75,11 @@ def draw_select_btn(layout, item):
 
 
 def draw_toggle_btn(layout,
-                    state_info: dict,
                     light_obj: bpy.types.Object,
                     item: bpy.types.Object | bpy.types.Collection):
     """Draw channel toggle buttons for receiver / blocker membership."""
     from ..ops import LLP_OT_toggle_light_linking
+    from ..utils import is_item_in_channel
     row = layout.row()
     row.context_pointer_set("toggle_light_linking_light_obj", light_obj)
 
@@ -88,8 +88,8 @@ def draw_toggle_btn(layout,
     else:
         row.context_pointer_set("toggle_light_linking_collection", item)
 
-    receiver_on = bool(state_info.get(CollectionType.RECEIVER))
-    blocker_on = bool(state_info.get(CollectionType.BLOCKER))
+    receiver_on = is_item_in_channel(light_obj, item, CollectionType.RECEIVER)
+    blocker_on = is_item_in_channel(light_obj, item, CollectionType.BLOCKER)
 
     sub = row.row(align=True)
     op = sub.operator(
@@ -143,22 +143,44 @@ class LLT_PT_light_control_panel(bpy.types.Panel):
     bl_options = {'HEADER_LAYOUT_EXPAND'}
 
     def draw_header(self, context):
-        from ..ops import LLP_OT_question
+        from ..ops import (
+            LLP_OT_question,
+            LLP_OT_init_all_light_linking,
+            LLP_OT_instances_data_all,
+        )
 
         pref = get_pref(context)
-
         layout = self.layout
-        row = layout.row(align=True)
-        row.label(text="Light Linking")
-        row.prop(pref, "moving_view_type", expand=True, icon_only=True)
-        row.separator()
-        tips = row.operator(LLP_OT_question.bl_idname, text="", icon="QUESTION", emboss=False)
+
+        action_row = layout.row(align=True)
+        action_row.label(text="Light Linking")
+        action_row.separator(factor=1.5)
+        buttons = action_row.row(align=True)
+        init_row = buttons.row(align=True)
+        init_row.enabled = LLP_OT_init_all_light_linking.poll(context)
+        init_row.operator(
+            LLP_OT_init_all_light_linking.bl_idname,
+            text="",
+            icon='OUTLINER_OB_LIGHT',
+        )
+        inst_row = buttons.row(align=True)
+        inst_row.enabled = LLP_OT_instances_data_all.poll(context)
+        inst_row.operator(
+            LLP_OT_instances_data_all.bl_idname,
+            text="",
+            icon='RESTRICT_INSTANCED_ON',
+        )
+
+        view_row = layout.row(align=True)
+        view_row.prop(pref, "moving_view_type", expand=True, icon_only=True)
+        view_row.separator()
+        tips = view_row.operator(LLP_OT_question.bl_idname, text="", icon="QUESTION", emboss=False)
         tips.data = p_(
             """Light Linking Panel
 This Panel Lists all the objects that are affected by the selected/pinned light.
 Use Exclude/Include mode to control list semantics, and toggle light or shadow per object."""
         )
-        row.separator()
+        view_row.separator()
 
     @staticmethod
     def check_support_light_linking(context):
@@ -184,11 +206,9 @@ Use Exclude/Include mode to control list semantics, and toggle light or shadow p
 
         refresh_drop_poll_context(context)
 
-        if context.scene.light_helper_property.light_linking_pin:
-            light_obj = context.scene.light_helper_property.light_linking_pin_object
-        else:
-            light_obj = context.object
+        light_obj = get_panel_light_obj(context)
         if not light_obj:
+            layout.label(text=p_("No light selected"), icon='INFO')
             return
 
         not_init = not is_linking_initialized(light_obj)
@@ -237,7 +257,7 @@ Use Exclude/Include mode to control list semantics, and toggle light or shadow p
             row.scale_x = 1.1
             row.scale_y = 1.1
             draw_select_btn(row, item)
-            draw_toggle_btn(row, state_info, light_obj, item)
+            draw_toggle_btn(row, light_obj, item)
             row.separator()
             draw_remove_button(row, light_obj, item)
 
@@ -245,7 +265,7 @@ Use Exclude/Include mode to control list semantics, and toggle light or shadow p
         draw_add_box(col, context, light_obj)
 
     def draw_light_list(self, context, layout):
-        from ..ops import LLP_OT_switch_filter_show
+        from ..ops import LLP_OT_switch_filter_show, LLP_OT_invert_filter_show
         from .ui_list import LLT_UL_light
 
         pref = get_pref(context)
@@ -260,6 +280,9 @@ Use Exclude/Include mode to control list semantics, and toggle light or shadow p
         col.prop(pref, "light_list_filter_type", expand=True, text="", icon_only=True)
         col.separator()
         col.operator(LLP_OT_switch_filter_show.bl_idname, text="", icon=icon)
+        invert_row = col.row(align=True)
+        invert_row.enabled = LLP_OT_invert_filter_show.poll(context)
+        invert_row.operator(LLP_OT_invert_filter_show.bl_idname, text="", icon='ARROW_LEFTRIGHT')
         row.template_list(LLT_UL_light.__name__, "", context.scene, "objects", context.scene.light_helper_property,
                           "active_object_index")
 
@@ -327,7 +350,7 @@ Provides buttons to toggle light or shadow channel per light."""
             sub.label(text='', icon=get_light_icon(light_obj))
             sub.prop(light_obj.light_helper_property, 'linking_mode', text='', text_ctxt="light_helper_zh_CN")
             draw_select_btn(row, light_obj)
-            draw_toggle_btn(row, state_info, light_obj, item)
+            draw_toggle_btn(row, light_obj, item)
             row.separator()
             draw_remove_button(row, light_obj, item)
 
