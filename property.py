@@ -148,6 +148,7 @@ class WindowManagerProperty(PropertyGroup):
     linking_tool_subject_mode: bpy.props.EnumProperty(
         name="Subject Mode",
         description="Whether the tool edits links from a light or from an object",
+        translation_context="light_helper_zh_CN",
         items=[
             ('LIGHT', "Light", "Edit links from the selected light", 'LIGHT', 0),
             ('OBJECT', "Object", "Edit links affecting the selected object", 'OBJECT_DATA', 1),
@@ -174,6 +175,7 @@ class WindowManagerProperty(PropertyGroup):
     linking_tool_overlay_mode: bpy.props.EnumProperty(
         name="Overlay Mode",
         description="How link lines and object outlines are drawn in the viewport",
+        translation_context="light_helper_zh_CN",
         items=[
             ('OFF', "Off", "Do not draw link overlays", 'HIDE_ON', 0),
             ('SELECTED', "Selected", "Only show links for the current subject", 'RESTRICT_SELECT_ON', 1),
@@ -181,6 +183,18 @@ class WindowManagerProperty(PropertyGroup):
         ],
         default='SELECTED',
         update=update_linking_tool_overlay_mode,
+        options={'SKIP_SAVE'},
+    )
+    def update_linking_tool_show_hud(self, context):
+        from .utils.overlay import tag_view3d_redraw
+        tag_view3d_redraw(context)
+
+    linking_tool_show_hud: bpy.props.BoolProperty(
+        name="Show Shortcuts",
+        description="Show shortcut tips in the viewport",
+        translation_context="light_helper_zh_CN",
+        default=True,
+        update=update_linking_tool_show_hud,
         options={'SKIP_SAVE'},
     )
     linking_tool_hud_x: bpy.props.IntProperty(

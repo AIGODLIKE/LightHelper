@@ -117,9 +117,14 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
 
     @staticmethod
     def _draw_mode_controls(row, wm_props):
-        row.prop(wm_props, "linking_tool_overlay_mode", text="")
+        control_row = row.row(align=True)
+        control_row.prop(wm_props, "linking_tool_overlay_mode", text="", text_ctxt="light_helper_zh_CN")
+        control_row.prop(
+            wm_props, "linking_tool_show_hud",
+            text=p_("Shortcuts"), toggle=True, text_ctxt="light_helper_zh_CN",
+        )
         row.separator(factor=0.8)
-        row.prop(wm_props, "linking_tool_subject_mode", expand=True, icon_only=True)
+        row.prop(wm_props, "linking_tool_subject_mode", expand=True, icon_only=True, text_ctxt="light_helper_zh_CN")
 
     @staticmethod
     def _draw_subject_status(row, subject_mode, light, obj, link_count):

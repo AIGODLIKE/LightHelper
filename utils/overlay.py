@@ -175,7 +175,8 @@ def _hud_bounds(context: bpy.types.Context, region: bpy.types.Region) -> tuple[f
 
 
 def mouse_over_hud(context: bpy.types.Context, event) -> bool:
-    if not context.window_manager.light_helper_property.linking_tool_active:
+    wm_props = context.window_manager.light_helper_property
+    if not wm_props.linking_tool_active or not wm_props.linking_tool_show_hud:
         return False
     region = context.region
     if region is None or region.type != 'WINDOW':
@@ -638,7 +639,7 @@ def _hud_lines(context: bpy.types.Context) -> list[str]:
 def _draw_overlay_hud():
     context = bpy.context
     wm_props = context.window_manager.light_helper_property
-    if not wm_props.linking_tool_active:
+    if not wm_props.linking_tool_active or not wm_props.linking_tool_show_hud:
         return
 
     region = context.region
