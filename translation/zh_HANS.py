@@ -113,17 +113,47 @@ data = {
     "Activate the light linking workspace tool in the 3D viewport toolbar": "在三维视口工具栏中激活灯光链接工作区工具",
     "Tool active": "工具已激活",
     "Show Overlay": "显示叠加层",
-    "Show Linking Overlay": "显示链接叠加层",
-    "Show link lines and object outlines in the viewport": "在视口中显示链接线与物体轮廓",
+    "Overlay": "叠加层",
+    "Overlay Mode": "叠加层模式",
+    "Off": "关",
+    "Selected": "仅选择",
+    "All": "所有",
+    "Do not draw link overlays": "不绘制链接叠加层",
+    "Only show links for the current subject": "仅显示当前主体的链接",
+    "Show all links; inactive links at reduced opacity": "显示所有链接，非活动链接降低透明度",
+    "How link lines and object outlines are drawn in the viewport": "在视口中绘制链接线与物体轮廓的方式",
+    "Cycle Overlay": "切换叠加层",
+    "Cycle overlay mode: Off, Selected, All": "循环切换叠加层模式：关、仅选择、所有",
+    "Overlay: Off": "叠加层：关",
+    "Overlay: Selected": "叠加层：仅选择",
+    "Overlay: All": "叠加层：所有",
     "Interactive viewport tool for light linking": "灯光链接交互式视口工具",
     "Light linking tool started": "灯光链接工具已启动",
     "Light linking tool finished": "灯光链接工具已结束",
     "Linking Tool Max Outlines": "轮廓绘制上限",
     "Maximum number of linked targets to draw outlines for. Lines are always drawn": "绘制轮廓的链接目标数量上限，连线始终绘制",
-    "LClick: Select/Toggle Link": "左键：选择/切换链接",
+    "LDrag on HUD: Move HUD": "在HUD上左键拖动移动",
+    "Move Linking HUD": "移动链接HUD",
+    "Drag to reposition the linking tool HUD": "拖动以重新定位灯光链接工具HUD",
     "Spacebar": "空格",
     "Ctrl+Wheel: Prev/Next Light": "Ctrl+滚轮：上一个/下一个灯光",
     "Linked items: %d": "链接物体：%d",
+    "Linked lights: %d": "链接灯光：%d",
+    "Light Mode": "灯光模式",
+    "Object Mode": "物体模式",
+    "Object: (none)": "物体：（无）",
+    "Light mode: %s": "灯光模式：%s",
+    "Object mode: %s": "物体模式：%s",
+    "Ctrl+LClick: Switch Light/Object": "Ctrl+左键：切换灯光/物体主体",
+    "LClick: Toggle Light Link": "左键：切换灯光链接",
+    "Ctrl+Wheel: Prev/Next Object": "Ctrl+滚轮：上一个/下一个物体",
+    "Use Ctrl+LClick to switch object subject": "请用 Ctrl+左键 切换物体主体",
+    "No light under cursor": "鼠标下方没有灯光",
+    "No object selected": "未选择物体",
+    "No filtered objects in the list": "列表中没有过滤物体",
+    "Cycle Subject": "切换主体",
+    "Switch to previous or next filtered light or object": "切换到上一个或下一个过滤灯光或物体",
+    "Select subject or toggle light linking": "选择主体或切换灯光链接",
     "Toggle Light Channel": "切换灯光通道",
     "Toggle Shadow Channel": "切换阴影通道",
     "Toggle Linking Mode": "切换链接模式",
@@ -141,6 +171,7 @@ data = {
     "Links: %d": "链接：%d",
     "Overlay hidden": "叠加层已隐藏",
     "Light: (none)": "灯光：（无）",
+    "Object": "物体",
     "linked": "已链接",
     "unlinked": "已取消链接",
     "light": "灯光",
@@ -151,12 +182,18 @@ data = {
     "Down": "下",
     "Space": "空格",
     """Light Linking Tool
-LClick: select light or toggle object link.
+Ctrl+LClick object: switch to object mode.
+Ctrl+LClick light: switch to light mode.
+Light mode: LClick toggles object link.
+Object mode: LClick toggles light link.
 Space: toggle light channel. D: toggle shadow channel.
-A: switch Exclude/Include. X: toggle overlay.
-Ctrl+Wheel: previous/next filtered light.""": """灯光链接工具
-左键：选择灯光或切换物体链接。
+A: switch Exclude/Include. X: cycle overlay.
+Ctrl+Wheel: previous/next subject.""": """灯光链接工具
+Ctrl+左键物体：切换到物体模式。
+Ctrl+左键灯光：切换到灯光模式。
+灯光模式：左键切换物体链接。
+物体模式：左键切换灯光链接。
 空格：切换灯光通道。D：切换阴影通道。
-A：切换排除/包含。X：切换叠加层显示。
-Ctrl+滚轮：上一个/下一个过滤灯光。""",
+A：切换排除/包含。X：循环切换叠加层。
+Ctrl+滚轮：上一个/下一个主体。""",
 }

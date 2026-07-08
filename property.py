@@ -5,6 +5,8 @@ from bpy.types import PropertyGroup
 def update_linking_mode(self, context):
     from .utils import apply_linking_mode_to_light
     apply_linking_mode_to_light(self.id_data, self.linking_mode)
+    from .utils.overlay import notify_linking_changed
+    notify_linking_changed(context)
 
 
 def check_light_object(obj: bpy.types.Object) -> bool:
@@ -106,6 +108,11 @@ def poll_linking_tool_light(_self, obj: bpy.types.Object) -> bool:
     return obj.type == 'LIGHT'
 
 
+def poll_linking_tool_object(_self, obj: bpy.types.Object) -> bool:
+    from .utils import is_linkable_object
+    return is_linkable_object(obj)
+
+
 class WindowManagerProperty(PropertyGroup):
     drop_light_obj: bpy.props.PointerProperty(type=bpy.types.Object)
     drop_object_obj: bpy.props.PointerProperty(type=bpy.types.Object)
@@ -121,10 +128,75 @@ class WindowManagerProperty(PropertyGroup):
         poll=poll_linking_tool_light,
         options={'SKIP_SAVE'},
     )
-    show_linking_overlay: bpy.props.BoolProperty(
-        name="Show Linking Overlay",
-        description="Show link lines and object outlines in the viewport",
-        default=True,
+    def update_linking_tool_subject_mode(self, context):
+        from .utils.overlay import invalidate_overlay_cache, refresh_overlay_cache, tag_view3d_redraw
+        if self.linking_tool_subject_mode == 'OBJECT':
+            self.linking_tool_light = None
+            if self.linking_tool_active and self.linking_tool_object is None:
+                from .ui.tool import _init_session_object
+                self.linking_tool_object = _init_session_object(context)
+        else:
+            self.linking_tool_object = None
+            if self.linking_tool_active and self.linking_tool_light is None:
+                from .ui.tool import _init_session_light
+                self.linking_tool_light = _init_session_light(context)
+        if self.linking_tool_active:
+            invalidate_overlay_cache()
+            refresh_overlay_cache(context)
+        tag_view3d_redraw(context)
+
+    linking_tool_subject_mode: bpy.props.EnumProperty(
+        name="Subject Mode",
+        description="Whether the tool edits links from a light or from an object",
+        items=[
+            ('LIGHT', "Light", "Edit links from the selected light", 'LIGHT', 0),
+            ('OBJECT', "Object", "Edit links affecting the selected object", 'OBJECT_DATA', 1),
+        ],
+        default='LIGHT',
+        update=update_linking_tool_subject_mode,
+        options={'SKIP_SAVE'},
+    )
+    linking_tool_object: bpy.props.PointerProperty(
+        name="Linking Tool Object",
+        type=bpy.types.Object,
+        poll=poll_linking_tool_object,
+        options={'SKIP_SAVE'},
+    )
+    def update_linking_tool_overlay_mode(self, context):
+        from .utils.overlay import invalidate_overlay_cache, refresh_overlay_cache, tag_view3d_redraw
+        if not self.linking_tool_active:
+            tag_view3d_redraw(context)
+            return
+        invalidate_overlay_cache()
+        refresh_overlay_cache(context)
+        tag_view3d_redraw(context)
+
+    linking_tool_overlay_mode: bpy.props.EnumProperty(
+        name="Overlay Mode",
+        description="How link lines and object outlines are drawn in the viewport",
+        items=[
+            ('OFF', "Off", "Do not draw link overlays", 'HIDE_ON', 0),
+            ('SELECTED', "Selected", "Only show links for the current subject", 'RESTRICT_SELECT_ON', 1),
+            ('ALL', "All", "Show all links; inactive links at reduced opacity", 'OVERLAY', 2),
+        ],
+        default='SELECTED',
+        update=update_linking_tool_overlay_mode,
+        options={'SKIP_SAVE'},
+    )
+    linking_tool_hud_x: bpy.props.IntProperty(
+        name="HUD X",
+        description="Horizontal position of the linking tool HUD",
+        default=16,
+        min=0,
+        soft_max=4096,
+        options={'SKIP_SAVE'},
+    )
+    linking_tool_hud_y: bpy.props.IntProperty(
+        name="HUD Y",
+        description="Vertical position of the linking tool HUD",
+        default=16,
+        min=0,
+        soft_max=4096,
         options={'SKIP_SAVE'},
     )
 
@@ -145,6 +217,8 @@ class WindowManagerProperty(PropertyGroup):
         coll = wm.light_helper_property.light_linking_add_collection
         link_item_both_channels(obj, coll, context)
         wm.light_helper_property["light_linking_add_collection"] = None
+        from .utils.overlay import notify_linking_changed
+        notify_linking_changed(context)
 
     def update_add_obj(self, context):
         wm = context.window_manager
@@ -163,6 +237,8 @@ class WindowManagerProperty(PropertyGroup):
         obj2 = wm.light_helper_property.light_linking_add_object
         link_item_both_channels(obj, obj2, context)
         wm.light_helper_property["light_linking_add_object"] = None
+        from .utils.overlay import notify_linking_changed
+        notify_linking_changed(context)
 
     def update_add_light(self, context):
         wm = context.window_manager
@@ -183,6 +259,8 @@ class WindowManagerProperty(PropertyGroup):
         init_light_linking(light, context)
         link_item_both_channels(light, obj, context)
         wm.light_helper_property["object_linking_add_object"] = None
+        from .utils.overlay import notify_linking_changed
+        notify_linking_changed(context)
 
     def poll_object_linking_add_collection(self, coll: bpy.types.Collection):
         from .utils import get_all_light_effect_items_state, get_view_layer_collections_cache, is_managed_linking_collection

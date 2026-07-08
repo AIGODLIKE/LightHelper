@@ -207,6 +207,9 @@ def link_item_to_channel(light: bpy.types.Object, item,
     except RuntimeError:
         return
 
+    from .overlay import notify_linking_changed
+    notify_linking_changed(context)
+
 
 def link_item_both_channels(light: bpy.types.Object, item,
                             context: bpy.types.Context | None = None) -> None:
@@ -241,9 +244,11 @@ def cycle_tool_light(context: bpy.types.Context, light: bpy.types.Object | None,
     lights = get_filtered_tool_lights(context)
     if not lights:
         return None
-    if light is None or light not in lights:
+    light = resolve_original_id(light)
+    names = [resolve_original_id(item).name for item in lights]
+    if light is None or light.name not in names:
         return lights[0]
-    index = lights.index(light)
+    index = names.index(light.name)
     return lights[(index + direction) % len(lights)]
 
 
@@ -271,7 +276,7 @@ def remove_orphaned_managed_collection(coll: bpy.types.Collection | None) -> Non
     bpy.data.collections.remove(coll)
 
 
-def restore_light_linking(light: bpy.types.Object) -> None:
+def restore_light_linking(light: bpy.types.Object, context: bpy.types.Context | None = None) -> None:
     linking = light.light_linking
     receiver = linking.receiver_collection
     blocker = linking.blocker_collection
@@ -279,6 +284,8 @@ def restore_light_linking(light: bpy.types.Object) -> None:
     linking.blocker_collection = None
     remove_orphaned_managed_collection(receiver)
     remove_orphaned_managed_collection(blocker)
+    from .overlay import notify_linking_changed
+    notify_linking_changed(context)
 
 
 def get_light_effect_obj_state(light: bpy.types.Object, obj: bpy.types.Object) -> dict:
@@ -334,6 +341,69 @@ def get_light_link_item_count(light: bpy.types.Object) -> int:
     if light is None:
         return 0
     return len(get_all_light_effect_items_state(light))
+
+
+def get_object_overlay_lights_state(obj: bpy.types.Object,
+                                    context: bpy.types.Context | None = None) -> dict:
+    light_state = {}
+    if obj is None or context is None:
+        return light_state
+
+    obj = resolve_original_id(obj)
+    for light_obj in context.scene.objects:
+        if light_obj.type != 'LIGHT' or not hasattr(light_obj, 'light_linking'):
+            continue
+        linking = light_obj.light_linking
+        if not linking.receiver_collection and not linking.blocker_collection:
+            continue
+
+        receiver_on = is_object_affected_in_channel(light_obj, obj, CollectionType.RECEIVER)
+        blocker_on = is_object_affected_in_channel(light_obj, obj, CollectionType.BLOCKER)
+        if not receiver_on and not blocker_on:
+            continue
+
+        light_state[light_obj] = {
+            CollectionType.RECEIVER: True if receiver_on else None,
+            CollectionType.BLOCKER: True if blocker_on else None,
+        }
+
+    return light_state
+
+
+def get_object_link_light_count(obj: bpy.types.Object, context: bpy.types.Context | None = None) -> int:
+    if obj is None:
+        return 0
+    return len(get_object_overlay_lights_state(obj, context))
+
+
+def get_filtered_tool_objects(context: bpy.types.Context) -> list[bpy.types.Object]:
+    from ..filter import filter_objects
+    return [obj for obj in filter_objects(context) if is_linkable_object(obj)]
+
+
+def cycle_tool_object(context: bpy.types.Context, obj: bpy.types.Object | None,
+                      direction: int) -> bpy.types.Object | None:
+    objects = get_filtered_tool_objects(context)
+    if not objects:
+        return None
+    obj = resolve_original_id(obj)
+    names = [resolve_original_id(item).name for item in objects]
+    if obj is None or obj.name not in names:
+        return objects[0]
+    index = names.index(obj.name)
+    return objects[(index + direction) % len(objects)]
+
+
+def select_tool_object(context: bpy.types.Context, obj: bpy.types.Object) -> None:
+    view_layer = context.view_layer
+    for selected in view_layer.objects.selected:
+        selected.select_set(False)
+    view_layer.objects.active = obj
+    obj.select_set(True)
+    objects = context.scene.objects[:]
+    if obj in objects:
+        context.scene.light_helper_property.active_object_index = objects.index(obj)
+    view_selected(context)
 
 
 def linking_item_sort_key(item: bpy.types.Object | bpy.types.Collection) -> tuple:
