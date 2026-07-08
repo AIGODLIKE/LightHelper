@@ -31,14 +31,20 @@ _bbox_edges = (
     (0, 4), (1, 5), (2, 6), (3, 7),
 )
 
-COLOR_LINE_BOTH = (0.2, 0.9, 0.3, 0.85)
-COLOR_LINE_LIGHT = (1.0, 0.75, 0.2, 0.8)
 COLOR_LINE_SHADOW = (0.3, 0.6, 1.0, 0.8)
 COLOR_LINE_NONE = (0.6, 0.6, 0.6, 0.5)
-
-COLOR_OUTLINE_BOTH = (0.2, 0.9, 0.3, 0.25)
-COLOR_OUTLINE_LIGHT = (1.0, 0.6, 0.1, 0.25)
 COLOR_OUTLINE_SHADOW = (0.3, 0.55, 1.0, 0.25)
+
+COLOR_INCLUDE_LINE_BOTH = (0.2, 0.9, 0.3, 0.85)
+COLOR_INCLUDE_LINE_LIGHT = (0.35, 0.95, 0.4, 0.8)
+COLOR_INCLUDE_OUTLINE_BOTH = (0.2, 0.9, 0.3, 0.25)
+COLOR_INCLUDE_OUTLINE_LIGHT = (0.35, 0.95, 0.4, 0.25)
+
+COLOR_EXCLUDE_LINE_BOTH = (0.95, 0.22, 0.18, 0.85)
+COLOR_EXCLUDE_LINE_LIGHT = (1.0, 0.35, 0.25, 0.8)
+COLOR_EXCLUDE_OUTLINE_BOTH = (0.95, 0.22, 0.18, 0.25)
+COLOR_EXCLUDE_OUTLINE_LIGHT = (1.0, 0.3, 0.2, 0.25)
+
 COLOR_SUBJECT_OUTLINE = (0.95, 0.95, 0.95, 0.25)
 
 OVERLAY_MODE_OFF = 'OFF'
@@ -275,6 +281,46 @@ def _channel_color(receiver: bool, blocker: bool, both_color, light_color, shado
     if blocker:
         return shadow_color
     return none_color
+
+
+def _resolve_target_linking_mode(group: LinkDrawGroup, target: LinkDrawTarget, subject_mode: str) -> str:
+    if subject_mode == 'OBJECT' and isinstance(target.item, bpy.types.Object) and target.item.type == 'LIGHT':
+        return get_linking_mode(target.item)
+    if group.subject is not None and group.subject.type == 'LIGHT':
+        return get_linking_mode(group.subject)
+    return "INCLUDE"
+
+
+def _target_line_colors(linking_mode: str):
+    if linking_mode == "EXCLUDE":
+        return (
+            COLOR_EXCLUDE_LINE_BOTH,
+            COLOR_EXCLUDE_LINE_LIGHT,
+            COLOR_LINE_SHADOW,
+            COLOR_LINE_NONE,
+        )
+    return (
+        COLOR_INCLUDE_LINE_BOTH,
+        COLOR_INCLUDE_LINE_LIGHT,
+        COLOR_LINE_SHADOW,
+        COLOR_LINE_NONE,
+    )
+
+
+def _target_outline_colors(linking_mode: str):
+    if linking_mode == "EXCLUDE":
+        return (
+            COLOR_EXCLUDE_OUTLINE_BOTH,
+            COLOR_EXCLUDE_OUTLINE_LIGHT,
+            COLOR_OUTLINE_SHADOW,
+            COLOR_LINE_NONE,
+        )
+    return (
+        COLOR_INCLUDE_OUTLINE_BOTH,
+        COLOR_INCLUDE_OUTLINE_LIGHT,
+        COLOR_OUTLINE_SHADOW,
+        COLOR_LINE_NONE,
+    )
 
 
 def _target_world_bbox(target: LinkDrawTarget) -> tuple[Vector | None, list[Vector] | None]:
@@ -518,9 +564,10 @@ def _draw_overlay_3d():
             center, corners = _target_world_bbox(target)
             if center is None:
                 continue
+            linking_mode = _resolve_target_linking_mode(group, target, subject_mode)
             color = _channel_color(
                 target.receiver, target.blocker,
-                COLOR_LINE_BOTH, COLOR_LINE_LIGHT, COLOR_LINE_SHADOW, COLOR_LINE_NONE,
+                *_target_line_colors(linking_mode),
             )
             color = _scale_color_alpha(color, alpha_scale)
             _draw_lines_batch(context, [subject_pos, center], color, width=2.0)
@@ -530,9 +577,10 @@ def _draw_overlay_3d():
                 center, corners = _target_world_bbox(target)
                 if corners is None:
                     continue
+                linking_mode = _resolve_target_linking_mode(group, target, subject_mode)
                 color = _channel_color(
                     target.receiver, target.blocker,
-                    COLOR_OUTLINE_BOTH, COLOR_OUTLINE_LIGHT, COLOR_OUTLINE_SHADOW, COLOR_LINE_NONE,
+                    *_target_outline_colors(linking_mode),
                 )
                 color = _scale_color_alpha(color, alpha_scale)
                 edge_coords = []
