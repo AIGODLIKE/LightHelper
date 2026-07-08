@@ -1,9 +1,16 @@
+import os
+
 import bpy
 from bpy.app.translations import pgettext_iface as p_
 
 TOOL_IDNAME = "light_helper.light_linking"
 TOOL_PICK = "object.light_helper_light_linking_pick"
 TOOL_HUD_DRAG = "object.light_helper_light_linking_hud_drag"
+TOOL_ICON = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)),
+    "icons",
+    "ops.light_helper.light_linking",
+)
 _session_active = False
 
 
@@ -99,7 +106,7 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
         "Interactive light linking tool\n"
         "LClick: select light or toggle link"
     )
-    bl_icon = "OUTLINER_OB_LIGHT"
+    bl_icon = TOOL_ICON
     bl_widget = None
     bl_operator = ""
     bl_keymap = (
