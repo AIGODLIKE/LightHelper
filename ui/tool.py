@@ -116,16 +116,13 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
     )
 
     @staticmethod
-    def _draw_mode_controls(row, wm_props, light):
-        row.prop(wm_props, "linking_tool_overlay_mode", expand=True, icon_only=True)
+    def _draw_mode_controls(row, wm_props):
+        row.prop(wm_props, "linking_tool_overlay_mode", text="")
         row.separator(factor=0.8)
         row.prop(wm_props, "linking_tool_subject_mode", expand=True, icon_only=True)
-        if wm_props.linking_tool_subject_mode == 'LIGHT' and light is not None:
-            row.separator(factor=0.8)
-            row.prop(light.light_helper_property, "linking_mode", expand=True, text_ctxt="light_helper_zh_CN")
 
     @staticmethod
-    def _draw_subject_status(row, subject_mode, light, obj, link_count, mode_label):
+    def _draw_subject_status(row, subject_mode, light, obj, link_count):
         if subject_mode == 'OBJECT':
             if obj is not None:
                 row.label(text=obj.name, icon='OBJECT_DATA', translate=False)
@@ -136,16 +133,16 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
         elif light is not None:
             row.label(text=light.name, icon='LIGHT', translate=False)
             row.separator(factor=0.8)
-            row.label(text=mode_label, translate=False)
-            row.separator(factor=0.8)
             row.label(text=p_("Linked items: %d") % link_count)
+            row.separator(factor=0.8)
+            row.prop(light.light_helper_property, "linking_mode", expand=True, text_ctxt="light_helper_zh_CN")
         else:
             row.label(text=p_("No light selected"), icon='INFO')
 
     @staticmethod
     def draw_settings(context, layout, tool):
         from ..ui.panel import LLT_PT_light_control_panel
-        from ..utils import get_light_link_item_count, get_linking_mode, get_object_link_light_count
+        from ..utils import get_light_link_item_count, get_object_link_light_count
         from ..utils.overlay import _cache_needs_refresh, get_active_link_count, refresh_overlay_cache
 
         if not LLT_PT_light_control_panel.check_support_light_linking(context):
@@ -162,7 +159,6 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
         is_header = context.region and context.region.type == 'TOOL_HEADER'
 
         link_count = 0
-        mode_label = ""
         if subject_mode == 'OBJECT':
             if obj is not None:
                 if _session_active:
@@ -172,8 +168,6 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
                 else:
                     link_count = get_object_link_light_count(obj, context)
         elif light is not None:
-            mode = get_linking_mode(light)
-            mode_label = p_("Exclude") if mode == "EXCLUDE" else p_("Include")
             if _session_active:
                 if _cache_needs_refresh(context):
                     refresh_overlay_cache(context)
@@ -183,16 +177,16 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
 
         if is_header:
             row = layout.row(align=True)
-            VIEW3D_WT_light_linking._draw_mode_controls(row, wm_props, light)
+            VIEW3D_WT_light_linking._draw_mode_controls(row, wm_props)
             row.separator(factor=1.2)
             VIEW3D_WT_light_linking._draw_subject_status(
-                row, subject_mode, light, obj, link_count, mode_label,
+                row, subject_mode, light, obj, link_count,
             )
             return
 
         col = layout.column(align=True)
         row = col.row(align=True)
-        VIEW3D_WT_light_linking._draw_mode_controls(row, wm_props, light)
+        VIEW3D_WT_light_linking._draw_mode_controls(row, wm_props)
 
         col.separator()
         if subject_mode == 'OBJECT':
@@ -203,8 +197,10 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
                 col.label(text=p_("No object selected"), icon='INFO')
         elif light is not None:
             col.label(text=light.name, icon='LIGHT', translate=False)
-            col.label(text=f"{p_('Linking Mode')}: {mode_label}")
             col.label(text=p_("Linked items: %d") % link_count)
+            col.row(align=True).prop(
+                light.light_helper_property, "linking_mode", expand=True, text_ctxt="light_helper_zh_CN",
+            )
         elif wm_props.linking_tool_active:
             col.label(text=p_("No light selected"), icon='INFO')
 
