@@ -51,17 +51,15 @@ _polyline_shader = None
 
 class LinkDrawTarget:
     __slots__ = (
-        "center",
-        "corners",
+        "item",
         "receiver",
         "blocker",
         "is_collection",
         "name",
     )
 
-    def __init__(self, center, corners, receiver, blocker, is_collection, name):
-        self.center = center
-        self.corners = corners
+    def __init__(self, item, receiver, blocker, is_collection, name):
+        self.item = item
         self.receiver = receiver
         self.blocker = blocker
         self.is_collection = is_collection
@@ -279,6 +277,18 @@ def _channel_color(receiver: bool, blocker: bool, both_color, light_color, shado
     return none_color
 
 
+def _target_world_bbox(target: LinkDrawTarget) -> tuple[Vector | None, list[Vector] | None]:
+    if target.is_collection:
+        if target.item.hide_viewport:
+            return None, None
+        return _world_bbox_from_collection(target.item)
+    if isinstance(target.item, bpy.types.Object):
+        if target.item.hide_viewport or target.item.hide_get():
+            return None, None
+        return _world_bbox_from_object(target.item)
+    return None, None
+
+
 def _build_targets_from_light(light: bpy.types.Object, max_outlines: int) -> tuple[list[LinkDrawTarget], bool]:
     items_state = get_all_light_effect_items_state(light)
     targets = []
@@ -288,15 +298,14 @@ def _build_targets_from_light(light: bpy.types.Object, max_outlines: int) -> tup
         if isinstance(item, bpy.types.Object):
             if item.hide_viewport or item.hide_get():
                 continue
-            center, corners = _world_bbox_from_object(item)
-            targets.append(LinkDrawTarget(center, corners, receiver, blocker, False, item.name))
+            targets.append(LinkDrawTarget(item, receiver, blocker, False, item.name))
         elif isinstance(item, bpy.types.Collection):
             if item.hide_viewport:
                 continue
             center, corners = _world_bbox_from_collection(item)
             if center is None:
                 continue
-            targets.append(LinkDrawTarget(center, corners, receiver, blocker, True, item.name))
+            targets.append(LinkDrawTarget(item, receiver, blocker, True, item.name))
     outlines_hidden = max_outlines >= 0 and len(targets) > max_outlines
     return targets, outlines_hidden
 
@@ -309,10 +318,9 @@ def _build_targets_from_object(obj: bpy.types.Object, context: bpy.types.Context
     for light_obj, state in get_object_overlay_lights_state(obj, context).items():
         if light_obj.hide_viewport or light_obj.hide_get():
             continue
-        center, corners = _world_bbox_from_object(light_obj)
         receiver = state[CollectionType.RECEIVER] is True
         blocker = state[CollectionType.BLOCKER] is True
-        targets.append(LinkDrawTarget(center, corners, receiver, blocker, False, light_obj.name))
+        targets.append(LinkDrawTarget(light_obj, receiver, blocker, False, light_obj.name))
     outlines_hidden = max_outlines >= 0 and len(targets) > max_outlines
     return targets, outlines_hidden
 
@@ -507,16 +515,20 @@ def _draw_overlay_3d():
             continue
 
         for target in group.targets:
+            center, corners = _target_world_bbox(target)
+            if center is None:
+                continue
             color = _channel_color(
                 target.receiver, target.blocker,
                 COLOR_LINE_BOTH, COLOR_LINE_LIGHT, COLOR_LINE_SHADOW, COLOR_LINE_NONE,
             )
             color = _scale_color_alpha(color, alpha_scale)
-            _draw_lines_batch(context, [subject_pos, target.center], color, width=2.0)
+            _draw_lines_batch(context, [subject_pos, center], color, width=2.0)
 
         if not _cache.outlines_hidden:
             for target in group.targets:
-                if target.corners is None:
+                center, corners = _target_world_bbox(target)
+                if corners is None:
                     continue
                 color = _channel_color(
                     target.receiver, target.blocker,
@@ -525,8 +537,8 @@ def _draw_overlay_3d():
                 color = _scale_color_alpha(color, alpha_scale)
                 edge_coords = []
                 for i0, i1 in _bbox_edges:
-                    edge_coords.append(target.corners[i0])
-                    edge_coords.append(target.corners[i1])
+                    edge_coords.append(corners[i0])
+                    edge_coords.append(corners[i1])
                 _draw_lines_batch(context, edge_coords, color, width=1.5)
 
     gpu.state.depth_test_set('NONE')
@@ -600,6 +612,56 @@ def _draw_overlay_hud():
     blf.disable(font_id, blf.SHADOW)
 
 
+def _collect_overlay_object_names() -> set[str]:
+    names = set()
+    for group in _cache.groups:
+        if group.subject is not None:
+            names.add(group.subject.name)
+        for target in group.targets:
+            if target.is_collection:
+                for obj in target.item.objects:
+                    names.add(obj.name)
+            elif isinstance(target.item, bpy.types.Object):
+                names.add(target.item.name)
+    return names
+
+
+@bpy.app.handlers.persistent
+def _depsgraph_update_post(_scene, depsgraph: bpy.types.Depsgraph):
+    try:
+        context = bpy.context
+        if context is None or context.window_manager is None:
+            return
+        wm_props = context.window_manager.light_helper_property
+        if not wm_props.linking_tool_active:
+            return
+        if wm_props.linking_tool_overlay_mode == OVERLAY_MODE_OFF:
+            return
+
+        relevant_names = _collect_overlay_object_names()
+        if not relevant_names:
+            return
+
+        for update in depsgraph.updates:
+            id_ref = update.id
+            if not isinstance(id_ref, bpy.types.Object):
+                continue
+            if id_ref.is_evaluated:
+                id_ref = id_ref.original
+                if id_ref is None:
+                    continue
+            if id_ref.name not in relevant_names:
+                continue
+            if update.is_updated_transform or update.is_updated_geometry:
+                tag_view3d_redraw(context)
+                return
+    except Exception:
+        pass
+
+
+_depsgraph_handler_registered = False
+
+
 def tag_view3d_redraw(context: bpy.types.Context | None = None):
     ctx = context if context is not None else bpy.context
     if ctx is None:
@@ -611,7 +673,7 @@ def tag_view3d_redraw(context: bpy.types.Context | None = None):
 
 
 def register_draw_handlers():
-    global _draw_handler_3d, _draw_handler_hud
+    global _draw_handler_3d, _draw_handler_hud, _depsgraph_handler_registered
     if _draw_handler_3d is None:
         _draw_handler_3d = bpy.types.SpaceView3D.draw_handler_add(
             _draw_overlay_3d, (), 'WINDOW', 'POST_VIEW',
@@ -620,16 +682,24 @@ def register_draw_handlers():
         _draw_handler_hud = bpy.types.SpaceView3D.draw_handler_add(
             _draw_overlay_hud, (), 'WINDOW', 'POST_PIXEL',
         )
+    if not _depsgraph_handler_registered:
+        if _depsgraph_update_post not in bpy.app.handlers.depsgraph_update_post:
+            bpy.app.handlers.depsgraph_update_post.append(_depsgraph_update_post)
+        _depsgraph_handler_registered = True
 
 
 def unregister_draw_handlers():
-    global _draw_handler_3d, _draw_handler_hud
+    global _draw_handler_3d, _draw_handler_hud, _depsgraph_handler_registered
     if _draw_handler_3d is not None:
         bpy.types.SpaceView3D.draw_handler_remove(_draw_handler_3d, 'WINDOW')
         _draw_handler_3d = None
     if _draw_handler_hud is not None:
         bpy.types.SpaceView3D.draw_handler_remove(_draw_handler_hud, 'WINDOW')
         _draw_handler_hud = None
+    if _depsgraph_handler_registered:
+        if _depsgraph_update_post in bpy.app.handlers.depsgraph_update_post:
+            bpy.app.handlers.depsgraph_update_post.remove(_depsgraph_update_post)
+        _depsgraph_handler_registered = False
 
 
 def _view3d_window_at_mouse(context: bpy.types.Context, event):
