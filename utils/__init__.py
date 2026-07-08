@@ -413,6 +413,19 @@ def check_link(obj: bpy.types.Object) -> bool:
     return bool(obj.light_linking.receiver_collection or obj.light_linking.blocker_collection)
 
 
+def get_item_visibility_restrictions(
+        item: bpy.types.Object | bpy.types.Collection) -> tuple[bool, bool, bool]:
+    if isinstance(item, bpy.types.Object):
+        viewport_hidden = item.hide_viewport or item.hide_get()
+        render_hidden = item.hide_render
+    elif isinstance(item, bpy.types.Collection):
+        viewport_hidden = item.hide_viewport
+        render_hidden = item.hide_render
+    else:
+        return False, False, False
+    return viewport_hidden, render_hidden, viewport_hidden or render_hidden
+
+
 LIGHT_HELPER_DUP_HANDLED_KEY = "light_helper_dup_handled"
 
 

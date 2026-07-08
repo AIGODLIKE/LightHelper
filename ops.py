@@ -84,6 +84,15 @@ class LLP_OT_question(bpy.types.Operator):
         return {"FINISHED"}
 
 
+def _operator_tooltip_description(properties, default: str) -> str:
+    tooltip = properties.tooltip
+    if tooltip:
+        if default:
+            return tooltip + "\n\n" + p_(default)
+        return tooltip
+    return p_(default) if default else ""
+
+
 class LLP_OT_remove_light_linking(LightHelperOperator, bpy.types.Operator):
     bl_idname = 'object.light_helper_remove_light_linking'
     bl_label = "Remove"
@@ -95,6 +104,7 @@ class LLP_OT_remove_light_linking(LightHelperOperator, bpy.types.Operator):
     )
 
     remove_all: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
+    tooltip: bpy.props.StringProperty(default="", options={'SKIP_SAVE'})
 
     @classmethod
     def poll(cls, context):
@@ -108,6 +118,10 @@ class LLP_OT_remove_light_linking(LightHelperOperator, bpy.types.Operator):
             cls.poll_message_set(p_("No object or collection to remove"))
             return False
         return True
+
+    @classmethod
+    def description(cls, context, properties):
+        return _operator_tooltip_description(properties, cls.bl_description)
 
     def execute(self, context):
         obj = getattr(context, "remove_light_linking_object", None)
@@ -235,6 +249,7 @@ class LLP_OT_toggle_light_linking(LightHelperOperator, bpy.types.Operator):
     coll_type: bpy.props.EnumProperty(
         items=enum_coll_type, options={'SKIP_SAVE'}
     )
+    tooltip: bpy.props.StringProperty(default="", options={'SKIP_SAVE'})
 
     @classmethod
     def poll(cls, context):
@@ -252,8 +267,10 @@ class LLP_OT_toggle_light_linking(LightHelperOperator, bpy.types.Operator):
     @classmethod
     def description(cls, context, properties):
         if properties.coll_type == CollectionType.RECEIVER.value:
-            return p_("Toggle Light")
-        return p_("Toggle Shadow")
+            default = "Toggle Light"
+        else:
+            default = "Toggle Shadow"
+        return _operator_tooltip_description(properties, default)
 
     def execute(self, context):
         light = getattr(context, "toggle_light_linking_light_obj", None)
@@ -301,6 +318,8 @@ class LLP_OT_select_item(LightHelperOperator, bpy.types.Operator):
     bl_description = "Select the object in the viewport or the collection in the outliner"
     bl_options = {'REGISTER', 'UNDO'}
 
+    tooltip: bpy.props.StringProperty(default="", options={'SKIP_SAVE'})
+
     @classmethod
     def poll(cls, context):
         obj = getattr(context, "select_item_object", None)
@@ -309,6 +328,10 @@ class LLP_OT_select_item(LightHelperOperator, bpy.types.Operator):
             cls.poll_message_set(p_("No object or collection to select"))
             return False
         return True
+
+    @classmethod
+    def description(cls, context, properties):
+        return _operator_tooltip_description(properties, cls.bl_description)
 
     def execute(self, context):
         from .utils import view_selected

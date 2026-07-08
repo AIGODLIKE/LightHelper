@@ -4,6 +4,7 @@ from bpy.app.translations import pgettext_iface as p_
 from ..utils import (
     CollectionType,
     get_all_light_effect_items_state,
+    get_item_visibility_restrictions,
     get_lights_from_effect_obj,
     get_pref,
     is_linking_initialized,
@@ -64,19 +65,39 @@ def draw_cycles_light_settings(layout, context, light_obj: bpy.types.Object) -> 
         panel_cls.draw(_PanelUI(), context)
 
 
-def draw_select_btn(layout, item):
+def get_item_visibility_tooltip(item: bpy.types.Object | bpy.types.Collection) -> tuple[str, bool]:
+    viewport_hidden, render_hidden, restricted = get_item_visibility_restrictions(item)
+    if not restricted:
+        return "", False
+
+    lines = []
+    if viewport_hidden:
+        lines.append(p_(
+            "Hidden in viewport: not visible in the 3D viewport or disabled in the current view layer"
+        ))
+    if render_hidden:
+        lines.append(p_("Disabled for render: excluded from final render output"))
+    title = p_('"%s" has visibility restrictions:') % item.name
+    return title + "\n" + "\n".join(lines), True
+
+
+def draw_select_btn(layout, item, tooltip: str = ""):
     from ..ops import LLP_OT_select_item
     row = layout.row()
     if isinstance(item, bpy.types.Object):
         row.context_pointer_set("select_item_object", item)
     else:
         row.context_pointer_set("select_item_collection", item)
-    row.operator(LLP_OT_select_item.bl_idname, text=item.name, emboss=False, translate=False, **get_item_icon(item))
+    op = row.operator(
+        LLP_OT_select_item.bl_idname, text=item.name, emboss=False, translate=False, **get_item_icon(item),
+    )
+    op.tooltip = tooltip
 
 
 def draw_toggle_btn(layout,
                     light_obj: bpy.types.Object,
-                    item: bpy.types.Object | bpy.types.Collection):
+                    item: bpy.types.Object | bpy.types.Collection,
+                    tooltip: str = ""):
     """Draw channel toggle buttons for receiver / blocker membership."""
     from ..ops import LLP_OT_toggle_light_linking
     from ..utils import is_item_in_channel
@@ -97,6 +118,7 @@ def draw_toggle_btn(layout,
         depress=receiver_on,
     )
     op.coll_type = CollectionType.RECEIVER.value
+    op.tooltip = tooltip
 
     sub = row.row(align=True)
     op = sub.operator(
@@ -104,11 +126,13 @@ def draw_toggle_btn(layout,
         depress=blocker_on,
     )
     op.coll_type = CollectionType.BLOCKER.value
+    op.tooltip = tooltip
 
 
 def draw_remove_button(layout,
                        light_obj: bpy.types.Object,
-                       item: bpy.types.Object | bpy.types.Collection):
+                       item: bpy.types.Object | bpy.types.Collection,
+                       tooltip: str = ""):
     from ..ops import LLP_OT_remove_light_linking
     row = layout.row()
     row.context_pointer_set("remove_light_linking_light_obj", light_obj)
@@ -118,6 +142,7 @@ def draw_remove_button(layout,
         row.context_pointer_set("remove_light_linking_collection", item)
     op = row.operator(LLP_OT_remove_light_linking.bl_idname, text='', icon="X", translate=False)
     op.remove_all = True
+    op.tooltip = tooltip
 
 
 def draw_add_box(col, context, light_obj):
@@ -253,13 +278,16 @@ Use Exclude/Include mode to control list semantics, and toggle light or shadow p
         for (item, state_info) in iter_sorted_linking_items(obj_state_dict):
             if isinstance(item, bpy.types.Object) and item not in objects:
                 continue
+            tooltip, restricted = get_item_visibility_tooltip(item)
             row = col.row(align=False)
+            if restricted:
+                row.active = False
             row.scale_x = 1.1
             row.scale_y = 1.1
-            draw_select_btn(row, item)
-            draw_toggle_btn(row, light_obj, item)
+            draw_select_btn(row, item, tooltip)
+            draw_toggle_btn(row, light_obj, item, tooltip)
             row.separator()
-            draw_remove_button(row, light_obj, item)
+            draw_remove_button(row, light_obj, item, tooltip)
 
         col.separator()
         draw_add_box(col, context, light_obj)
@@ -345,14 +373,17 @@ Provides buttons to toggle light or shadow channel per light."""
         for (light_obj, state_info) in iter_sorted_linking_lights(obj_state_dict):
             if light_obj not in objects:
                 continue
+            tooltip, restricted = get_item_visibility_tooltip(light_obj)
             row = col.row()
+            if restricted:
+                row.active = False
             sub = row.row(align=True)
             sub.label(text='', icon=get_light_icon(light_obj))
             sub.prop(light_obj.light_helper_property, 'linking_mode', text='', text_ctxt="light_helper_zh_CN")
-            draw_select_btn(row, light_obj)
-            draw_toggle_btn(row, light_obj, item)
+            draw_select_btn(row, light_obj, tooltip)
+            draw_toggle_btn(row, light_obj, item, tooltip)
             row.separator()
-            draw_remove_button(row, light_obj, item)
+            draw_remove_button(row, light_obj, item, tooltip)
 
         box = col.box()
         box.prop(context.window_manager.light_helper_property, 'object_linking_add_object', text='', icon='ADD')
