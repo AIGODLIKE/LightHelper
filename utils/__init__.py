@@ -230,13 +230,32 @@ def toggle_item_both_channels(light: bpy.types.Object, item,
     return enable
 
 
+def is_emissive_light_source(obj: bpy.types.Object, context: bpy.types.Context | None = None) -> bool:
+    obj = resolve_original_id(obj)
+    if obj is None or obj.type == 'LIGHT':
+        return False
+    if not hasattr(obj, "light_linking"):
+        return False
+    pref = get_pref(context)
+    return check_material_including_emission(obj, pref.node_search_depth)
+
+
+def is_tool_light_source(obj: bpy.types.Object, context: bpy.types.Context | None = None) -> bool:
+    obj = resolve_original_id(obj)
+    if obj is None:
+        return False
+    if obj.type == 'LIGHT':
+        return True
+    return is_emissive_light_source(obj, context)
+
+
 def is_linkable_object(obj: bpy.types.Object) -> bool:
     return obj.type in ILLUMINATED_OBJECT_TYPE_LIST and obj.type != "LIGHT"
 
 
 def get_filtered_tool_lights(context: bpy.types.Context) -> list[bpy.types.Object]:
     from ..filter import filter_objects
-    return [obj for obj in filter_objects(context) if obj.type == 'LIGHT']
+    return [obj for obj in filter_objects(context) if is_tool_light_source(obj, context)]
 
 
 def cycle_tool_light(context: bpy.types.Context, light: bpy.types.Object | None,
@@ -351,7 +370,7 @@ def get_object_overlay_lights_state(obj: bpy.types.Object,
 
     obj = resolve_original_id(obj)
     for light_obj in context.scene.objects:
-        if light_obj.type != 'LIGHT' or not hasattr(light_obj, 'light_linking'):
+        if not is_tool_light_source(light_obj, context) or not hasattr(light_obj, 'light_linking'):
             continue
         linking = light_obj.light_linking
         if not linking.receiver_collection and not linking.blocker_collection:
@@ -470,7 +489,7 @@ def get_lights_from_effect_obj(obj: bpy.types.Object, context: bpy.types.Context
         return light_state
 
     for light_obj in lights:
-        if light_obj.type != 'LIGHT' or not hasattr(light_obj, 'light_linking'):
+        if not is_tool_light_source(light_obj, context) or not hasattr(light_obj, 'light_linking'):
             continue
         if not light_obj.light_linking.receiver_collection and not light_obj.light_linking.blocker_collection:
             continue

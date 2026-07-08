@@ -10,6 +10,7 @@ from ..utils import (
     init_light_linking,
     is_item_in_channel,
     is_linkable_object,
+    is_tool_light_source,
     link_item_to_channel,
     resolve_original_id,
     select_tool_light,
@@ -92,7 +93,16 @@ class LLP_OT_light_linking_pick(LightHelperOperator, bpy.types.Operator):
             return {'CANCELLED'}
 
         obj = resolve_original_id(obj)
-        if obj.type == 'LIGHT':
+        if is_tool_light_source(obj, context):
+            wm_props = context.window_manager.light_helper_property
+            current_light = resolve_original_id(wm_props.linking_tool_light)
+            if (is_linkable_object(obj)
+                    and wm_props.linking_tool_subject_mode == 'LIGHT'
+                    and current_light is not None
+                    and current_light.name == obj.name):
+                LLP_OT_light_linking_pick._set_object(context, obj)
+                operator.report({'INFO'}, p_("Object mode: %s") % obj.name)
+                return {'FINISHED'}
             LLP_OT_light_linking_pick._set_light(context, obj)
             operator.report({'INFO'}, p_("Light mode: %s") % obj.name)
             return {'FINISHED'}
@@ -121,7 +131,8 @@ class LLP_OT_light_linking_pick(LightHelperOperator, bpy.types.Operator):
             return {'CANCELLED'}
 
         obj = resolve_original_id(obj)
-        if obj.type == 'LIGHT':
+        current_light = resolve_original_id(light)
+        if is_tool_light_source(obj, context) and (current_light is None or current_light.name != obj.name):
             LLP_OT_light_linking_pick._set_light(context, obj)
             operator.report({'INFO'}, p_("Selected light: %s") % obj.name)
             return {'FINISHED'}
@@ -164,7 +175,7 @@ class LLP_OT_light_linking_pick(LightHelperOperator, bpy.types.Operator):
             return {'CANCELLED'}
 
         obj = resolve_original_id(obj)
-        if obj.type == 'LIGHT':
+        if is_tool_light_source(obj, context):
             init_light_linking(obj, context)
             if toggle_both:
                 enabled = toggle_item_both_channels(obj, subject, context)
@@ -301,7 +312,7 @@ class LLP_OT_light_linking_toggle_mode(_LLP_LightLinkingToolPoll, LightHelperOpe
         wm_props = context.window_manager.light_helper_property
         if wm_props.linking_tool_subject_mode == 'OBJECT':
             _, _, light = LLP_OT_light_linking_pick._pick_target(context, event)
-            if light is None or light.type != 'LIGHT':
+            if light is None or not is_tool_light_source(light, context):
                 self.report({'WARNING'}, p_("No light under cursor"))
                 return {'CANCELLED'}
         else:

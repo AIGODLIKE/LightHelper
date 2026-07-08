@@ -22,9 +22,9 @@ def is_session_active() -> bool:
 
 
 def _init_session_light(context: bpy.types.Context) -> bpy.types.Object | None:
-    from ..utils import get_filtered_tool_lights, select_tool_light
+    from ..utils import get_filtered_tool_lights, is_tool_light_source, select_tool_light
     obj = context.object
-    if obj is not None and obj.type == 'LIGHT':
+    if obj is not None and is_tool_light_source(obj, context):
         select_tool_light(context, obj)
         return obj
     lights = get_filtered_tool_lights(context)
@@ -128,6 +128,8 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
 
     @staticmethod
     def _draw_subject_status(row, subject_mode, light, obj, link_count):
+        from ..utils.icon import get_item_icon, get_light_icon
+
         if subject_mode == 'OBJECT':
             if obj is not None:
                 row.label(text=obj.name, icon='OBJECT_DATA', translate=False)
@@ -136,7 +138,11 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
             else:
                 row.label(text=p_("No object selected"), icon='INFO')
         elif light is not None:
-            row.label(text=light.name, icon='LIGHT', translate=False)
+            if light.type == 'LIGHT':
+                light_icon = get_light_icon(light)
+            else:
+                light_icon = get_item_icon(light).get('icon', 'OBJECT_DATA')
+            row.label(text=light.name, icon=light_icon, translate=False)
             row.separator(factor=0.8)
             row.label(text=p_("Linked items: %d") % link_count)
             row.separator(factor=0.8)
@@ -201,7 +207,12 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
             elif wm_props.linking_tool_active:
                 col.label(text=p_("No object selected"), icon='INFO')
         elif light is not None:
-            col.label(text=light.name, icon='LIGHT', translate=False)
+            from ..utils.icon import get_item_icon, get_light_icon
+            if light.type == 'LIGHT':
+                light_icon = get_light_icon(light)
+            else:
+                light_icon = get_item_icon(light).get('icon', 'OBJECT_DATA')
+            col.label(text=light.name, icon=light_icon, translate=False)
             col.label(text=p_("Linked items: %d") % link_count)
             col.row(align=True).prop(
                 light.light_helper_property, "linking_mode", expand=True, text_ctxt="light_helper_zh_CN",
@@ -214,7 +225,7 @@ _session_timer = None
 
 
 def _sync_tool_subject_from_selection(context: bpy.types.Context) -> bool:
-    from ..utils import is_linkable_object, resolve_original_id
+    from ..utils import is_linkable_object, is_tool_light_source, resolve_original_id
     from ..utils.overlay import invalidate_overlay_cache, refresh_overlay_cache, tag_view3d_redraw
 
     wm_props = context.window_manager.light_helper_property
@@ -232,7 +243,7 @@ def _sync_tool_subject_from_selection(context: bpy.types.Context) -> bool:
             if current is None or current.name != obj.name:
                 wm_props.linking_tool_object = obj
                 changed = True
-    elif obj.type == 'LIGHT':
+    elif is_tool_light_source(obj, context):
         current = resolve_original_id(wm_props.linking_tool_light)
         if current is None or current.name != obj.name:
             wm_props.linking_tool_light = obj

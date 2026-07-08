@@ -105,7 +105,8 @@ class SceneProperty(PropertyGroup):
 
 
 def poll_linking_tool_light(_self, obj: bpy.types.Object) -> bool:
-    return obj.type == 'LIGHT'
+    from .utils import is_tool_light_source
+    return is_tool_light_source(obj)
 
 
 def poll_linking_tool_object(_self, obj: bpy.types.Object) -> bool:

@@ -219,9 +219,9 @@ def cycle_overlay_mode(current_mode: str) -> str:
     return modes[(modes.index(current_mode) + 1) % len(modes)]
 
 
-def _is_light_overlay_ready(light: bpy.types.Object) -> bool:
-    from . import is_linking_initialized
-    return light.type == 'LIGHT' and is_linking_initialized(light)
+def _is_light_overlay_ready(light: bpy.types.Object, context: bpy.types.Context | None = None) -> bool:
+    from . import is_linking_initialized, is_tool_light_source
+    return is_tool_light_source(light, context) and is_linking_initialized(light)
 
 
 def _subject_cache_key(subject_mode: str, subject: bpy.types.Object | None) -> tuple[str, str | None]:
@@ -284,10 +284,14 @@ def _channel_color(receiver: bool, blocker: bool, both_color, light_color, shado
     return none_color
 
 
-def _resolve_target_linking_mode(group: LinkDrawGroup, target: LinkDrawTarget, subject_mode: str) -> str:
-    if subject_mode == 'OBJECT' and isinstance(target.item, bpy.types.Object) and target.item.type == 'LIGHT':
+def _resolve_target_linking_mode(group: LinkDrawGroup, target: LinkDrawTarget, subject_mode: str,
+                                 context: bpy.types.Context | None = None) -> str:
+    from . import is_tool_light_source
+    if (subject_mode == 'OBJECT'
+            and isinstance(target.item, bpy.types.Object)
+            and is_tool_light_source(target.item, context)):
         return get_linking_mode(target.item)
-    if group.subject is not None and group.subject.type == 'LIGHT':
+    if group.subject is not None and is_tool_light_source(group.subject, context):
         return get_linking_mode(group.subject)
     return "INCLUDE"
 
@@ -381,7 +385,7 @@ def _build_all_light_groups(context: bpy.types.Context, active_light: bpy.types.
     groups = []
     total_targets = 0
     for light in context.scene.objects:
-        if not _is_light_overlay_ready(light):
+        if not _is_light_overlay_ready(light, context):
             continue
         if light.hide_viewport or light.hide_get():
             continue
@@ -565,7 +569,7 @@ def _draw_overlay_3d():
             center, corners = _target_world_bbox(target)
             if center is None:
                 continue
-            linking_mode = _resolve_target_linking_mode(group, target, subject_mode)
+            linking_mode = _resolve_target_linking_mode(group, target, subject_mode, context)
             color = _channel_color(
                 target.receiver, target.blocker,
                 *_target_line_colors(linking_mode),
@@ -578,7 +582,7 @@ def _draw_overlay_3d():
                 center, corners = _target_world_bbox(target)
                 if corners is None:
                     continue
-                linking_mode = _resolve_target_linking_mode(group, target, subject_mode)
+                linking_mode = _resolve_target_linking_mode(group, target, subject_mode, context)
                 color = _channel_color(
                     target.receiver, target.blocker,
                     *_target_outline_colors(linking_mode),
