@@ -102,9 +102,31 @@ class SceneProperty(PropertyGroup):
     active_object_index: bpy.props.IntProperty(default=0, update=update_active_object_index)
 
 
+def poll_linking_tool_light(_self, obj: bpy.types.Object) -> bool:
+    return obj.type == 'LIGHT'
+
+
 class WindowManagerProperty(PropertyGroup):
     drop_light_obj: bpy.props.PointerProperty(type=bpy.types.Object)
     drop_object_obj: bpy.props.PointerProperty(type=bpy.types.Object)
+
+    linking_tool_active: bpy.props.BoolProperty(
+        name="Linking Tool Active",
+        default=False,
+        options={'SKIP_SAVE'},
+    )
+    linking_tool_light: bpy.props.PointerProperty(
+        name="Linking Tool Light",
+        type=bpy.types.Object,
+        poll=poll_linking_tool_light,
+        options={'SKIP_SAVE'},
+    )
+    show_linking_overlay: bpy.props.BoolProperty(
+        name="Show Linking Overlay",
+        description="Show link lines and object outlines in the viewport",
+        default=True,
+        options={'SKIP_SAVE'},
+    )
 
     def update_add_collection(self, context):
         wm = context.window_manager

@@ -72,15 +72,31 @@ def load_post_handler(_dummy):
 _handlers = (load_post_handler,)
 
 
+def run_migration_for_all_scenes() -> None:
+    try:
+        scenes = bpy.data.scenes
+    except (AttributeError, TypeError):
+        return
+    for scene in scenes:
+        migrate_scene(scene)
+
+
+def _deferred_migration():
+    run_migration_for_all_scenes()
+    return None
+
+
 def register():
     for handler in _handlers:
         if handler not in bpy.app.handlers.load_post:
             bpy.app.handlers.load_post.append(handler)
-    if bpy.context.scene:
-        migrate_scene(bpy.context.scene)
+    if not bpy.app.timers.is_registered(_deferred_migration):
+        bpy.app.timers.register(_deferred_migration, first_interval=0.0)
 
 
 def unregister():
+    if bpy.app.timers.is_registered(_deferred_migration):
+        bpy.app.timers.unregister(_deferred_migration)
     for handler in _handlers:
         if handler in bpy.app.handlers.load_post:
             bpy.app.handlers.load_post.remove(handler)

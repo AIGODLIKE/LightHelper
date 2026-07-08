@@ -27,7 +27,7 @@ class LLT_AddonPreferences(AddonPreferences):
         translation_context="light_helper_zh_CN",
         update=update_filter_settings,
         items=[
-            ("ALL", "All", "Display lights and objects that can emit light", "ALIGN_LEFT", 0),
+            ("ALL", "All", "Display lights and objects that can emit light", "SCENE_DATA", 0),
             ("LIGHT", "Light", "Only show the lights", "OUTLINER_DATA_LIGHT", 1),
             ("EMISSION", "Emission Material", "Only luminous material are displayed", "MATERIAL", 2),
         ]
@@ -81,6 +81,13 @@ class LLT_AddonPreferences(AddonPreferences):
         description="Automatically split shared light linking collections when lights are duplicated, and inherit linking for duplicated objects",
         default=True,
     )
+    linking_tool_max_outlines: IntProperty(
+        name="Linking Tool Max Outlines",
+        description="Maximum number of linked targets to draw outlines for. Lines are always drawn",
+        default=25,
+        min=0,
+        max=500,
+    )
 
     def draw(self, context):
         layout = self.layout
@@ -93,6 +100,7 @@ class LLT_AddonPreferences(AddonPreferences):
         column.prop(self, "light_link_filter_type", text_ctxt="light_helper_zh_CN")
         column.prop(self, "moving_view_type")
         column.prop(self, "auto_fix_shared_linking")
+        column.prop(self, "linking_tool_max_outlines")
         column.separator()
         column.label(
             text="Use Exclude mode to omit listed objects from a light, or Include mode to affect only listed objects.",

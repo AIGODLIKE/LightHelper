@@ -26,6 +26,10 @@ def _collect_candidate_objects(depsgraph: bpy.types.Depsgraph) -> list[bpy.types
         id_ref = update.id
         if not isinstance(id_ref, bpy.types.Object):
             continue
+        if id_ref.is_evaluated:
+            id_ref = id_ref.original
+            if id_ref is None:
+                continue
         if id_ref.name in seen:
             continue
         if id_ref.type not in ILLUMINATED_OBJECT_TYPE_LIST:
@@ -76,15 +80,31 @@ _handler_lists = (
 )
 
 
+def run_fix_for_all_scenes() -> None:
+    try:
+        scenes = bpy.data.scenes
+    except (AttributeError, TypeError):
+        return
+    for scene in scenes:
+        fix_all_shared_light_linking(scene)
+
+
+def _deferred_fix():
+    run_fix_for_all_scenes()
+    return None
+
+
 def register():
     for handler, handler_list in zip(_handlers, _handler_lists):
         if handler not in handler_list:
             handler_list.append(handler)
-    if bpy.context.scene:
-        fix_all_shared_light_linking(bpy.context.scene)
+    if not bpy.app.timers.is_registered(_deferred_fix):
+        bpy.app.timers.register(_deferred_fix, first_interval=0.0)
 
 
 def unregister():
+    if bpy.app.timers.is_registered(_deferred_fix):
+        bpy.app.timers.unregister(_deferred_fix)
     for handler, handler_list in zip(_handlers, _handler_lists):
         if handler in handler_list:
             handler_list.remove(handler)

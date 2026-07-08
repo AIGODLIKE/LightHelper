@@ -433,10 +433,11 @@ def _tag_ui_redraw(context):
 def register():
     global _registered_category
     from ..utils import get_pref
+    category = "LH"
     try:
         category = get_pref(bpy.context).panel_name
-    except KeyError:
-        category = "LH"
+    except (KeyError, AttributeError, TypeError):
+        pass
     _registered_category = category
     for panel in panel_list:
         panel.bl_category = category

@@ -39,6 +39,27 @@ def get_pref(context=None):
     return ctx.preferences.addons[base_package].preferences
 
 
+def resolve_original_id(id_block):
+    if id_block is None:
+        return None
+    if isinstance(id_block, bpy.types.Object) and id_block.is_evaluated:
+        return id_block.original
+    original = getattr(id_block, "original", None)
+    if original is not None:
+        return original
+    return id_block
+
+
+def is_original_id(id_block) -> bool:
+    if id_block is None:
+        return False
+    if isinstance(id_block, bpy.types.Object):
+        return not id_block.is_evaluated
+    if isinstance(id_block, bpy.types.ID):
+        return not getattr(id_block, "is_evaluated", False)
+    return True
+
+
 def is_linking_initialized(light: bpy.types.Object) -> bool:
     if not hasattr(light, "light_linking"):
         return False
@@ -159,28 +180,83 @@ def is_object_affected_in_channel(light: bpy.types.Object, obj: bpy.types.Object
 def link_item_to_channel(light: bpy.types.Object, item,
                          coll_type: CollectionType, enabled: bool,
                          context: bpy.types.Context | None = None) -> None:
-    coll = ensure_linking_coll(coll_type, light, context)
+    light = resolve_original_id(light)
+    item = resolve_original_id(item)
+    if not is_original_id(light) or not is_original_id(item):
+        return
+    try:
+        coll = ensure_linking_coll(coll_type, light, context)
+    except RuntimeError:
+        return
     mode = get_linking_mode(light)
-    if isinstance(item, bpy.types.Object):
-        if enabled:
-            if not collection_has_object(coll, item):
-                coll.objects.link(item)
-            _set_item_link_state(coll, item, mode)
-        elif collection_has_object(coll, item):
-            coll.objects.unlink(item)
-    elif isinstance(item, bpy.types.Collection):
-        if enabled:
-            if not collection_has_child(coll, item):
-                coll.children.link(item)
-            _set_item_link_state(coll, item, mode)
-        elif collection_has_child(coll, item):
-            coll.children.unlink(item)
+    try:
+        if isinstance(item, bpy.types.Object):
+            if enabled:
+                if not collection_has_object(coll, item):
+                    coll.objects.link(item)
+                _set_item_link_state(coll, item, mode)
+            elif collection_has_object(coll, item):
+                coll.objects.unlink(item)
+        elif isinstance(item, bpy.types.Collection):
+            if enabled:
+                if not collection_has_child(coll, item):
+                    coll.children.link(item)
+                _set_item_link_state(coll, item, mode)
+            elif collection_has_child(coll, item):
+                coll.children.unlink(item)
+    except RuntimeError:
+        return
 
 
 def link_item_both_channels(light: bpy.types.Object, item,
                             context: bpy.types.Context | None = None) -> None:
     link_item_to_channel(light, item, CollectionType.RECEIVER, True, context)
     link_item_to_channel(light, item, CollectionType.BLOCKER, True, context)
+
+
+def toggle_item_both_channels(light: bpy.types.Object, item,
+                              context: bpy.types.Context | None = None) -> bool:
+    """Toggle receiver and blocker channels together. Returns True if channels are enabled."""
+    if not is_linking_initialized(light):
+        init_light_linking(light, context)
+    receiver = is_item_in_channel(light, item, CollectionType.RECEIVER)
+    blocker = is_item_in_channel(light, item, CollectionType.BLOCKER)
+    enable = not (receiver and blocker)
+    link_item_to_channel(light, item, CollectionType.RECEIVER, enable, context)
+    link_item_to_channel(light, item, CollectionType.BLOCKER, enable, context)
+    return enable
+
+
+def is_linkable_object(obj: bpy.types.Object) -> bool:
+    return obj.type in ILLUMINATED_OBJECT_TYPE_LIST and obj.type != "LIGHT"
+
+
+def get_filtered_tool_lights(context: bpy.types.Context) -> list[bpy.types.Object]:
+    from ..filter import filter_objects
+    return [obj for obj in filter_objects(context) if obj.type == 'LIGHT']
+
+
+def cycle_tool_light(context: bpy.types.Context, light: bpy.types.Object | None,
+                     direction: int) -> bpy.types.Object | None:
+    lights = get_filtered_tool_lights(context)
+    if not lights:
+        return None
+    if light is None or light not in lights:
+        return lights[0]
+    index = lights.index(light)
+    return lights[(index + direction) % len(lights)]
+
+
+def select_tool_light(context: bpy.types.Context, light: bpy.types.Object) -> None:
+    view_layer = context.view_layer
+    for obj in view_layer.objects.selected:
+        obj.select_set(False)
+    view_layer.objects.active = light
+    light.select_set(True)
+    objects = context.scene.objects[:]
+    if light in objects:
+        context.scene.light_helper_property.active_object_index = objects.index(light)
+    view_selected(context)
 
 
 def remove_orphaned_managed_collection(coll: bpy.types.Collection | None) -> None:
@@ -252,6 +328,12 @@ def get_all_light_effect_items_state(light: bpy.types.Object) -> dict:
             items_state[obj][CollectionType.BLOCKER] = True
 
     return items_state
+
+
+def get_light_link_item_count(light: bpy.types.Object) -> int:
+    if light is None:
+        return 0
+    return len(get_all_light_effect_items_state(light))
 
 
 def linking_item_sort_key(item: bpy.types.Object | bpy.types.Collection) -> tuple:
@@ -496,7 +578,11 @@ def inherit_light_linking_from_object(
         target: bpy.types.Object,
         source: bpy.types.Object,
         context: bpy.types.Context | None = None) -> bool:
-    if target == source:
+    target = resolve_original_id(target)
+    source = resolve_original_id(source)
+    if target is None or source is None or target == source:
+        return False
+    if not is_original_id(target) or not is_original_id(source):
         return False
     changed = False
     ctx = context if context is not None else bpy.context
@@ -531,6 +617,9 @@ def mark_duplicate_handled(obj: bpy.types.Object) -> None:
 
 
 def process_duplicated_object(obj: bpy.types.Object, context: bpy.types.Context | None = None) -> bool:
+    obj = resolve_original_id(obj)
+    if obj is None or not is_original_id(obj):
+        return False
     if is_duplicate_handled(obj):
         return False
     changed = False

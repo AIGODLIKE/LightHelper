@@ -1,9 +1,11 @@
 from . import panel
 from . import ui_list
+from . import tool
 
 module_list = [
     panel,
     ui_list,
+    tool,
 ]
 
 

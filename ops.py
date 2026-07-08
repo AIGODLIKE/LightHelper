@@ -527,6 +527,197 @@ class LLP_OT_invert_filter_show(LightHelperOperator, bpy.types.Operator):
         return {"FINISHED"}
 
 
+class LLP_OT_light_linking_pick(LightHelperOperator, bpy.types.Operator):
+    bl_idname = 'object.light_helper_light_linking_pick'
+    bl_label = "Light Linking Pick"
+    bl_description = "Select light or toggle object light linking"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        from .ui.panel import LLT_PT_light_control_panel
+        from .ui.tool import is_light_linking_tool_active
+        if not is_light_linking_tool_active(context):
+            return False
+        return LLT_PT_light_control_panel.check_support_light_linking(context)
+
+    @staticmethod
+    def perform_pick(operator, context, event, toggle_both: bool, coll_type=None):
+        from .utils import (
+            CollectionType,
+            is_item_in_channel,
+            is_linkable_object,
+            link_item_to_channel,
+            resolve_original_id,
+            toggle_item_both_channels,
+        )
+        from .utils.overlay import (
+            _view3d_window_at_mouse,
+            invalidate_overlay_cache,
+            raycast_object_under_mouse,
+            tag_view3d_redraw,
+        )
+
+        wm_props = context.window_manager.light_helper_property
+        light = resolve_original_id(wm_props.linking_tool_light)
+        if light is None:
+            operator.report({'WARNING'}, p_("No light selected"))
+            return {'CANCELLED'}
+
+        area, region = _view3d_window_at_mouse(context, event)
+        if area is None or region is None:
+            operator.report({'WARNING'}, p_("Click in the 3D viewport"))
+            return {'CANCELLED'}
+
+        obj = raycast_object_under_mouse(context, event)
+        if obj is None:
+            operator.report({'WARNING'}, p_("No object under cursor"))
+            return {'CANCELLED'}
+
+        if obj.type == 'LIGHT':
+            LLP_OT_light_linking_pick._set_light(context, obj)
+            operator.report({'INFO'}, p_("Selected light: %s") % obj.name)
+            return {'FINISHED'}
+
+        if not is_linkable_object(obj):
+            operator.report({'WARNING'}, p_("Selected object cannot use light linking"))
+            return {'CANCELLED'}
+
+        if toggle_both:
+            enabled = toggle_item_both_channels(light, obj, context)
+            action = p_("linked") if enabled else p_("unlinked")
+            operator.report({'INFO'}, f"{obj.name} {action}")
+        elif coll_type is not None:
+            in_channel = is_item_in_channel(light, obj, coll_type)
+            link_item_to_channel(light, obj, coll_type, not in_channel, context)
+            if coll_type == CollectionType.RECEIVER:
+                channel = p_("light")
+            else:
+                channel = p_("shadow")
+            state = p_("on") if not in_channel else p_("off")
+            operator.report({'INFO'}, f"{obj.name} {channel} {state}")
+
+        invalidate_overlay_cache()
+        tag_view3d_redraw(context)
+        return {'FINISHED'}
+
+    @staticmethod
+    def _set_light(context, light_obj: bpy.types.Object):
+        from .utils import resolve_original_id, select_tool_light
+        from .utils.overlay import invalidate_overlay_cache, tag_view3d_redraw
+        light_obj = resolve_original_id(light_obj)
+        wm_props = context.window_manager.light_helper_property
+        wm_props.linking_tool_light = light_obj
+        select_tool_light(context, light_obj)
+        invalidate_overlay_cache()
+        tag_view3d_redraw(context)
+
+    def invoke(self, context, event):
+        from .ui.tool import start_tool_session
+        start_tool_session(context)
+        return self.perform_pick(self, context, event, toggle_both=True)
+
+
+class _LLP_LightLinkingToolPoll:
+    @classmethod
+    def poll(cls, context):
+        from .ui.panel import LLT_PT_light_control_panel
+        from .ui.tool import is_light_linking_tool_active
+        if not is_light_linking_tool_active(context):
+            return False
+        return LLT_PT_light_control_panel.check_support_light_linking(context)
+
+
+class LLP_OT_light_linking_toggle_light(_LLP_LightLinkingToolPoll, LightHelperOperator, bpy.types.Operator):
+    bl_idname = 'object.light_helper_light_linking_toggle_light'
+    bl_label = "Toggle Light Channel"
+    bl_description = "Toggle light channel for object under cursor"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def invoke(self, context, event):
+        from .ui.tool import start_tool_session
+        from .utils import CollectionType
+        start_tool_session(context)
+        return LLP_OT_light_linking_pick.perform_pick(
+            self, context, event, toggle_both=False, coll_type=CollectionType.RECEIVER,
+        )
+
+
+class LLP_OT_light_linking_toggle_shadow(_LLP_LightLinkingToolPoll, LightHelperOperator, bpy.types.Operator):
+    bl_idname = 'object.light_helper_light_linking_toggle_shadow'
+    bl_label = "Toggle Shadow Channel"
+    bl_description = "Toggle shadow channel for object under cursor"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def invoke(self, context, event):
+        from .ui.tool import start_tool_session
+        from .utils import CollectionType
+        start_tool_session(context)
+        return LLP_OT_light_linking_pick.perform_pick(
+            self, context, event, toggle_both=False, coll_type=CollectionType.BLOCKER,
+        )
+
+
+class LLP_OT_light_linking_toggle_mode(_LLP_LightLinkingToolPoll, LightHelperOperator, bpy.types.Operator):
+    bl_idname = 'object.light_helper_light_linking_toggle_mode'
+    bl_label = "Toggle Linking Mode"
+    bl_description = "Switch between Exclude and Include mode"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def invoke(self, context, event):
+        from .ui.tool import start_tool_session
+        from .utils import apply_linking_mode_to_light, get_linking_mode
+        from .utils.overlay import invalidate_overlay_cache, tag_view3d_redraw
+        start_tool_session(context)
+        wm_props = context.window_manager.light_helper_property
+        light = wm_props.linking_tool_light
+        if light is not None and hasattr(light, "light_helper_property"):
+            mode = get_linking_mode(light)
+            new_mode = "INCLUDE" if mode == "EXCLUDE" else "EXCLUDE"
+            light.light_helper_property.linking_mode = new_mode
+            apply_linking_mode_to_light(light, new_mode)
+            invalidate_overlay_cache()
+            tag_view3d_redraw(context)
+        return {'FINISHED'}
+
+
+class LLP_OT_light_linking_toggle_overlay(_LLP_LightLinkingToolPoll, LightHelperOperator, bpy.types.Operator):
+    bl_idname = 'object.light_helper_light_linking_toggle_overlay'
+    bl_label = "Toggle Overlay"
+    bl_description = "Show or hide link lines and outlines"
+    bl_options = {'REGISTER'}
+
+    def invoke(self, context, event):
+        from .ui.tool import start_tool_session
+        from .utils.overlay import tag_view3d_redraw
+        start_tool_session(context)
+        wm_props = context.window_manager.light_helper_property
+        wm_props.show_linking_overlay = not wm_props.show_linking_overlay
+        tag_view3d_redraw(context)
+        return {'FINISHED'}
+
+
+class LLP_OT_light_linking_cycle_light(_LLP_LightLinkingToolPoll, LightHelperOperator, bpy.types.Operator):
+    bl_idname = 'object.light_helper_light_linking_cycle_light'
+    bl_label = "Cycle Light"
+    bl_description = "Switch to previous or next filtered light"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    direction: bpy.props.IntProperty(default=1, options={'SKIP_SAVE'})
+
+    def invoke(self, context, event):
+        from .ui.tool import start_tool_session
+        from .utils import cycle_tool_light
+        start_tool_session(context)
+        wm_props = context.window_manager.light_helper_property
+        light = cycle_tool_light(context, wm_props.linking_tool_light, self.direction)
+        if light is not None:
+            LLP_OT_light_linking_pick._set_light(context, light)
+        else:
+            self.report({'WARNING'}, p_("No filtered lights in the list"))
+        return {'FINISHED'}
+
+
 ops_list = [
     LLP_OT_question,
     LLP_OT_remove_light_linking,
@@ -540,6 +731,12 @@ ops_list = [
     LLP_OT_instances_data_all,
     LLP_OT_switch_filter_show,
     LLP_OT_invert_filter_show,
+    LLP_OT_light_linking_pick,
+    LLP_OT_light_linking_toggle_light,
+    LLP_OT_light_linking_toggle_shadow,
+    LLP_OT_light_linking_toggle_mode,
+    LLP_OT_light_linking_toggle_overlay,
+    LLP_OT_light_linking_cycle_light,
 ]
 register_class, unregister_class = bpy.utils.register_classes_factory(ops_list)
 
@@ -549,4 +746,12 @@ def register():
 
 
 def unregister():
+    from .utils.overlay import unregister_draw_handlers, invalidate_overlay_cache
+    from .ui.tool import stop_tool_session
+    try:
+        stop_tool_session(bpy.context)
+    except (AttributeError, TypeError, ReferenceError):
+        pass
+    unregister_draw_handlers()
+    invalidate_overlay_cache()
     unregister_class()
