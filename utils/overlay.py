@@ -145,6 +145,7 @@ def _hud_shortcut_lines(subject_mode: str) -> list[str]:
         f"D: {p_('Toggle Shadow')}",
         f"A: {p_('Exclude')}/{p_('Include')}",
         f"X: {p_('Cycle Overlay')}",
+        f"Esc: {p_('Exit Tool')}",
     ])
     if subject_mode == 'OBJECT':
         lines.append(p_("Ctrl+Wheel: Prev/Next Object"))

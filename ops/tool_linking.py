@@ -346,6 +346,19 @@ class LLP_OT_light_linking_toggle_overlay(_LLP_LightLinkingToolPoll, LightHelper
         return {'FINISHED'}
 
 
+class LLP_OT_light_linking_exit(_LLP_LightLinkingToolPoll, LightHelperOperator, bpy.types.Operator):
+    bl_idname = 'object.light_helper_light_linking_exit'
+    bl_label = "Exit Tool"
+    bl_description = "Exit to the previous tool, or the first tool if none"
+    bl_options = {'REGISTER'}
+
+    def invoke(self, context, event):
+        from ..ui.tool import exit_to_previous_tool
+        target = exit_to_previous_tool(context)
+        self.report({'INFO'}, p_("Switched to tool: %s") % target)
+        return {'FINISHED'}
+
+
 class LLP_OT_light_linking_cycle_light(_LLP_LightLinkingToolPoll, LightHelperOperator, bpy.types.Operator):
     bl_idname = 'object.light_helper_light_linking_cycle_light'
     bl_label = "Cycle Subject"

@@ -12,16 +12,78 @@ TOOL_ICON = os.path.join(
     "ops.light_helper.light_linking",
 )
 _session_active = False
+_previous_tool_idname = None
+_last_seen_tool_idname = None
+DEFAULT_FALLBACK_TOOL = "builtin.select_box"
+
+
+def get_active_tool_idname(context: bpy.types.Context) -> str | None:
+    if context is None or context.workspace is None:
+        return None
+    try:
+        tool = context.workspace.tools.from_space_view3d_mode(context.mode, create=False)
+    except (AttributeError, TypeError):
+        return None
+    if tool is None:
+        return None
+    return tool.idname
 
 
 def is_light_linking_tool_active(context: bpy.types.Context) -> bool:
-    if context is None or context.workspace is None:
+    return get_active_tool_idname(context) == TOOL_IDNAME
+
+
+def get_fallback_tool_idname() -> str:
+    if _previous_tool_idname and _previous_tool_idname != TOOL_IDNAME:
+        return _previous_tool_idname
+    return DEFAULT_FALLBACK_TOOL
+
+
+def activate_tool_by_id(context: bpy.types.Context, tool_idname: str) -> bool:
+    if not tool_idname:
         return False
     try:
-        tool = context.workspace.tools.from_space_view3d_mode(context.mode)
-    except (AttributeError, TypeError):
-        return False
-    return tool is not None and tool.idname == TOOL_IDNAME
+        bpy.ops.wm.tool_set_by_id(name=tool_idname, space_type='VIEW_3D')
+        return True
+    except Exception:
+        pass
+    for window in context.window_manager.windows:
+        screen = window.screen
+        if screen is None:
+            continue
+        for area in screen.areas:
+            if area.type != 'VIEW_3D':
+                continue
+            for region in area.regions:
+                if region.type != 'WINDOW':
+                    continue
+                try:
+                    with context.temp_override(window=window, screen=screen, area=area, region=region):
+                        bpy.ops.wm.tool_set_by_id(name=tool_idname, space_type='VIEW_3D')
+                    return True
+                except Exception:
+                    continue
+    return False
+
+
+def exit_to_previous_tool(context: bpy.types.Context) -> str:
+    target = get_fallback_tool_idname()
+    stop_tool_session(context)
+    if not activate_tool_by_id(context, target):
+        target = DEFAULT_FALLBACK_TOOL
+        activate_tool_by_id(context, target)
+    return target
+
+
+def _track_previous_tool(context: bpy.types.Context) -> None:
+    global _previous_tool_idname, _last_seen_tool_idname
+    current = get_active_tool_idname(context)
+    if current is None:
+        return
+    if current == TOOL_IDNAME:
+        if _last_seen_tool_idname and _last_seen_tool_idname != TOOL_IDNAME:
+            _previous_tool_idname = _last_seen_tool_idname
+    _last_seen_tool_idname = current
 
 
 def is_session_active() -> bool:
@@ -116,6 +178,7 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
         ("object.light_helper_light_linking_toggle_shadow", {"type": 'D', "value": 'PRESS'}, None),
         ("object.light_helper_light_linking_toggle_mode", {"type": 'A', "value": 'PRESS'}, None),
         ("object.light_helper_light_linking_toggle_overlay", {"type": 'X', "value": 'PRESS'}, None),
+        ("object.light_helper_light_linking_exit", {"type": 'ESC', "value": 'PRESS'}, None),
         ("object.light_helper_light_linking_cycle_light", {"type": 'WHEELUPMOUSE', "value": 'PRESS', "ctrl": True},
          {"properties": [("direction", -1)]}),
         ("object.light_helper_light_linking_cycle_light", {"type": 'WHEELDOWNMOUSE', "value": 'PRESS', "ctrl": True},
@@ -268,6 +331,7 @@ def _tool_session_poll():
         context = bpy.context
         if context is None or context.window_manager is None:
             return 0.15
+        _track_previous_tool(context)
         if is_light_linking_tool_active(context):
             if not _session_active:
                 start_tool_session(context)

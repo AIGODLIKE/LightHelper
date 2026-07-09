@@ -152,8 +152,10 @@ data = {
     "Object: (none)": "物体：（无）",
     "Light mode: %s": "灯光模式：%s",
     "Object mode: %s": "物体模式：%s",
-    "Ctrl+LClick: Switch Light/Object": "Ctrl+左键：切换灯光/物体主体",
+    "Ctrl+LClick: Switch Light/Object": "Ctrl+左键：切换灯光/物体（含自发光）",
+    "LClick: Select/Toggle Link": "左键：选择/切换链接",
     "LClick: Toggle Light Link": "左键：切换灯光链接",
+    "RClick: Select/Toggle Light/Object": "右键：选择/切换灯光/物体（含自发光）",
     "Ctrl+Wheel: Prev/Next Object": "Ctrl+滚轮：上一个/下一个物体",
     "Use Ctrl+LClick to switch object subject": "请用 Ctrl+左键 切换物体主体",
     "No light under cursor": "鼠标下方没有灯光",
@@ -175,6 +177,9 @@ data = {
     "Toggle Overlay": "切换叠加层",
     "Prev/Next Light": "上一个/下一个灯光",
     "Exit": "退出",
+    "Exit Tool": "退出工具",
+    "Exit to the previous tool, or the first tool if none": "退出并回到上一个工具；若无则回到第一个工具",
+    "Switched to tool: %s": "已切换到工具：%s",
     "Links: %d, outlines hidden": "链接：%d，已隐藏轮廓",
     "Links: %d": "链接：%d",
     "Overlay hidden": "叠加层已隐藏",
@@ -196,6 +201,7 @@ Light mode: LClick toggles object link.
 Object mode: LClick toggles light link.
 Space: toggle light channel. D: toggle shadow channel.
 A: switch Exclude/Include. X: cycle overlay.
+Esc: exit tool.
 Ctrl+Wheel: previous/next subject.""": """灯光链接工具
 Ctrl+左键物体：切换到物体模式。
 Ctrl+左键灯光：切换到灯光模式。
@@ -203,5 +209,6 @@ Ctrl+左键灯光：切换到灯光模式。
 物体模式：左键切换灯光链接。
 空格：切换灯光通道。D：切换阴影通道。
 A：切换排除/包含。X：循环切换叠加层。
+Esc：退出工具。
 Ctrl+滚轮：上一个/下一个主体。""",
 }
