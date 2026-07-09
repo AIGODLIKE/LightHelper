@@ -2,6 +2,7 @@ import bpy
 
 from ..utils.icon import get_item_icon
 
+
 class LLT_UL_light(bpy.types.UIList):
     sort_type: bpy.props.EnumProperty(
         name="Use Sort",
@@ -45,7 +46,7 @@ class LLT_UL_light(bpy.types.UIList):
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
         from ..utils import check_link
-        from ..ops import LLP_OT_add_light_linking, LLP_OT_clear_light_linking
+        from ..ops import LLP_OT_add_light_linking, LLP_OT_clear_light_linking, LLP_OT_solo_light
         split = layout.split(factor=0.2, align=True)
 
         left = split.row(align=True)
@@ -56,6 +57,21 @@ class LLT_UL_light(bpy.types.UIList):
             left.prop(item.light_helper_property, "show_in_view", text='', icon=icon, emboss=False)
             left.separator()
 
+            index = context.scene.objects[:].index(item)
+            if item.type == 'LIGHT':
+                solo = context.window_manager.light_helper_property.solo_light
+                solo_active = solo is not None and solo.name == item.name
+                solo_row = left.row(align=True)
+                solo_row.context_pointer_set("solo_light_object", item)
+                op = solo_row.operator(
+                    LLP_OT_solo_light.bl_idname,
+                    text="",
+                    icon='CLIPUV_HLT',
+                    depress=solo_active,
+                    emboss=False
+                )
+                op.index = index
+
         left.label(**get_item_icon(item))
         if self.show_type:
             left.label(text=item.type.title())
@@ -63,16 +79,13 @@ class LLT_UL_light(bpy.types.UIList):
         right = split.row(align=True)
         right.label(text=item.name, translate=False)
         right.separator()
-
         rs = right.split()
         rs.separator()
-        index = context.scene.objects[:].index(item)
         if check_link(item):
             rs.context_pointer_set("clear_light_linking_object", item)
             rs.operator(LLP_OT_clear_light_linking.bl_idname, text="Restore").index = index
         else:
             with context.temp_override(add_light_linking_light_obj=item):
-                from bpy.app.translations import pgettext_iface
                 rs.context_pointer_set("add_light_linking_light_obj", item)
                 op = rs.operator(LLP_OT_add_light_linking.bl_idname, text='Init')
                 op.index = index

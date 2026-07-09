@@ -231,3 +231,42 @@ class LLP_OT_link_selected_objs(LightHelperOperator, bpy.types.Operator):
                 continue
             link_item_both_channels(light, obj, context)
         return {"FINISHED"}
+
+
+class LLP_OT_clear_selected_light_linking(LightHelperOperator, bpy.types.Operator):
+    bl_idname = 'object.light_helper_clear_selected_light_linking'
+    bl_label = "Clear Selected Links"
+    bl_description = "Clear light linking for all selected lights"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def _iter_targets(cls, context):
+        from ..utils import is_linking_initialized, is_tool_light_source
+        for obj in context.selected_objects:
+            if is_tool_light_source(obj, context) and is_linking_initialized(obj):
+                yield obj
+
+    @classmethod
+    def poll(cls, context):
+        if not any(cls._iter_targets(context)):
+            cls.poll_message_set(p_("No selected lights with light linking"))
+            return False
+        return True
+
+    def execute(self, context):
+        from .common import format_lights_report
+        lights = list(self._iter_targets(context))
+        if not lights:
+            self.report({'WARNING'}, p_("No selected lights with light linking"))
+            return {"CANCELLED"}
+        for light in lights:
+            restore_light_linking(light, context)
+        self.report(
+            {'INFO'},
+            format_lights_report(
+                lights,
+                p_("Cleared light linking for %d light(s): %s"),
+                p_("Cleared light linking for %d light(s): %s, and %d more"),
+            ),
+        )
+        return {"FINISHED"}

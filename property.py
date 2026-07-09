@@ -87,6 +87,7 @@ class SceneProperty(PropertyGroup):
 
     def update_active_object_index(self, context):
         from .utils import view_selected
+        from .ui.tool import is_session_active, sync_tool_subject_from_selection
         index = self.active_object_index
         objects = context.scene.objects
         if index < 0 or index >= len(objects):
@@ -100,6 +101,8 @@ class SceneProperty(PropertyGroup):
                 obj.select_set(False)
 
         view_selected(context)
+        if is_session_active(context):
+            sync_tool_subject_from_selection(context)
 
     active_object_index: bpy.props.IntProperty(default=0, update=update_active_object_index)
 
@@ -117,6 +120,11 @@ def poll_linking_tool_object(_self, obj: bpy.types.Object) -> bool:
 class WindowManagerProperty(PropertyGroup):
     drop_light_obj: bpy.props.PointerProperty(type=bpy.types.Object)
     drop_object_obj: bpy.props.PointerProperty(type=bpy.types.Object)
+    solo_light: bpy.props.PointerProperty(
+        name="Solo Light",
+        type=bpy.types.Object,
+        options={'SKIP_SAVE'},
+    )
 
     linking_tool_active: bpy.props.BoolProperty(
         name="Linking Tool Active",

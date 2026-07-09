@@ -2,6 +2,7 @@ import bpy
 
 from .common import LightHelperOperator
 from .filter_ops import LLP_OT_invert_filter_show, LLP_OT_switch_filter_show
+from .light_adjust import LLP_OT_adjust_light_ev, LLP_OT_solo_light
 from .maintenance import (
     LLP_OT_init_all_light_linking,
     LLP_OT_instances_data,
@@ -10,6 +11,7 @@ from .maintenance import (
 from .panel_linking import (
     LLP_OT_add_light_linking,
     LLP_OT_clear_light_linking,
+    LLP_OT_clear_selected_light_linking,
     LLP_OT_link_selected_objs,
     LLP_OT_remove_light_linking,
     LLP_OT_toggle_light_linking,
@@ -31,6 +33,7 @@ ops_list = [
     LLP_OT_question,
     LLP_OT_remove_light_linking,
     LLP_OT_clear_light_linking,
+    LLP_OT_clear_selected_light_linking,
     LLP_OT_add_light_linking,
     LLP_OT_toggle_light_linking,
     LLP_OT_link_selected_objs,
@@ -40,6 +43,8 @@ ops_list = [
     LLP_OT_instances_data_all,
     LLP_OT_switch_filter_show,
     LLP_OT_invert_filter_show,
+    LLP_OT_adjust_light_ev,
+    LLP_OT_solo_light,
     LLP_OT_light_linking_pick,
     LLP_OT_light_linking_hud_drag,
     LLP_OT_light_linking_toggle_light,
@@ -66,6 +71,7 @@ __all__ = [
     "LLP_OT_question",
     "LLP_OT_remove_light_linking",
     "LLP_OT_clear_light_linking",
+    "LLP_OT_clear_selected_light_linking",
     "LLP_OT_add_light_linking",
     "LLP_OT_toggle_light_linking",
     "LLP_OT_link_selected_objs",
@@ -75,6 +81,8 @@ __all__ = [
     "LLP_OT_instances_data_all",
     "LLP_OT_switch_filter_show",
     "LLP_OT_invert_filter_show",
+    "LLP_OT_adjust_light_ev",
+    "LLP_OT_solo_light",
     "LLP_OT_light_linking_pick",
     "LLP_OT_light_linking_hud_drag",
     "LLP_OT_light_linking_toggle_light",

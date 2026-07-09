@@ -228,6 +228,21 @@ def stop_tool_session(context: bpy.types.Context) -> None:
         context.window.cursor_set('DEFAULT')
 
 
+def _sync_active_object_index(context: bpy.types.Context, obj: bpy.types.Object) -> None:
+    """Keep sidebar UIList highlight in sync without re-entering selection update."""
+    scene_props = context.scene.light_helper_property
+    objects = context.scene.objects
+    try:
+        index = objects.find(obj.name)
+    except (AttributeError, TypeError):
+        return
+    if index < 0:
+        return
+    if scene_props.active_object_index != index:
+        # Assign via RNA path that skips update callback when possible.
+        scene_props["active_object_index"] = index
+
+
 def sync_tool_subject_from_selection(context: bpy.types.Context) -> bool:
     from ..utils import is_linkable_object, is_tool_light_source, resolve_original_id
     from ..utils.overlay import invalidate_overlay_cache, refresh_overlay_cache, tag_view3d_redraw
@@ -236,7 +251,7 @@ def sync_tool_subject_from_selection(context: bpy.types.Context) -> bool:
     if not wm_props.linking_tool_active:
         return False
 
-    obj = resolve_original_id(context.object)
+    obj = resolve_original_id(context.view_layer.objects.active or context.object)
     if obj is None:
         return False
 
@@ -247,11 +262,13 @@ def sync_tool_subject_from_selection(context: bpy.types.Context) -> bool:
             if current is None or current.name != obj.name:
                 wm_props.linking_tool_object = obj
                 changed = True
+            _sync_active_object_index(context, obj)
     elif is_tool_light_source(obj, context):
         current = resolve_original_id(wm_props.linking_tool_light)
         if current is None or current.name != obj.name:
             wm_props.linking_tool_light = obj
             changed = True
+        _sync_active_object_index(context, obj)
 
     if changed:
         invalidate_overlay_cache()
@@ -297,6 +314,11 @@ def _unregister_depsgraph_sync() -> None:
     _depsgraph_sync_registered = False
 
 
+def _on_active_object_changed(*_args):
+    """Outliner / viewport active object changes (more reliable than depsgraph alone)."""
+    schedule_selection_sync()
+
+
 def _subscribe_tool_changes():
     global _msgbus_subscribed
     try:
@@ -306,6 +328,13 @@ def _subscribe_tool_changes():
             owner=_msgbus_owner,
             args=(),
             notify=_on_tool_changed,
+            options={'PERSISTENT'},
+        )
+        bpy.msgbus.subscribe_rna(
+            key=(bpy.types.LayerObjects, "active"),
+            owner=_msgbus_owner,
+            args=(),
+            notify=_on_active_object_changed,
             options={'PERSISTENT'},
         )
         _msgbus_subscribed = True

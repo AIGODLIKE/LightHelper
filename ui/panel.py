@@ -26,11 +26,22 @@ def get_panel_light_obj(context) -> bpy.types.Object | None:
     return None
 
 
-def get_cycles_light_settings_panel():
-    return getattr(bpy.types, 'CYCLES_LIGHT_PT_settings', None)
+def get_panel_effect_obj(context) -> bpy.types.Object | None:
+    from ..utils import is_linkable_object
+    if context.scene.light_helper_property.object_linking_pin:
+        obj = context.scene.light_helper_property.object_linking_pin_object
+    else:
+        obj = context.object
+    if obj is not None and is_linkable_object(obj):
+        return obj
+    return None
 
 
-def _cycles_light_settings_context(context, light_obj: bpy.types.Object):
+def get_cycles_panel(panel_name: str):
+    return getattr(bpy.types, panel_name, None)
+
+
+def _cycles_light_context(context, light_obj: bpy.types.Object):
     return context.temp_override(
         object=light_obj,
         active_object=light_obj,
@@ -42,27 +53,37 @@ def _cycles_light_settings_context(context, light_obj: bpy.types.Object):
     )
 
 
-def cycles_light_settings_poll(context, light_obj: bpy.types.Object) -> bool:
-    panel_cls = get_cycles_light_settings_panel()
-    if panel_cls is None:
+def cycles_panel_poll(panel_name: str, context, light_obj: bpy.types.Object) -> bool:
+    panel_cls = get_cycles_panel(panel_name)
+    if panel_cls is None or light_obj is None or light_obj.type != 'LIGHT':
         return False
-    with _cycles_light_settings_context(context, light_obj):
+    with _cycles_light_context(context, light_obj):
         return panel_cls.poll(context)
 
 
-def draw_cycles_light_settings(layout, context, light_obj: bpy.types.Object) -> None:
-    panel_cls = get_cycles_light_settings_panel()
+def draw_cycles_panel(panel_name: str, layout, context, light_obj: bpy.types.Object) -> None:
+    panel_cls = get_cycles_panel(panel_name)
     if panel_cls is None:
         return
 
     class _PanelUI:
-        pass
+        bl_space_type = 'VIEW_3D'
 
     _PanelUI.layout = layout
-    with _cycles_light_settings_context(context, light_obj):
+    with _cycles_light_context(context, light_obj):
         if not panel_cls.poll(context):
             return
         panel_cls.draw(_PanelUI(), context)
+
+
+def draw_light_ev_controls(layout, context) -> None:
+    from ..ops import LLP_OT_adjust_light_ev
+    row = layout.row(align=True)
+    enabled = LLP_OT_adjust_light_ev.poll(context)
+    row.enabled = enabled
+    for label, ev in (("-1 EV", -1.0), ("-0.5 EV", -0.5), ("+0.5 EV", 0.5), ("+1 EV", 1.0)):
+        op = row.operator(LLP_OT_adjust_light_ev.bl_idname, text=label)
+        op.ev = ev
 
 
 def get_item_visibility_tooltip(item: bpy.types.Object | bpy.types.Collection) -> tuple[str, bool]:
@@ -293,7 +314,11 @@ Use Exclude/Include mode to control list semantics, and toggle light or shadow p
         draw_add_box(col, context, light_obj)
 
     def draw_light_list(self, context, layout):
-        from ..ops import LLP_OT_switch_filter_show, LLP_OT_invert_filter_show
+        from ..ops import (
+            LLP_OT_clear_selected_light_linking,
+            LLP_OT_invert_filter_show,
+            LLP_OT_switch_filter_show,
+        )
         from .ui_list import LLT_UL_light
 
         pref = get_pref(context)
@@ -311,6 +336,9 @@ Use Exclude/Include mode to control list semantics, and toggle light or shadow p
         invert_row = col.row(align=True)
         invert_row.enabled = LLP_OT_invert_filter_show.poll(context)
         invert_row.operator(LLP_OT_invert_filter_show.bl_idname, text="", icon='ARROW_LEFTRIGHT')
+        clear_row = col.row(align=True)
+        clear_row.enabled = LLP_OT_clear_selected_light_linking.poll(context)
+        clear_row.operator(LLP_OT_clear_selected_light_linking.bl_idname, text="", icon='TRASH')
         row.template_list(LLT_UL_light.__name__, "", context.scene, "objects", context.scene.light_helper_property,
                           "active_object_index")
 
@@ -322,6 +350,12 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
     bl_region_type = 'UI'
     bl_category = "LH"
     bl_options = {'HEADER_LAYOUT_EXPAND'}
+
+    @classmethod
+    def poll(cls, context):
+        if not LLT_PT_light_control_panel.check_support_light_linking(context):
+            return False
+        return get_panel_effect_obj(context) is not None
 
     def draw_header(self, context):
         from ..ops import LLP_OT_question
@@ -344,14 +378,8 @@ Provides buttons to toggle light or shadow channel per light."""
     def draw_object(self, context, layout):
         refresh_drop_poll_context(context)
 
-        if context.scene.light_helper_property.object_linking_pin:
-            item = context.scene.light_helper_property.object_linking_pin_object
-        else:
-            item = context.object
-        if not item:
-            return
-        if item.type == 'LIGHT':
-            layout.label(text=p_("Light can't be an effected object"))
+        item = get_panel_effect_obj(context)
+        if item is None:
             return
 
         col = layout.column()
@@ -389,33 +417,82 @@ Provides buttons to toggle light or shadow channel per light."""
         box.prop(context.window_manager.light_helper_property, 'object_linking_add_object', text='', icon='ADD')
 
 
-class LLT_PT_light_settings(bpy.types.Panel):
-    bl_label = "Settings"
-    bl_idname = "LLT_PT_light_settings"
+class LLT_PT_light_properties(bpy.types.Panel):
+    bl_label = "Light Properties"
+    bl_idname = "LLT_PT_light_properties"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "LH"
-    bl_options = set()
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return get_panel_light_obj(context) is not None
+
+    def draw_header(self, context):
+        light_obj = get_panel_light_obj(context)
+        if light_obj is None:
+            return
+        self.layout.label(text=light_obj.name, icon=get_light_icon(light_obj), translate=False)
+
+    def draw(self, context):
+        light_obj = get_panel_light_obj(context)
+        if light_obj is None:
+            return
+        draw_light_ev_controls(self.layout, context)
+
+
+class LLT_PT_cycles_light(bpy.types.Panel):
+    bl_label = "Light"
+    bl_idname = "LLT_PT_cycles_light"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "LH"
+    bl_parent_id = "LLT_PT_light_properties"
+    bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
         if context.scene.render.engine != 'CYCLES':
             return False
         light_obj = get_panel_light_obj(context)
-        if light_obj is None:
-            return False
-        return cycles_light_settings_poll(context, light_obj)
+        return cycles_panel_poll('CYCLES_LIGHT_PT_light', context, light_obj)
 
     def draw(self, context):
         light_obj = get_panel_light_obj(context)
         if light_obj is None:
             return
-        draw_cycles_light_settings(self.layout, context, light_obj)
+        draw_cycles_panel('CYCLES_LIGHT_PT_light', self.layout, context, light_obj)
+
+
+class LLT_PT_light_settings(bpy.types.Panel):
+    bl_label = "Settings"
+    bl_idname = "LLT_PT_light_settings"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "LH"
+    bl_parent_id = "LLT_PT_light_properties"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        if context.scene.render.engine != 'CYCLES':
+            return False
+        light_obj = get_panel_light_obj(context)
+        return cycles_panel_poll('CYCLES_LIGHT_PT_settings', context, light_obj)
+
+    def draw(self, context):
+        light_obj = get_panel_light_obj(context)
+        if light_obj is None:
+            return
+        draw_cycles_panel('CYCLES_LIGHT_PT_settings', self.layout, context, light_obj)
 
 
 panel_list = [
     LLT_PT_light_control_panel,
     LLT_PT_obj_control_panel,
+    LLT_PT_light_properties,
+    LLT_PT_cycles_light,
     LLT_PT_light_settings,
 ]
 register_class, unregister_class = bpy.utils.register_classes_factory(panel_list)
