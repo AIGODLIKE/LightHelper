@@ -84,6 +84,11 @@ class SceneProperty(PropertyGroup):
     )
     light_linking_pin: bpy.props.BoolProperty(name='Pin', update=update_pin_object)
     object_linking_pin: bpy.props.BoolProperty(name='Pin', update=update_pin_object2)
+    show_object_linking_panel: bpy.props.BoolProperty(
+        name="Show Linked Objects List",
+        description="Show the linked objects UI list in the Object Linking panel",
+        default=True,
+    )
 
     def update_active_object_index(self, context):
         from .ui.tool import is_session_active, is_syncing_list_index, sync_tool_subject_from_selection
@@ -107,6 +112,29 @@ class SceneProperty(PropertyGroup):
             sync_tool_subject_from_selection(context)
 
     active_object_index: bpy.props.IntProperty(default=0, update=update_active_object_index)
+
+    def update_active_linked_object_index(self, context):
+        from .utils import is_linkable_object, view_selected
+        index = self.active_linked_object_index
+        objects = context.scene.objects
+        if index < 0 or index >= len(objects):
+            return
+        act_obj = objects[index]
+        if not is_linkable_object(act_obj):
+            return
+        context.view_layer.objects.active = act_obj
+        act_obj.select_set(True)
+        for obj in context.view_layer.objects.selected:
+            if obj != act_obj:
+                obj.select_set(False)
+        if self.object_linking_pin:
+            self.object_linking_pin_object = act_obj
+        view_selected(context)
+
+    active_linked_object_index: bpy.props.IntProperty(
+        default=0,
+        update=update_active_linked_object_index,
+    )
 
 
 def poll_linking_tool_light(_self, obj: bpy.types.Object) -> bool:

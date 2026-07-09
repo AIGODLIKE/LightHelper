@@ -1,4 +1,5 @@
 import bpy
+from bpy.app.translations import pgettext_iface as p_
 
 from ..utils.icon import get_item_icon
 
@@ -104,9 +105,38 @@ class LLT_UL_light(bpy.types.UIList):
         return flt_flags, flt_neworder
 
 
+class LLT_UL_linked_object(bpy.types.UIList):
+    """Lists objects that are referenced by any light linking collection."""
+
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
+        from ..utils import get_object_link_light_count
+        from ..utils.icon import get_item_icon
+
+        row = layout.row(align=True)
+        row.label(text=item.name, translate=False, **get_item_icon(item))
+        count = get_object_link_light_count(item, context)
+        if count:
+            row.label(text=p_("Linked lights: %d") % count)
+
+    def filter_items(self, context, data, propname):
+        from ..utils import iter_objects_linked_by_lights
+
+        helper_funcs = bpy.types.UI_UL_list
+        objects = getattr(data, propname)[:]
+        linked = set(iter_objects_linked_by_lights(context))
+        flt_flags = [
+            self.bitflag_filter_item if obj in linked else 0
+            for obj in objects
+        ]
+        flt_neworder = helper_funcs.sort_items_by_name(objects, "name")
+        return flt_flags, flt_neworder
+
+
 def register():
     bpy.utils.register_class(LLT_UL_light)
+    bpy.utils.register_class(LLT_UL_linked_object)
 
 
 def unregister():
+    bpy.utils.unregister_class(LLT_UL_linked_object)
     bpy.utils.unregister_class(LLT_UL_light)

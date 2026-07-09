@@ -408,9 +408,39 @@ def get_filtered_tool_objects(context: bpy.types.Context) -> list[bpy.types.Obje
     return [obj for obj in filter_objects(context) if is_linkable_object(obj)]
 
 
+def iter_objects_linked_by_lights(context: bpy.types.Context) -> list[bpy.types.Object]:
+    """Objects that appear in any light's receiver/blocker linking collections."""
+    linked: set[bpy.types.Object] = set()
+    for light_obj in context.scene.objects:
+        if not is_tool_light_source(light_obj, context):
+            continue
+        if not hasattr(light_obj, "light_linking"):
+            continue
+        linking = light_obj.light_linking
+        if not linking.receiver_collection and not linking.blocker_collection:
+            continue
+        for item in get_all_light_effect_items_state(light_obj):
+            if isinstance(item, bpy.types.Object):
+                if is_linkable_object(item):
+                    linked.add(resolve_original_id(item) or item)
+            elif isinstance(item, bpy.types.Collection):
+                for child in item.objects:
+                    if is_linkable_object(child):
+                        linked.add(resolve_original_id(child) or child)
+    return sorted(linked, key=lambda o: o.name.casefold())
+
+
+def is_object_linked_by_any_light(obj: bpy.types.Object, context: bpy.types.Context) -> bool:
+    obj = resolve_original_id(obj)
+    if obj is None or not is_linkable_object(obj):
+        return False
+    return obj in set(iter_objects_linked_by_lights(context))
+
+
 def cycle_tool_object(context: bpy.types.Context, obj: bpy.types.Object | None,
                       direction: int) -> bpy.types.Object | None:
-    objects = get_filtered_tool_objects(context)
+    # Match the Object Linking UIList: only objects already linked by lights.
+    objects = iter_objects_linked_by_lights(context)
     if not objects:
         return None
     obj = resolve_original_id(obj)
@@ -428,8 +458,10 @@ def select_tool_object(context: bpy.types.Context, obj: bpy.types.Object) -> Non
     view_layer.objects.active = obj
     obj.select_set(True)
     objects = context.scene.objects[:]
+    scene_props = context.scene.light_helper_property
     if obj in objects:
-        context.scene.light_helper_property.active_object_index = objects.index(obj)
+        scene_props.active_object_index = objects.index(obj)
+        scene_props.active_linked_object_index = objects.index(obj)
     view_selected(context)
 
 

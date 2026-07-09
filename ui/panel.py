@@ -219,6 +219,7 @@ class LLT_PT_light_control_panel(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "LH"
+    bl_order = 0
     bl_options = {'HEADER_LAYOUT_EXPAND'}
 
     def draw_header(self, context):
@@ -374,12 +375,16 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "LH"
+    bl_order = 1
     bl_options = {'HEADER_LAYOUT_EXPAND'}
 
     @classmethod
     def poll(cls, context):
         if not LLT_PT_light_control_panel.check_support_light_linking(context):
             return False
+        from ..utils import iter_objects_linked_by_lights
+        if iter_objects_linked_by_lights(context):
+            return True
         return get_panel_effect_obj(context) is not None
 
     def draw_header(self, context):
@@ -387,10 +392,39 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
         row = layout.row(align=True)
         row.label(text=p_("Object Linking"))
         row.separator()
+        scene_props = context.scene.light_helper_property
+        row.prop(
+            scene_props,
+            "show_object_linking_panel",
+            text="",
+            icon='HIDE_OFF' if scene_props.show_object_linking_panel else 'HIDE_ON',
+        )
 
     def draw(self, context):
         layout = self.layout
+        if context.scene.light_helper_property.show_object_linking_panel:
+            self.draw_linked_object_list(context, layout)
         self.draw_object(context, layout)
+
+    def draw_linked_object_list(self, context, layout):
+        from .ui_list import LLT_UL_linked_object
+        from ..utils import iter_objects_linked_by_lights
+
+        linked = iter_objects_linked_by_lights(context)
+        col = layout.column(align=True)
+        col.label(text=p_("Linked Objects"))
+        if not linked:
+            col.label(text=p_("No linked objects"), icon='INFO')
+            return
+        col.template_list(
+            LLT_UL_linked_object.__name__,
+            "",
+            context.scene,
+            "objects",
+            context.scene.light_helper_property,
+            "active_linked_object_index",
+            rows=4,
+        )
 
     def draw_object(self, context, layout):
         refresh_drop_poll_context(context)
@@ -440,6 +474,7 @@ class LLT_PT_light_properties(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "LH"
+    bl_order = 2
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
