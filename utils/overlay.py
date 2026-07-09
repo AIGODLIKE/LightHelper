@@ -126,20 +126,60 @@ def mark_hud_consumed_click() -> None:
     _hud_consumed_click = True
 
 
+def _hud_info_lines(context: bpy.types.Context) -> list[str]:
+    from bpy.app.translations import pgettext_iface as p_
+
+    wm_props = context.window_manager.light_helper_property
+    subject_mode = wm_props.linking_tool_subject_mode
+    lines = []
+
+    if subject_mode == 'OBJECT':
+        obj = wm_props.linking_tool_object
+        if obj is None:
+            lines.append(p_("Object: (none)"))
+        else:
+            lines.append(f"{p_('Object')}: {obj.name}")
+    else:
+        light = wm_props.linking_tool_light
+        if light is None:
+            lines.append(p_("Light: (none)"))
+        else:
+            mode = get_linking_mode(light)
+            mode_label = p_("Exclude") if mode == "EXCLUDE" else p_("Include")
+            lines.append(f"{p_('Light')}: {light.name}  [{mode_label}]")
+
+    if cache_needs_refresh(context):
+        refresh_overlay_cache(context)
+    link_count = len(_active_group_targets())
+    if link_count > 0:
+        if _cache.outlines_hidden:
+            lines.append(p_("Links: %d, outlines hidden") % link_count)
+        else:
+            lines.append(p_("Links: %d") % link_count)
+    else:
+        lines.append(p_("Links: %d") % 0)
+
+    overlay_mode = wm_props.linking_tool_overlay_mode
+    if overlay_mode == OVERLAY_MODE_OFF:
+        lines.append(p_("Overlay: Off"))
+    elif overlay_mode == OVERLAY_MODE_ALL:
+        lines.append(p_("Overlay: All"))
+    else:
+        lines.append(p_("Overlay: Selected"))
+    return lines
+
+
 def _hud_shortcut_lines(subject_mode: str) -> list[str]:
     from bpy.app.translations import pgettext_iface as p_
 
+    lines = [p_("Ctrl+LClick: Switch Subject Mode")]
     if subject_mode == 'OBJECT':
-        # Ctrl+LClick tip is drawn separately in red at the top of the HUD.
-        lines = [
+        lines.extend([
             p_("LClick: Switch Object Subject"),
             p_("LClick Light: Toggle Light Link"),
-        ]
+        ])
     else:
-        lines = [
-            p_("Ctrl+LClick: Switch Subject Mode"),
-            p_("LClick: Select/Toggle Link"),
-        ]
+        lines.append(p_("LClick: Select/Toggle Link"))
     lines.extend([
         f"L / {p_('Spacebar')}: {p_('Toggle Light')}",
         f"S: {p_('Toggle Shadow')}",
@@ -155,11 +195,21 @@ def _hud_shortcut_lines(subject_mode: str) -> list[str]:
     return lines
 
 
-def _hud_line_color(subject_mode: str, line: str, index: int) -> tuple[float, float, float, float]:
+def _hud_lines(context: bpy.types.Context) -> list[str]:
+    """Top-to-bottom: status info, blank separator, then shortcuts."""
+    wm_props = context.window_manager.light_helper_property
+    info = _hud_info_lines(context)
+    shortcuts = _hud_shortcut_lines(wm_props.linking_tool_subject_mode)
+    return info + [""] + shortcuts
+
+
+def _hud_line_color(subject_mode: str, line: str) -> tuple[float, float, float, float]:
     from bpy.app.translations import pgettext_iface as p_
 
-    if subject_mode == 'OBJECT' and index == 0 and line == p_("Ctrl+LClick: Switch Subject Mode"):
+    if subject_mode == 'OBJECT' and line == p_("Ctrl+LClick: Switch Subject Mode"):
         return (1.0, 0.35, 0.3, 1.0)
+    if not line:
+        return (1.0, 1.0, 1.0, 0.0)
     return (1.0, 1.0, 1.0, 0.95)
 
 
@@ -172,9 +222,12 @@ def _hud_bounds(context: bpy.types.Context, region: bpy.types.Region) -> tuple[f
     blf.size(font_id, HUD_FONT_SIZE)
     max_w = 0.0
     for line in lines:
+        if not line:
+            continue
         width, _height = blf.dimensions(font_id, line)
         max_w = max(max_w, width)
     total_h = len(lines) * HUD_LINE_HEIGHT if lines else HUD_LINE_HEIGHT
+    # Anchor is bottom-left; content grows upward.
     return (
         x - HUD_PADDING,
         y - HUD_PADDING,
@@ -604,50 +657,6 @@ def _draw_overlay_3d():
     gpu.state.blend_set('NONE')
 
 
-def _hud_lines(context: bpy.types.Context) -> list[str]:
-    from bpy.app.translations import pgettext_iface as p_
-
-    wm_props = context.window_manager.light_helper_property
-    subject_mode = wm_props.linking_tool_subject_mode
-    lines = []
-
-    if subject_mode == 'OBJECT':
-        # Put the mode-switch tip first so it draws in red on the HUD.
-        lines.append(p_("Ctrl+LClick: Switch Subject Mode"))
-        obj = wm_props.linking_tool_object
-        if obj is None:
-            lines.append(p_("Object: (none)"))
-        else:
-            lines.append(f"{p_('Object')}: {obj.name}")
-    else:
-        light = wm_props.linking_tool_light
-        if light is None:
-            lines.append(p_("Light: (none)"))
-        else:
-            mode = get_linking_mode(light)
-            mode_label = p_("Exclude") if mode == "EXCLUDE" else p_("Include")
-            lines.append(f"{p_('Light')}: {light.name}  [{mode_label}]")
-
-    lines.extend(_hud_shortcut_lines(subject_mode))
-
-    if cache_needs_refresh(context):
-        refresh_overlay_cache(context)
-    link_count = len(_active_group_targets())
-    if link_count > 0:
-        if _cache.outlines_hidden:
-            lines.append(p_("Links: %d, outlines hidden") % link_count)
-        else:
-            lines.append(p_("Links: %d") % link_count)
-    overlay_mode = wm_props.linking_tool_overlay_mode
-    if overlay_mode == OVERLAY_MODE_OFF:
-        lines.append(p_("Overlay: Off"))
-    elif overlay_mode == OVERLAY_MODE_ALL:
-        lines.append(p_("Overlay: All"))
-    else:
-        lines.append(p_("Overlay: Selected"))
-    return lines
-
-
 def _draw_overlay_hud():
     context = bpy.context
     wm_props = context.window_manager.light_helper_property
@@ -665,11 +674,15 @@ def _draw_overlay_hud():
     margin_y = wm_props.linking_tool_hud_y
     blf.size(font_id, HUD_FONT_SIZE)
 
+    # Draw top-to-bottom so list order matches on-screen reading order.
+    top_y = margin_y + max(0, len(lines) - 1) * HUD_LINE_HEIGHT
     blf.enable(font_id, blf.SHADOW)
     blf.shadow(font_id, 3, 0.0, 0.0, 0.0, 0.7)
     for i, line in enumerate(lines):
-        blf.position(font_id, margin_x, margin_y + i * HUD_LINE_HEIGHT, 0)
-        color = _hud_line_color(subject_mode, line, i)
+        if not line:
+            continue
+        blf.position(font_id, margin_x, top_y - i * HUD_LINE_HEIGHT, 0)
+        color = _hud_line_color(subject_mode, line)
         blf.color(font_id, *color)
         blf.draw(font_id, line)
     blf.disable(font_id, blf.SHADOW)
