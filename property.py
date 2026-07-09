@@ -208,12 +208,30 @@ class WindowManagerProperty(PropertyGroup):
         update=update_linking_tool_show_hud,
         options={'SKIP_SAVE'},
     )
+    def get_linking_tool_hud_x(self):
+        from .utils import get_pref
+        return get_pref().linking_tool_hud_x
+
+    def set_linking_tool_hud_x(self, value):
+        from .utils import get_pref
+        get_pref().linking_tool_hud_x = value
+
+    def get_linking_tool_hud_y(self):
+        from .utils import get_pref
+        return get_pref().linking_tool_hud_y
+
+    def set_linking_tool_hud_y(self, value):
+        from .utils import get_pref
+        get_pref().linking_tool_hud_y = value
+
     linking_tool_hud_x: bpy.props.IntProperty(
         name="HUD X",
         description="Horizontal position of the linking tool HUD",
         default=16,
         min=0,
         soft_max=4096,
+        get=get_linking_tool_hud_x,
+        set=set_linking_tool_hud_x,
         options={'SKIP_SAVE'},
     )
     linking_tool_hud_y: bpy.props.IntProperty(
@@ -222,6 +240,8 @@ class WindowManagerProperty(PropertyGroup):
         default=16,
         min=0,
         soft_max=4096,
+        get=get_linking_tool_hud_y,
+        set=set_linking_tool_hud_y,
         options={'SKIP_SAVE'},
     )
 

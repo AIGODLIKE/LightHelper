@@ -44,6 +44,23 @@ class LLP_OT_adjust_light_ev(LightHelperOperator, bpy.types.Operator):
         return {'FINISHED'}
 
 
+class LLP_OT_reset_linking_hud(LightHelperOperator, bpy.types.Operator):
+    bl_idname = 'wm.light_helper_reset_linking_hud'
+    bl_label = "Reset HUD Position"
+    bl_description = "Reset the linking tool HUD to the default corner position"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        from ..utils import get_pref
+        from ..utils.overlay import tag_view3d_redraw
+        pref = get_pref(context)
+        pref.linking_tool_hud_x = 16
+        pref.linking_tool_hud_y = 16
+        tag_view3d_redraw(context)
+        self.report({'INFO'}, p_("HUD position reset"))
+        return {'FINISHED'}
+
+
 class LLP_OT_solo_light(LightHelperOperator, bpy.types.Operator):
     bl_idname = 'object.light_helper_solo_light'
     bl_label = "Solo Light"

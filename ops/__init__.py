@@ -2,7 +2,7 @@ import bpy
 
 from .common import LightHelperOperator
 from .filter_ops import LLP_OT_invert_filter_show, LLP_OT_switch_filter_show
-from .light_adjust import LLP_OT_adjust_light_ev, LLP_OT_solo_light
+from .light_adjust import LLP_OT_adjust_light_ev, LLP_OT_reset_linking_hud, LLP_OT_solo_light
 from .maintenance import (
     LLP_OT_init_all_light_linking,
     LLP_OT_instances_data,
@@ -44,6 +44,7 @@ ops_list = [
     LLP_OT_switch_filter_show,
     LLP_OT_invert_filter_show,
     LLP_OT_adjust_light_ev,
+    LLP_OT_reset_linking_hud,
     LLP_OT_solo_light,
     LLP_OT_light_linking_pick,
     LLP_OT_light_linking_hud_drag,
@@ -82,6 +83,7 @@ __all__ = [
     "LLP_OT_switch_filter_show",
     "LLP_OT_invert_filter_show",
     "LLP_OT_adjust_light_ev",
+    "LLP_OT_reset_linking_hud",
     "LLP_OT_solo_light",
     "LLP_OT_light_linking_pick",
     "LLP_OT_light_linking_hud_drag",

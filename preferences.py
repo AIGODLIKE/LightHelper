@@ -94,9 +94,24 @@ class LLT_AddonPreferences(AddonPreferences):
         min=0,
         max=500,
     )
+    linking_tool_hud_x: IntProperty(
+        name="HUD X",
+        description="Horizontal position of the linking tool HUD",
+        default=16,
+        min=0,
+        soft_max=4096,
+    )
+    linking_tool_hud_y: IntProperty(
+        name="HUD Y",
+        description="Vertical position of the linking tool HUD",
+        default=16,
+        min=0,
+        soft_max=4096,
+    )
 
     def draw(self, context):
         from bpy.app.translations import pgettext_iface as p_
+        from .ops.light_adjust import LLP_OT_reset_linking_hud
         layout = self.layout
         column = layout.column(align=True)
         if bpy.app.version < (4, 3, 0):
@@ -108,6 +123,11 @@ class LLT_AddonPreferences(AddonPreferences):
         column.prop(self, "moving_view_type", text_ctxt="light_helper_zh_CN")
         column.prop(self, "auto_fix_shared_linking")
         column.prop(self, "linking_tool_max_outlines")
+        column.separator()
+        row = column.row(align=True)
+        row.prop(self, "linking_tool_hud_x")
+        row.prop(self, "linking_tool_hud_y")
+        column.operator(LLP_OT_reset_linking_hud.bl_idname, icon='LOOP_BACK')
         column.separator()
         column.label(
             text=p_("Use Exclude mode to omit listed objects from a light, or Include mode to affect only listed objects."),
