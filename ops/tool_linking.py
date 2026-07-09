@@ -109,7 +109,7 @@ class LLP_OT_light_linking_pick(_LLP_LightLinkingToolInvoke, LightHelperOperator
             if (is_linkable_object(obj)
                     and wm_props.linking_tool_subject_mode == 'LIGHT'
                     and current_light is not None
-                    and current_light.name == obj.name):
+                    and current_light == obj):
                 LLP_OT_light_linking_pick._set_object(context, obj)
                 operator.report({'INFO'}, p_("Object mode: %s") % obj.name)
                 return {'FINISHED'}
@@ -165,7 +165,7 @@ class LLP_OT_light_linking_pick(_LLP_LightLinkingToolInvoke, LightHelperOperator
 
         if object_mode:
             if is_tool_light_source(obj, context):
-                if subject.name == obj.name:
+                if subject == obj:
                     operator.report({'WARNING'}, p_("Cannot link a light source to itself"))
                     return {'CANCELLED'}
                 init_light_linking(obj, context)
@@ -179,7 +179,7 @@ class LLP_OT_light_linking_pick(_LLP_LightLinkingToolInvoke, LightHelperOperator
             return {'CANCELLED'}
 
         # Light mode
-        if is_tool_light_source(obj, context) and subject.name != obj.name:
+        if is_tool_light_source(obj, context) and subject != obj:
             LLP_OT_light_linking_pick._set_light(context, obj)
             operator.report({'INFO'}, p_("Selected light: %s") % obj.name)
             return {'FINISHED'}
@@ -188,7 +188,7 @@ class LLP_OT_light_linking_pick(_LLP_LightLinkingToolInvoke, LightHelperOperator
             operator.report({'WARNING'}, p_("Selected object cannot use light linking"))
             return {'CANCELLED'}
 
-        if subject.name == obj.name:
+        if subject == obj:
             operator.report({'WARNING'}, p_("Cannot link a light source to itself"))
             return {'CANCELLED'}
 

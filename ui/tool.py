@@ -254,10 +254,10 @@ def sync_list_from_selection(context: bpy.types.Context) -> bool:
         return False
 
     scene_props = context.scene.light_helper_property
-    objects = context.scene.objects
+    objects = context.scene.objects[:]
     try:
-        index = objects.find(obj.name)
-    except (AttributeError, TypeError):
+        index = objects.index(obj)
+    except ValueError:
         return False
     if index < 0:
         return False
@@ -294,12 +294,12 @@ def sync_tool_subject_from_selection(context: bpy.types.Context) -> bool:
     if wm_props.linking_tool_subject_mode == 'OBJECT':
         if is_linkable_object(obj):
             current = resolve_original_id(wm_props.linking_tool_object)
-            if current is None or current.name != obj.name:
+            if current is None or current != obj:
                 wm_props.linking_tool_object = obj
                 changed = True
     elif is_tool_light_source(obj, context):
         current = resolve_original_id(wm_props.linking_tool_light)
-        if current is None or current.name != obj.name:
+        if current is None or current != obj:
             wm_props.linking_tool_light = obj
             changed = True
 

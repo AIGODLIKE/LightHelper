@@ -13,7 +13,7 @@ class LLP_OT_instances_data(LightHelperOperator, bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         light_obj = get_light_obj(context)
-        if not light_obj:
+        if light_obj is None or light_obj.type != 'LIGHT' or not hasattr(light_obj, "light_linking"):
             cls.poll_message_set(p_("No light selected"))
             return False
         light = light_obj.light_linking
@@ -29,7 +29,7 @@ class LLP_OT_instances_data(LightHelperOperator, bpy.types.Operator):
     def execute(self, context):
         from ..utils import make_light_linking_single_user
         light_obj = get_light_obj(context)
-        if light_obj is None:
+        if light_obj is None or light_obj.type != 'LIGHT' or not hasattr(light_obj, "light_linking"):
             self.report({'ERROR'}, p_("No light selected"))
             return {"CANCELLED"}
         if not make_light_linking_single_user(light_obj):

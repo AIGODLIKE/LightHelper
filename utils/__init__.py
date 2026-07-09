@@ -261,10 +261,10 @@ def cycle_tool_light(context: bpy.types.Context, light: bpy.types.Object | None,
     if not lights:
         return None
     light = resolve_original_id(light)
-    names = [resolve_original_id(item).name for item in lights]
-    if light is None or light.name not in names:
+    resolved = [resolve_original_id(item) for item in lights]
+    if light is None or light not in resolved:
         return lights[0]
-    index = names.index(light.name)
+    index = resolved.index(light)
     return lights[(index + direction) % len(lights)]
 
 
@@ -414,10 +414,10 @@ def cycle_tool_object(context: bpy.types.Context, obj: bpy.types.Object | None,
     if not objects:
         return None
     obj = resolve_original_id(obj)
-    names = [resolve_original_id(item).name for item in objects]
-    if obj is None or obj.name not in names:
+    resolved = [resolve_original_id(item) for item in objects]
+    if obj is None or obj not in resolved:
         return objects[0]
-    index = names.index(obj.name)
+    index = resolved.index(obj)
     return objects[(index + direction) % len(objects)]
 
 

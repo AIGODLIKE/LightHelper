@@ -338,7 +338,8 @@ class WindowManagerProperty(PropertyGroup):
         item = self.drop_object_obj
         if item is None:
             return False
-        light_ok = obj not in get_lights_from_effect_obj(item, bpy.context)
+        # Prefer cached linking lights from refresh_drop_poll_context; no bpy.context in poll.
+        light_ok = obj not in get_lights_from_effect_obj(item)
         return check_light_object(obj) and obj.type == 'LIGHT' and light_ok
 
     light_linking_add_collection: bpy.props.PointerProperty(name='Drag and Drop to Add',

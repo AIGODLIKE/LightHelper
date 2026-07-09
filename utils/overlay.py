@@ -377,7 +377,6 @@ def _build_all_light_groups(context: bpy.types.Context, active_light: bpy.types.
     from . import resolve_original_id
 
     active_light = resolve_original_id(active_light)
-    active_name = active_light.name if active_light else None
     groups = []
     total_targets = 0
     for light in context.scene.objects:
@@ -388,7 +387,7 @@ def _build_all_light_groups(context: bpy.types.Context, active_light: bpy.types.
         targets, _ = _build_targets_from_light(light, -1)
         if not targets:
             continue
-        is_active = active_name is not None and light.name == active_name
+        is_active = active_light is not None and light == active_light
         groups.append(LinkDrawGroup(light, targets, is_active))
         total_targets += len(targets)
     groups.sort(key=lambda group: (not group.is_active, group.subject.name.casefold() if group.subject else ""))
@@ -401,7 +400,6 @@ def _build_all_object_groups(context: bpy.types.Context, active_obj: bpy.types.O
     from . import is_linkable_object, resolve_original_id
 
     active_obj = resolve_original_id(active_obj)
-    active_name = active_obj.name if active_obj else None
     groups = []
     total_targets = 0
     for obj in context.scene.objects:
@@ -412,7 +410,7 @@ def _build_all_object_groups(context: bpy.types.Context, active_obj: bpy.types.O
         targets, _ = _build_targets_from_object(obj, context, -1)
         if not targets:
             continue
-        is_active = active_name is not None and obj.name == active_name
+        is_active = active_obj is not None and obj == active_obj
         groups.append(LinkDrawGroup(obj, targets, is_active))
         total_targets += len(targets)
     groups.sort(key=lambda group: (not group.is_active, group.subject.name.casefold() if group.subject else ""))

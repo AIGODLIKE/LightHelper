@@ -218,12 +218,14 @@ class LLP_OT_link_selected_objs(LightHelperOperator, bpy.types.Operator):
         return True
 
     def execute(self, context):
+        from ..utils import is_linkable_object
+
         light = getattr(context, "link_light_obj", None)
         if not light:
             self.report({'ERROR'}, p_("No light selected"))
             return {"CANCELLED"}
         for obj in context.selected_objects:
-            if obj == light:
+            if obj == light or not is_linkable_object(obj):
                 continue
             link_item_both_channels(light, obj, context)
         return {"FINISHED"}
