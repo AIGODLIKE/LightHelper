@@ -204,8 +204,7 @@ def _active_group_targets() -> list[LinkDrawTarget]:
 
 
 def get_active_link_count(context: bpy.types.Context | None = None) -> int:
-    if context is not None and cache_needs_refresh(context):
-        refresh_overlay_cache(context)
+    """Read cached active link count. Does not refresh from draw paths."""
     return len(_active_group_targets())
 
 

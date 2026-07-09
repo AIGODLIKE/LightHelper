@@ -18,11 +18,13 @@ _last_seen_tool_idname = None
 _tool_registered = False
 _msgbus_owner = object()
 _depsgraph_sync_registered = False
+_msgbus_subscribed = False
 _deferred_session_sync_pending = False
+_deferred_selection_sync_pending = False
 
 
 def _deferred_session_sync():
-    """One-shot timer: sync session outside of UI draw."""
+    """One-shot timer: sync session outside of UI draw / depsgraph."""
     global _deferred_session_sync_pending
     _deferred_session_sync_pending = False
     try:
@@ -49,6 +51,33 @@ def schedule_session_sync():
         return
     _deferred_session_sync_pending = True
     bpy.app.timers.register(_deferred_session_sync, first_interval=0.0)
+
+
+def _deferred_selection_sync():
+    """One-shot timer: sync subject from selection outside depsgraph."""
+    global _deferred_selection_sync_pending
+    _deferred_selection_sync_pending = False
+    try:
+        context = bpy.context
+        if context is None or not is_session_active(context):
+            return None
+        if not is_light_linking_tool_active(context):
+            schedule_session_sync()
+            return None
+        sync_tool_subject_from_selection(context)
+    except (AttributeError, ReferenceError, TypeError):
+        pass
+    return None
+
+
+def schedule_selection_sync():
+    global _deferred_selection_sync_pending
+    if _deferred_selection_sync_pending:
+        return
+    if bpy.app.timers.is_registered(_deferred_selection_sync):
+        return
+    _deferred_selection_sync_pending = True
+    bpy.app.timers.register(_deferred_selection_sync, first_interval=0.0)
 
 
 def get_active_tool_idname(context: bpy.types.Context) -> str | None:
@@ -163,6 +192,9 @@ def start_tool_session(context: bpy.types.Context) -> None:
                 wm_props.linking_tool_object = init_session_object(context)
         elif wm_props.linking_tool_light is None:
             wm_props.linking_tool_light = init_session_light(context)
+        _subscribe_tool_changes()
+        _register_depsgraph_sync()
+        register_draw_handlers()
         refresh_overlay_cache(context)
         tag_view3d_redraw(context)
         return
@@ -171,6 +203,8 @@ def start_tool_session(context: bpy.types.Context) -> None:
     wm_props.linking_tool_active = True
     wm_props.linking_tool_light = light
     wm_props.linking_tool_object = None
+    _subscribe_tool_changes()
+    _register_depsgraph_sync()
     register_draw_handlers()
     refresh_overlay_cache(context)
     tag_view3d_redraw(context)
@@ -186,6 +220,8 @@ def stop_tool_session(context: bpy.types.Context) -> None:
     wm_props.linking_tool_object = None
     wm_props.linking_tool_subject_mode = 'LIGHT'
     unregister_draw_handlers()
+    _unsubscribe_tool_changes()
+    _unregister_depsgraph_sync()
     invalidate_overlay_cache()
     tag_view3d_redraw(context)
     if context.window:
@@ -230,18 +266,15 @@ def _on_tool_changed(*_args):
 
 @bpy.app.handlers.persistent
 def _depsgraph_sync_selection(_scene, _depsgraph):
+    """Session-only: never mutate RNA here; defer to one-shot timers."""
     try:
         context = bpy.context
-        if context is None:
+        if context is None or not is_session_active(context):
             return
-        tool_on = is_light_linking_tool_active(context)
-        session_on = is_session_active(context)
-        if tool_on != session_on:
-            # Avoid mutating session state inside depsgraph; defer to a one-shot timer.
+        if not is_light_linking_tool_active(context):
             schedule_session_sync()
             return
-        if session_on:
-            sync_tool_subject_from_selection(context)
+        schedule_selection_sync()
     except (AttributeError, ReferenceError, TypeError):
         pass
 
@@ -265,6 +298,7 @@ def _unregister_depsgraph_sync() -> None:
 
 
 def _subscribe_tool_changes():
+    global _msgbus_subscribed
     try:
         bpy.msgbus.clear_by_owner(_msgbus_owner)
         bpy.msgbus.subscribe_rna(
@@ -274,15 +308,18 @@ def _subscribe_tool_changes():
             notify=_on_tool_changed,
             options={'PERSISTENT'},
         )
+        _msgbus_subscribed = True
     except (AttributeError, TypeError, RuntimeError):
-        pass
+        _msgbus_subscribed = False
 
 
 def _unsubscribe_tool_changes():
+    global _msgbus_subscribed
     try:
         bpy.msgbus.clear_by_owner(_msgbus_owner)
     except (AttributeError, TypeError, RuntimeError):
         pass
+    _msgbus_subscribed = False
 
 
 class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
@@ -421,27 +458,29 @@ def register():
         group=False,
     )
     _tool_registered = True
-    _subscribe_tool_changes()
-    _register_depsgraph_sync()
+    # msgbus / depsgraph attach in start_tool_session only.
     try:
-        if is_light_linking_tool_active(bpy.context):
-            start_tool_session(bpy.context)
+        if bpy.context is not None and is_light_linking_tool_active(bpy.context):
+            schedule_session_sync()
     except (AttributeError, ReferenceError, TypeError):
         pass
 
 
 def unregister():
-    global _tool_registered, _deferred_session_sync_pending
-    _unsubscribe_tool_changes()
-    _unregister_depsgraph_sync()
+    global _tool_registered, _deferred_session_sync_pending, _deferred_selection_sync_pending
     if bpy.app.timers.is_registered(_deferred_session_sync):
         bpy.app.timers.unregister(_deferred_session_sync)
+    if bpy.app.timers.is_registered(_deferred_selection_sync):
+        bpy.app.timers.unregister(_deferred_selection_sync)
     _deferred_session_sync_pending = False
+    _deferred_selection_sync_pending = False
     try:
         if bpy.context is not None:
             stop_tool_session(bpy.context)
     except (AttributeError, ReferenceError, TypeError):
         pass
+    _unsubscribe_tool_changes()
+    _unregister_depsgraph_sync()
     if _tool_registered:
         bpy.utils.unregister_tool(VIEW3D_WT_light_linking)
         _tool_registered = False

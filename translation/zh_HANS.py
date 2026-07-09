@@ -102,6 +102,7 @@ data = {
     "Initialize light linking collections for this light": "为此灯光初始化灯光链接集合",
     "Linking Mode": "链接模式",
     "Exclude: listed objects are excluded from this light. Include: only listed objects receive this light": "排除：列表中的物体不受此灯光影响。包含：仅列表中的物体受此灯光影响。",
+    "Include: only listed objects receive this light. Exclude: listed objects are excluded from this light": "包含：仅列表中的物体受此灯光影响。排除：列表中的物体不受此灯光影响。",
     "Exclude": "排除",
     "Include": "包含",
     "Listed objects are excluded from illumination and shadow linking": "列表中的物体被排除在灯光与阴影链接之外",

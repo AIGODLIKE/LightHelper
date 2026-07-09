@@ -17,13 +17,13 @@ def check_light_object(obj: bpy.types.Object) -> bool:
 class ObjectProperty(PropertyGroup):
     linking_mode: bpy.props.EnumProperty(
         name="Linking Mode",
-        description="Exclude: listed objects are excluded from this light. Include: only listed objects receive this light",
+        description="Include: only listed objects receive this light. Exclude: listed objects are excluded from this light",
         translation_context="light_helper_zh_CN",
         items=[
-            ("EXCLUDE", "Exclude", "Listed objects are excluded from illumination and shadow linking"),
             ("INCLUDE", "Include", "Only listed objects receive illumination and shadow linking"),
+            ("EXCLUDE", "Exclude", "Listed objects are excluded from illumination and shadow linking"),
         ],
-        default="EXCLUDE",
+        default="INCLUDE",
         update=update_linking_mode,
     )
 

@@ -70,7 +70,7 @@ def is_linking_initialized(light: bpy.types.Object) -> bool:
 def get_linking_mode(light: bpy.types.Object) -> str:
     if hasattr(light, "light_helper_property"):
         return light.light_helper_property.linking_mode
-    return StateValue.EXCLUDE.value
+    return StateValue.INCLUDE.value
 
 
 def get_linking_coll(obj: bpy.types.Object, type: CollectionType) -> bpy.types.Collection:

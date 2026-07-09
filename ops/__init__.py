@@ -57,14 +57,7 @@ def register():
 
 
 def unregister():
-    from ..utils.overlay import invalidate_overlay_cache, unregister_draw_handlers
-    from ..ui.tool import stop_tool_session
-    try:
-        stop_tool_session(bpy.context)
-    except (AttributeError, TypeError, ReferenceError):
-        pass
-    unregister_draw_handlers()
-    invalidate_overlay_cache()
+    # Session / draw-handler teardown lives in ui.tool.unregister.
     unregister_class()
 
 
