@@ -37,11 +37,24 @@ def get_panel_effect_obj(context) -> bpy.types.Object | None:
     return None
 
 
-def get_cycles_panel(panel_name: str):
+def get_builtin_panel(panel_name: str):
     return getattr(bpy.types, panel_name, None)
 
 
-def _cycles_light_context(context, light_obj: bpy.types.Object):
+def _is_eevee_engine(engine: str) -> bool:
+    return engine in {'BLENDER_EEVEE', 'BLENDER_EEVEE_NEXT'}
+
+
+def _panel_engine_override(engine: str) -> str:
+    # Built-in EEVEE light panels declare COMPAT_ENGINES = {'BLENDER_EEVEE'}.
+    if engine == 'BLENDER_EEVEE_NEXT':
+        return 'BLENDER_EEVEE'
+    return engine
+
+
+def _light_data_context(context, light_obj: bpy.types.Object, engine: str | None = None):
+    if engine is None:
+        engine = context.scene.render.engine
     return context.temp_override(
         object=light_obj,
         active_object=light_obj,
@@ -49,31 +62,51 @@ def _cycles_light_context(context, light_obj: bpy.types.Object):
         selected_editable_objects=[light_obj],
         light=light_obj.data,
         id=light_obj.data,
-        engine='CYCLES',
+        engine=_panel_engine_override(engine),
     )
 
 
-def cycles_panel_poll(panel_name: str, context, light_obj: bpy.types.Object) -> bool:
-    panel_cls = get_cycles_panel(panel_name)
+def builtin_panel_poll(panel_name: str, context, light_obj: bpy.types.Object,
+                       engine: str | None = None) -> bool:
+    panel_cls = get_builtin_panel(panel_name)
     if panel_cls is None or light_obj is None or light_obj.type != 'LIGHT':
         return False
-    with _cycles_light_context(context, light_obj):
+    with _light_data_context(context, light_obj, engine):
         return panel_cls.poll(context)
 
 
-def draw_cycles_panel(panel_name: str, layout, context, light_obj: bpy.types.Object) -> None:
-    panel_cls = get_cycles_panel(panel_name)
+def draw_builtin_panel(panel_name: str, layout, context, light_obj: bpy.types.Object,
+                       engine: str | None = None) -> None:
+    panel_cls = get_builtin_panel(panel_name)
     if panel_cls is None:
         return
 
     class _PanelUI:
-        bl_space_type = 'VIEW_3D'
+        bl_space_type = 'PROPERTIES'
 
-    _PanelUI.layout = layout
-    with _cycles_light_context(context, light_obj):
+    ui = _PanelUI()
+    ui.layout = layout
+    with _light_data_context(context, light_obj, engine):
         if not panel_cls.poll(context):
             return
-        panel_cls.draw(_PanelUI(), context)
+        panel_cls.draw(ui, context)
+
+
+def draw_builtin_panel_header(panel_name: str, layout, context, light_obj: bpy.types.Object,
+                              engine: str | None = None) -> None:
+    panel_cls = get_builtin_panel(panel_name)
+    if panel_cls is None or not hasattr(panel_cls, "draw_header"):
+        return
+
+    class _PanelUI:
+        bl_space_type = 'PROPERTIES'
+
+    ui = _PanelUI()
+    ui.layout = layout
+    with _light_data_context(context, light_obj, engine):
+        if not panel_cls.poll(context):
+            return
+        panel_cls.draw_header(ui, context)
 
 
 def draw_light_ev_controls(layout, context) -> None:
@@ -436,9 +469,6 @@ class LLT_PT_light_properties(bpy.types.Panel):
         self.layout.label(text=light_obj.name, icon=get_light_icon(light_obj), translate=False)
 
     def draw(self, context):
-        light_obj = get_panel_light_obj(context)
-        if light_obj is None:
-            return
         draw_light_ev_controls(self.layout, context)
 
 
@@ -449,20 +479,19 @@ class LLT_PT_cycles_light(bpy.types.Panel):
     bl_region_type = 'UI'
     bl_category = "LH"
     bl_parent_id = "LLT_PT_light_properties"
-    bl_options = {'DEFAULT_CLOSED'}
+    bl_options = set()
 
     @classmethod
     def poll(cls, context):
         if context.scene.render.engine != 'CYCLES':
             return False
-        light_obj = get_panel_light_obj(context)
-        return cycles_panel_poll('CYCLES_LIGHT_PT_light', context, light_obj)
+        return builtin_panel_poll('CYCLES_LIGHT_PT_light', context, get_panel_light_obj(context), 'CYCLES')
 
     def draw(self, context):
         light_obj = get_panel_light_obj(context)
         if light_obj is None:
             return
-        draw_cycles_panel('CYCLES_LIGHT_PT_light', self.layout, context, light_obj)
+        draw_builtin_panel('CYCLES_LIGHT_PT_light', self.layout, context, light_obj, 'CYCLES')
 
 
 class LLT_PT_light_settings(bpy.types.Panel):
@@ -472,20 +501,91 @@ class LLT_PT_light_settings(bpy.types.Panel):
     bl_region_type = 'UI'
     bl_category = "LH"
     bl_parent_id = "LLT_PT_light_properties"
-    bl_options = {'DEFAULT_CLOSED'}
+    bl_options = set()
 
     @classmethod
     def poll(cls, context):
         if context.scene.render.engine != 'CYCLES':
             return False
-        light_obj = get_panel_light_obj(context)
-        return cycles_panel_poll('CYCLES_LIGHT_PT_settings', context, light_obj)
+        return builtin_panel_poll('CYCLES_LIGHT_PT_settings', context, get_panel_light_obj(context), 'CYCLES')
 
     def draw(self, context):
         light_obj = get_panel_light_obj(context)
         if light_obj is None:
             return
-        draw_cycles_panel('CYCLES_LIGHT_PT_settings', self.layout, context, light_obj)
+        draw_builtin_panel('CYCLES_LIGHT_PT_settings', self.layout, context, light_obj, 'CYCLES')
+
+
+class LLT_PT_eevee_light(bpy.types.Panel):
+    bl_label = "Light"
+    bl_idname = "LLT_PT_eevee_light"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "LH"
+    bl_parent_id = "LLT_PT_light_properties"
+    bl_options = set()
+
+    @classmethod
+    def poll(cls, context):
+        if not _is_eevee_engine(context.scene.render.engine):
+            return False
+        return builtin_panel_poll('DATA_PT_EEVEE_light', context, get_panel_light_obj(context))
+
+    def draw(self, context):
+        light_obj = get_panel_light_obj(context)
+        if light_obj is None:
+            return
+        draw_builtin_panel('DATA_PT_EEVEE_light', self.layout, context, light_obj)
+
+
+class LLT_PT_eevee_light_shadow(bpy.types.Panel):
+    bl_label = "Shadow"
+    bl_idname = "LLT_PT_eevee_light_shadow"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "LH"
+    bl_parent_id = "LLT_PT_eevee_light"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        if not _is_eevee_engine(context.scene.render.engine):
+            return False
+        return builtin_panel_poll('DATA_PT_EEVEE_light_shadow', context, get_panel_light_obj(context))
+
+    def draw_header(self, context):
+        light_obj = get_panel_light_obj(context)
+        if light_obj is None:
+            return
+        draw_builtin_panel_header('DATA_PT_EEVEE_light_shadow', self.layout, context, light_obj)
+
+    def draw(self, context):
+        light_obj = get_panel_light_obj(context)
+        if light_obj is None:
+            return
+        draw_builtin_panel('DATA_PT_EEVEE_light_shadow', self.layout, context, light_obj)
+
+
+class LLT_PT_eevee_light_influence(bpy.types.Panel):
+    bl_label = "Influence"
+    bl_idname = "LLT_PT_eevee_light_influence"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "LH"
+    bl_parent_id = "LLT_PT_eevee_light"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        if not _is_eevee_engine(context.scene.render.engine):
+            return False
+        return builtin_panel_poll('DATA_PT_EEVEE_light_influence', context, get_panel_light_obj(context))
+
+    def draw(self, context):
+        light_obj = get_panel_light_obj(context)
+        if light_obj is None:
+            return
+        draw_builtin_panel('DATA_PT_EEVEE_light_influence', self.layout, context, light_obj)
 
 
 panel_list = [
@@ -494,6 +594,9 @@ panel_list = [
     LLT_PT_light_properties,
     LLT_PT_cycles_light,
     LLT_PT_light_settings,
+    LLT_PT_eevee_light,
+    LLT_PT_eevee_light_shadow,
+    LLT_PT_eevee_light_influence,
 ]
 register_class, unregister_class = bpy.utils.register_classes_factory(panel_list)
 _registered_category = None

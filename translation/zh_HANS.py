@@ -100,6 +100,8 @@ data = {
     "Cleared light linking for %d light(s): %s": "已清除 %d 个灯光的链接：%s",
     "Cleared light linking for %d light(s): %s, and %d more": "已清除 %d 个灯光的链接：%s，另有 %d 个",
     "Light Properties": "灯光属性",
+    "Shadow": "阴影",
+    "Influence": "影响",
     "Adjust Light EV": "调整灯光 EV",
     "Multiply selected light energy by 2^EV": "将选中灯光能量乘以 2^EV",
     "-1 EV": "-1 EV",
