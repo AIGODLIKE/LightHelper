@@ -69,15 +69,14 @@ def load_post_fix_handler(_dummy):
         fix_all_shared_light_linking(scene)
 
 
-_handlers = (
-    depsgraph_update_post_handler,
-    load_post_fix_handler,
-)
-
-_handler_lists = (
-    bpy.app.handlers.depsgraph_update_post,
-    bpy.app.handlers.load_post,
-)
+def sync_auto_fix_depsgraph_handler(enabled: bool | None = None) -> None:
+    if enabled is None:
+        enabled = _auto_fix_enabled()
+    if enabled:
+        if depsgraph_update_post_handler not in bpy.app.handlers.depsgraph_update_post:
+            bpy.app.handlers.depsgraph_update_post.append(depsgraph_update_post_handler)
+    elif depsgraph_update_post_handler in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.remove(depsgraph_update_post_handler)
 
 
 def run_fix_for_all_scenes() -> None:
@@ -95,9 +94,11 @@ def _deferred_fix():
 
 
 def register():
-    for handler, handler_list in zip(_handlers, _handler_lists):
-        if handler not in handler_list:
-            handler_list.append(handler)
+    # load_post for file open; depsgraph only while auto-fix is enabled.
+    if load_post_fix_handler not in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.append(load_post_fix_handler)
+    sync_auto_fix_depsgraph_handler()
+    # One-shot fix after enable; do not keep a permanent timer.
     if not bpy.app.timers.is_registered(_deferred_fix):
         bpy.app.timers.register(_deferred_fix, first_interval=0.0)
 
@@ -105,6 +106,6 @@ def register():
 def unregister():
     if bpy.app.timers.is_registered(_deferred_fix):
         bpy.app.timers.unregister(_deferred_fix)
-    for handler, handler_list in zip(_handlers, _handler_lists):
-        if handler in handler_list:
-            handler_list.remove(handler)
+    sync_auto_fix_depsgraph_handler(False)
+    if load_post_fix_handler in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.remove(load_post_fix_handler)

@@ -178,7 +178,7 @@ class LLT_PT_light_control_panel(bpy.types.Panel):
         layout = self.layout
 
         action_row = layout.row(align=True)
-        action_row.label(text="Light Linking")
+        action_row.label(text=p_("Light Linking"))
         action_row.separator(factor=1.5)
         buttons = action_row.row(align=True)
         init_row = buttons.row(align=True)
@@ -217,7 +217,7 @@ Use Exclude/Include mode to control list semantics, and toggle light or shadow p
         layout = self.layout
         if not self.check_support_light_linking(context):
             layout.alert = True
-            layout.label(text="This rendering engine does not support light linking")
+            layout.label(text=p_("This rendering engine does not support light linking"))
             layout.label(text=context.scene.render.engine)
             layout = layout.column()
             layout.alert = False
@@ -260,8 +260,8 @@ Use Exclude/Include mode to control list semantics, and toggle light or shadow p
                 if LLP_OT_add_light_linking.poll(context) is False:
                     cc = col.column()
                     cc.alert = True
-                    cc.label(text="Please select light or can be illuminated object")
-                    cc.label(text=pgettext_iface("Current type: ") + context.object.type)
+                    cc.label(text=p_("Please select light or can be illuminated object"))
+                    cc.label(text=p_("Current type: ") + context.object.type)
             return
 
         col.separator()
@@ -327,7 +327,7 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
         from ..ops import LLP_OT_question
         layout = self.layout
         row = layout.row(align=True)
-        row.label(text="Object Linking")
+        row.label(text=p_("Object Linking"))
         tips = row.operator(LLP_OT_question.bl_idname, text='', icon='QUESTION', emboss=False)
         if tips:
             tips.data = p_(
@@ -351,7 +351,7 @@ Provides buttons to toggle light or shadow channel per light."""
         if not item:
             return
         if item.type == 'LIGHT':
-            layout.label(text="Light can't be an effected object")
+            layout.label(text=p_("Light can't be an effected object"))
             return
 
         col = layout.column()
@@ -364,7 +364,7 @@ Provides buttons to toggle light or shadow channel per light."""
 
         obj_state_dict = get_lights_from_effect_obj(item, context)
         if len(obj_state_dict) == 0:
-            col.label(text='No Link type lights effecting this object', icon='LIGHT')
+            col.label(text=p_('No Link type lights effecting this object'), icon='LIGHT')
             box = col.box()
             box.prop(context.window_manager.light_helper_property, 'object_linking_add_object', text='', icon='ADD')
             return

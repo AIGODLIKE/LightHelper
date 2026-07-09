@@ -6,6 +6,7 @@ class LLT_UL_light(bpy.types.UIList):
     sort_type: bpy.props.EnumProperty(
         name="Use Sort",
         default="TYPE",
+        translation_context="light_helper_zh_CN",
         items=[("TYPE", "Type", ""),
                ("NAME", "Name", "")],
         options=set(),
@@ -19,6 +20,7 @@ class LLT_UL_light(bpy.types.UIList):
         from bpy.app.translations import pgettext_iface
 
         pref = get_pref(context)
+        tctx = "light_helper_zh_CN"
 
         sp = layout.column(align=True).split(factor=0.2, align=True)
 
@@ -29,10 +31,10 @@ class LLT_UL_light(bpy.types.UIList):
                 "Show",
                 "Moving View Type",
         ):
-            sc.label(text=f"{pgettext_iface(i)}:")
+            sc.label(text=f"{pgettext_iface(i, tctx)}:")
 
         sc = sp.column(align=True)
-        sc.row(align=True).prop(self, "sort_type", expand=True)
+        sc.row(align=True).prop(self, "sort_type", expand=True, text_ctxt=tctx)
 
         row = sc.row(align=True)
         row.prop(self, "show_type", emboss=True, toggle=True)

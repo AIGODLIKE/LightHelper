@@ -70,16 +70,22 @@ class LLT_AddonPreferences(AddonPreferences):
     moving_view_type: EnumProperty(
         name="Moving View Type",
         default="NONE",
+        translation_context="light_helper_zh_CN",
         items=[
             ("NONE", "None", "Only Select, Do not move the view", "RESTRICT_SELECT_OFF", 0),
             ("MAINTAINING_ZOOM", "Maintaining Zoom", "Direct switching of view position,no animation", "VIEWZOOM", 1),
             ("ANIMATION", "Animation", "Animation switching, no fixed zoom", "ANIM", 2),
         ]
     )
+    def update_auto_fix_shared_linking(self, _context):
+        from .handlers import sync_auto_fix_depsgraph_handler
+        sync_auto_fix_depsgraph_handler(self.auto_fix_shared_linking)
+
     auto_fix_shared_linking: bpy.props.BoolProperty(
         name="Auto Fix Shared Linking",
         description="Automatically split shared light linking collections when lights are duplicated, and inherit linking for duplicated objects",
         default=True,
+        update=update_auto_fix_shared_linking,
     )
     linking_tool_max_outlines: IntProperty(
         name="Linking Tool Max Outlines",
@@ -90,24 +96,25 @@ class LLT_AddonPreferences(AddonPreferences):
     )
 
     def draw(self, context):
+        from bpy.app.translations import pgettext_iface as p_
         layout = self.layout
         column = layout.column(align=True)
         if bpy.app.version < (4, 3, 0):
-            column.label(text="Version lower than 4.3.0, only the CYCLE renderer can set light exclusion")
+            column.label(text=p_("Version lower than 4.3.0, only the CYCLE renderer can set light exclusion"))
         column.prop(self, "panel_name")
         column.prop(self, "node_search_depth")
         column.prop(self, "light_list_filter_type")
         column.prop(self, "light_link_filter_type", text_ctxt="light_helper_zh_CN")
-        column.prop(self, "moving_view_type")
+        column.prop(self, "moving_view_type", text_ctxt="light_helper_zh_CN")
         column.prop(self, "auto_fix_shared_linking")
         column.prop(self, "linking_tool_max_outlines")
         column.separator()
         column.label(
-            text="Use Exclude mode to omit listed objects from a light, or Include mode to affect only listed objects.",
+            text=p_("Use Exclude mode to omit listed objects from a light, or Include mode to affect only listed objects."),
             icon='INFO',
         )
         column.label(
-            text="Restore clears light linking collections and resets default lighting behavior.",
+            text=p_("Restore clears light linking collections and resets default lighting behavior."),
         )
 
 

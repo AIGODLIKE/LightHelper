@@ -100,10 +100,6 @@ class LinkOverlayCache:
 _cache = LinkOverlayCache()
 
 
-def get_overlay_cache() -> LinkOverlayCache:
-    return _cache
-
-
 def notify_linking_changed(context: bpy.types.Context | None = None) -> None:
     ctx = context if context is not None else bpy.context
     if ctx is None or ctx.window_manager is None:
@@ -680,6 +676,21 @@ def _collect_overlay_object_names() -> set[str]:
     return names
 
 
+def _collect_overlay_collection_names() -> set[str]:
+    names = set()
+    for group in _cache.groups:
+        if group.subject is not None and hasattr(group.subject, "light_linking"):
+            linking = group.subject.light_linking
+            if linking.receiver_collection is not None:
+                names.add(linking.receiver_collection.name)
+            if linking.blocker_collection is not None:
+                names.add(linking.blocker_collection.name)
+        for target in group.targets:
+            if target.is_collection:
+                names.add(target.item.name)
+    return names
+
+
 @bpy.app.handlers.persistent
 def _depsgraph_update_post(_scene, depsgraph: bpy.types.Depsgraph):
     try:
@@ -693,11 +704,22 @@ def _depsgraph_update_post(_scene, depsgraph: bpy.types.Depsgraph):
             return
 
         relevant_names = _collect_overlay_object_names()
-        if not relevant_names:
-            return
+        collection_names = _collect_overlay_collection_names()
+        needs_cache_refresh = False
+        needs_redraw = False
 
         for update in depsgraph.updates:
             id_ref = update.id
+            if isinstance(id_ref, bpy.types.Collection):
+                if id_ref.is_evaluated:
+                    id_ref = id_ref.original
+                    if id_ref is None:
+                        continue
+                if id_ref.name in collection_names:
+                    needs_cache_refresh = True
+                    break
+                continue
+
             if not isinstance(id_ref, bpy.types.Object):
                 continue
             if id_ref.is_evaluated:
@@ -707,13 +729,35 @@ def _depsgraph_update_post(_scene, depsgraph: bpy.types.Depsgraph):
             if id_ref.name not in relevant_names:
                 continue
             if update.is_updated_transform or update.is_updated_geometry:
-                tag_view3d_redraw(context)
-                return
+                needs_redraw = True
+
+        if needs_cache_refresh:
+            invalidate_overlay_cache()
+            refresh_overlay_cache(context)
+            tag_view3d_redraw(context)
+        elif needs_redraw:
+            tag_view3d_redraw(context)
     except Exception:
         pass
 
 
+_undo_handler_registered = False
 _depsgraph_handler_registered = False
+
+
+@bpy.app.handlers.persistent
+def _undo_redo_post(_dummy):
+    try:
+        context = bpy.context
+        if context is None or context.window_manager is None:
+            return
+        if not context.window_manager.light_helper_property.linking_tool_active:
+            return
+        invalidate_overlay_cache()
+        refresh_overlay_cache(context)
+        tag_view3d_redraw(context)
+    except Exception:
+        pass
 
 
 def tag_view3d_redraw(context: bpy.types.Context | None = None):
@@ -727,7 +771,7 @@ def tag_view3d_redraw(context: bpy.types.Context | None = None):
 
 
 def register_draw_handlers():
-    global _draw_handler_3d, _draw_handler_hud, _depsgraph_handler_registered
+    global _draw_handler_3d, _draw_handler_hud, _depsgraph_handler_registered, _undo_handler_registered
     if _draw_handler_3d is None:
         _draw_handler_3d = bpy.types.SpaceView3D.draw_handler_add(
             _draw_overlay_3d, (), 'WINDOW', 'POST_VIEW',
@@ -740,10 +784,16 @@ def register_draw_handlers():
         if _depsgraph_update_post not in bpy.app.handlers.depsgraph_update_post:
             bpy.app.handlers.depsgraph_update_post.append(_depsgraph_update_post)
         _depsgraph_handler_registered = True
+    if not _undo_handler_registered:
+        if _undo_redo_post not in bpy.app.handlers.undo_post:
+            bpy.app.handlers.undo_post.append(_undo_redo_post)
+        if _undo_redo_post not in bpy.app.handlers.redo_post:
+            bpy.app.handlers.redo_post.append(_undo_redo_post)
+        _undo_handler_registered = True
 
 
 def unregister_draw_handlers():
-    global _draw_handler_3d, _draw_handler_hud, _depsgraph_handler_registered
+    global _draw_handler_3d, _draw_handler_hud, _depsgraph_handler_registered, _undo_handler_registered
     if _draw_handler_3d is not None:
         bpy.types.SpaceView3D.draw_handler_remove(_draw_handler_3d, 'WINDOW')
         _draw_handler_3d = None
@@ -754,6 +804,12 @@ def unregister_draw_handlers():
         if _depsgraph_update_post in bpy.app.handlers.depsgraph_update_post:
             bpy.app.handlers.depsgraph_update_post.remove(_depsgraph_update_post)
         _depsgraph_handler_registered = False
+    if _undo_handler_registered:
+        if _undo_redo_post in bpy.app.handlers.undo_post:
+            bpy.app.handlers.undo_post.remove(_undo_redo_post)
+        if _undo_redo_post in bpy.app.handlers.redo_post:
+            bpy.app.handlers.redo_post.remove(_undo_redo_post)
+        _undo_handler_registered = False
 
 
 def _view3d_window_at_mouse(context: bpy.types.Context, event):
@@ -778,10 +834,6 @@ def _view3d_window_at_mouse(context: bpy.types.Context, event):
 
 def _region_coord_from_event(event, region) -> tuple[float, float]:
     return float(event.mouse_x - region.x), float(event.mouse_y - region.y)
-
-
-def _event_region_coord(context, event, region) -> tuple[float, float]:
-    return _region_coord_from_event(event, region)
 
 
 def _depth_along_view(origin: Vector, direction: Vector, world_co: Vector) -> float:
@@ -849,27 +901,10 @@ def _pick_object_at_coord(context: bpy.types.Context, area, region, coord) -> bp
         return candidates[0][1]
 
 
-def pick_object_under_mouse(context: bpy.types.Context, event,
-                            *, change_selection: bool = False) -> bpy.types.Object | None:
+def pick_object_under_mouse(context: bpy.types.Context, event) -> bpy.types.Object | None:
     """Pick the object under the cursor without changing the current selection."""
     area, region = _view3d_window_at_mouse(context, event)
     if area is None or region is None:
         return None
-
     coord = _region_coord_from_event(event, region)
-    picked = _pick_object_at_coord(context, area, region, coord)
-    if picked is None:
-        return None
-
-    if change_selection:
-        view_layer = context.view_layer
-        for obj in view_layer.objects.selected:
-            obj.select_set(False)
-        picked.select_set(True)
-        view_layer.objects.active = picked
-
-    return picked
-
-
-def raycast_object_under_mouse(context: bpy.types.Context, event) -> bpy.types.Object | None:
-    return pick_object_under_mouse(context, event, change_selection=False)
+    return _pick_object_at_coord(context, area, region, coord)

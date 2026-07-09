@@ -45,15 +45,13 @@ class LLP_OT_light_linking_pick(LightHelperOperator, bpy.types.Operator):
         return LLT_PT_light_control_panel.check_support_light_linking(context)
 
     @staticmethod
-    def _pick_target(context, event, *, change_selection: bool = False):
+    def _pick_target(context, event):
         from ..utils.overlay import _view3d_window_at_mouse, pick_object_under_mouse
 
         area, region = _view3d_window_at_mouse(context, event)
         if area is None or region is None:
             return None, None, None
-        return area, region, pick_object_under_mouse(
-            context, event, change_selection=change_selection,
-        )
+        return area, region, pick_object_under_mouse(context, event)
 
     @staticmethod
     def _finish_pick(context):
@@ -141,6 +139,10 @@ class LLP_OT_light_linking_pick(LightHelperOperator, bpy.types.Operator):
             operator.report({'WARNING'}, p_("Selected object cannot use light linking"))
             return {'CANCELLED'}
 
+        if current_light is not None and current_light.name == obj.name:
+            operator.report({'WARNING'}, p_("Cannot link a light source to itself"))
+            return {'CANCELLED'}
+
         if toggle_both:
             enabled = toggle_item_both_channels(light, obj, context)
             action = p_("linked") if enabled else p_("unlinked")
@@ -176,6 +178,9 @@ class LLP_OT_light_linking_pick(LightHelperOperator, bpy.types.Operator):
 
         obj = resolve_original_id(obj)
         if is_tool_light_source(obj, context):
+            if subject.name == obj.name:
+                operator.report({'WARNING'}, p_("Cannot link a light source to itself"))
+                return {'CANCELLED'}
             init_light_linking(obj, context)
             if toggle_both:
                 enabled = toggle_item_both_channels(obj, subject, context)
@@ -217,6 +222,8 @@ class LLP_OT_light_linking_pick(LightHelperOperator, bpy.types.Operator):
         start_tool_session(context)
         if hud_consumed_click():
             clear_hud_consumed_click()
+            return {'CANCELLED'}
+        if mouse_over_hud(context, event):
             return {'CANCELLED'}
         if event.ctrl:
             return self.perform_ctrl_pick(self, context, event)
@@ -274,12 +281,15 @@ class LLP_OT_light_linking_hud_drag(_LLP_LightLinkingToolPoll, LightHelperOperat
 class LLP_OT_light_linking_toggle_light(_LLP_LightLinkingToolPoll, LightHelperOperator, bpy.types.Operator):
     bl_idname = 'object.light_helper_light_linking_toggle_light'
     bl_label = "Toggle Light Channel"
-    bl_description = "Toggle light channel for object under cursor"
+    bl_description = "Toggle the light channel for the object under the cursor"
     bl_options = {'REGISTER', 'UNDO'}
 
     def invoke(self, context, event):
         from ..ui.tool import start_tool_session
+        from ..utils.overlay import mouse_over_hud
         start_tool_session(context)
+        if mouse_over_hud(context, event):
+            return {'CANCELLED'}
         return LLP_OT_light_linking_pick.perform_pick(
             self, context, event, toggle_both=False, coll_type=CollectionType.RECEIVER,
         )
@@ -288,12 +298,15 @@ class LLP_OT_light_linking_toggle_light(_LLP_LightLinkingToolPoll, LightHelperOp
 class LLP_OT_light_linking_toggle_shadow(_LLP_LightLinkingToolPoll, LightHelperOperator, bpy.types.Operator):
     bl_idname = 'object.light_helper_light_linking_toggle_shadow'
     bl_label = "Toggle Shadow Channel"
-    bl_description = "Toggle shadow channel for object under cursor"
+    bl_description = "Toggle the shadow channel for the object under the cursor"
     bl_options = {'REGISTER', 'UNDO'}
 
     def invoke(self, context, event):
         from ..ui.tool import start_tool_session
+        from ..utils.overlay import mouse_over_hud
         start_tool_session(context)
+        if mouse_over_hud(context, event):
+            return {'CANCELLED'}
         return LLP_OT_light_linking_pick.perform_pick(
             self, context, event, toggle_both=False, coll_type=CollectionType.BLOCKER,
         )

@@ -134,7 +134,6 @@ def start_tool_session(context: bpy.types.Context) -> None:
     wm_props.linking_tool_active = True
     wm_props.linking_tool_light = light
     wm_props.linking_tool_object = None
-    wm_props.linking_tool_overlay_mode = 'SELECTED'
     register_draw_handlers()
     refresh_overlay_cache(context)
     tag_view3d_redraw(context)
@@ -165,8 +164,10 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
     bl_idname = TOOL_IDNAME
     bl_label = "Light Linking"
     bl_description = (
-        "Interactive light linking tool\n"
-        "LClick: select light or toggle link"
+        "Interactive light linking tool. "
+        "LClick: select/toggle link. "
+        "Ctrl+LClick: switch light/object. "
+        "Esc: exit tool"
     )
     bl_icon = TOOL_ICON
     bl_widget = None
@@ -330,24 +331,26 @@ def _tool_session_poll():
     try:
         context = bpy.context
         if context is None or context.window_manager is None:
-            return 0.15
+            return 0.5
         _track_previous_tool(context)
         if is_light_linking_tool_active(context):
             if not _session_active:
                 start_tool_session(context)
             else:
                 _sync_tool_subject_from_selection(context)
-        elif _session_active:
+            return 0.2
+        if _session_active:
             stop_tool_session(context)
     except Exception:
         pass
-    return 0.15
+    # Idle: poll less often while the linking tool is not active.
+    return 0.5
 
 
 def _start_session_timer():
     global _session_timer
     if _session_timer is None:
-        _session_timer = bpy.app.timers.register(_tool_session_poll, first_interval=0.05)
+        _session_timer = bpy.app.timers.register(_tool_session_poll, first_interval=0.1)
 
 
 def _stop_session_timer():
