@@ -50,27 +50,26 @@ class LLT_UL_light(bpy.types.UIList):
         split = layout.split(factor=0.2, align=True)
 
         left = split.row(align=True)
+        index = context.scene.objects[:].index(item)
 
         if self.show_in_view:
             icon = "HIDE_OFF" if item.light_helper_property.show_in_view else "HIDE_ON"
-
             left.prop(item.light_helper_property, "show_in_view", text='', icon=icon, emboss=False)
             left.separator()
 
-            index = context.scene.objects[:].index(item)
-            if item.type == 'LIGHT':
-                solo = context.window_manager.light_helper_property.solo_light
-                solo_active = solo is not None and solo.name == item.name
-                solo_row = left.row(align=True)
-                solo_row.context_pointer_set("solo_light_object", item)
-                op = solo_row.operator(
-                    LLP_OT_solo_light.bl_idname,
-                    text="",
-                    icon='CLIPUV_HLT',
-                    depress=solo_active,
-                    emboss=False
-                )
-                op.index = index
+        if item.type == 'LIGHT':
+            solo = context.window_manager.light_helper_property.solo_light
+            solo_active = solo is not None and solo.name == item.name
+            solo_row = left.row(align=True)
+            solo_row.alert = solo_active
+            solo_row.context_pointer_set("solo_light_object", item)
+            op = solo_row.operator(
+                LLP_OT_solo_light.bl_idname,
+                text="",
+                icon='CLIPUV_DEHLT' if solo_active else 'CLIPUV_HLT',
+                emboss=solo_active,
+            )
+            op.index = index
 
         left.label(**get_item_icon(item))
         if self.show_type:
