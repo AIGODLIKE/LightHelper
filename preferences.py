@@ -97,14 +97,14 @@ class LLT_AddonPreferences(AddonPreferences):
     linking_tool_hud_x: IntProperty(
         name="HUD X",
         description="Horizontal position of the linking tool HUD",
-        default=16,
+        default=100,
         min=0,
         soft_max=4096,
     )
     linking_tool_hud_y: IntProperty(
         name="HUD Y",
         description="Vertical position of the linking tool HUD",
-        default=16,
+        default=150,
         min=0,
         soft_max=4096,
     )

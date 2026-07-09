@@ -129,16 +129,20 @@ def mark_hud_consumed_click() -> None:
 def _hud_shortcut_lines(subject_mode: str) -> list[str]:
     from bpy.app.translations import pgettext_iface as p_
 
-    lines = [
-        p_("Ctrl+LClick: Switch Light/Object"),
-    ]
     if subject_mode == 'OBJECT':
-        lines.append(p_("LClick: Toggle Light Link"))
+        # Ctrl+LClick tip is drawn separately in red at the top of the HUD.
+        lines = [
+            p_("LClick: Switch Object Subject"),
+            p_("LClick Light: Toggle Light Link"),
+        ]
     else:
-        lines.append(p_("LClick: Select/Toggle Link"))
+        lines = [
+            p_("Ctrl+LClick: Switch Subject Mode"),
+            p_("LClick: Select/Toggle Link"),
+        ]
     lines.extend([
-        f"{p_('Spacebar')}: {p_('Toggle Light')}",
-        f"D: {p_('Toggle Shadow')}",
+        f"L / {p_('Spacebar')}: {p_('Toggle Light')}",
+        f"S: {p_('Toggle Shadow')}",
         f"A: {p_('Exclude')}/{p_('Include')}",
         f"X: {p_('Cycle Overlay')}",
         f"Esc: {p_('Exit Tool')}",
@@ -149,6 +153,14 @@ def _hud_shortcut_lines(subject_mode: str) -> list[str]:
         lines.append(p_("Ctrl+Wheel: Prev/Next Light"))
     lines.append(p_("LDrag on HUD: Move HUD"))
     return lines
+
+
+def _hud_line_color(subject_mode: str, line: str, index: int) -> tuple[float, float, float, float]:
+    from bpy.app.translations import pgettext_iface as p_
+
+    if subject_mode == 'OBJECT' and index == 0 and line == p_("Ctrl+LClick: Switch Subject Mode"):
+        return (1.0, 0.35, 0.3, 1.0)
+    return (1.0, 1.0, 1.0, 0.95)
 
 
 def _hud_bounds(context: bpy.types.Context, region: bpy.types.Region) -> tuple[float, float, float, float]:
@@ -600,6 +612,8 @@ def _hud_lines(context: bpy.types.Context) -> list[str]:
     lines = []
 
     if subject_mode == 'OBJECT':
+        # Put the mode-switch tip first so it draws in red on the HUD.
+        lines.append(p_("Ctrl+LClick: Switch Subject Mode"))
         obj = wm_props.linking_tool_object
         if obj is None:
             lines.append(p_("Object: (none)"))
@@ -644,6 +658,7 @@ def _draw_overlay_hud():
     if region is None:
         return
 
+    subject_mode = wm_props.linking_tool_subject_mode
     lines = _hud_lines(context)
     font_id = 0
     margin_x = wm_props.linking_tool_hud_x
@@ -654,7 +669,8 @@ def _draw_overlay_hud():
     blf.shadow(font_id, 3, 0.0, 0.0, 0.0, 0.7)
     for i, line in enumerate(lines):
         blf.position(font_id, margin_x, margin_y + i * HUD_LINE_HEIGHT, 0)
-        blf.color(font_id, 1.0, 1.0, 1.0, 0.95)
+        color = _hud_line_color(subject_mode, line, i)
+        blf.color(font_id, *color)
         blf.draw(font_id, line)
     blf.disable(font_id, blf.SHADOW)
 

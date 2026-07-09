@@ -418,8 +418,8 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
     bl_label = "Light Linking"
     bl_description = (
         "Interactive light linking tool. "
-        "LClick: select/toggle link. "
-        "Ctrl+LClick: switch light/object. "
+        "LClick: select/toggle link or switch object subject. "
+        "Ctrl+LClick: switch subject mode. "
         "Esc: exit tool"
     )
     bl_icon = TOOL_ICON
@@ -427,9 +427,12 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
     bl_operator = ""
     bl_keymap = (
         (TOOL_HUD_DRAG, {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
+        (TOOL_PICK, {"type": 'LEFTMOUSE', "value": 'CLICK', "ctrl": True},
+         {"properties": [("switch_subject_mode", True)]}),
         (TOOL_PICK, {"type": 'LEFTMOUSE', "value": 'CLICK'}, None),
         ("object.light_helper_light_linking_toggle_light", {"type": 'SPACE', "value": 'PRESS'}, None),
-        ("object.light_helper_light_linking_toggle_shadow", {"type": 'D', "value": 'PRESS'}, None),
+        ("object.light_helper_light_linking_toggle_light", {"type": 'L', "value": 'PRESS'}, None),
+        ("object.light_helper_light_linking_toggle_shadow", {"type": 'S', "value": 'PRESS'}, None),
         ("object.light_helper_light_linking_toggle_mode", {"type": 'A', "value": 'PRESS'}, None),
         ("object.light_helper_light_linking_toggle_overlay", {"type": 'X', "value": 'PRESS'}, None),
         ("object.light_helper_light_linking_exit", {"type": 'ESC', "value": 'PRESS'}, None),
@@ -455,6 +458,10 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
         from ..utils.icon import get_item_icon, get_light_icon
 
         if subject_mode == 'OBJECT':
+            tip = row.row(align=True)
+            tip.alert = True
+            tip.label(text=p_("Ctrl+LClick: Switch Subject Mode"), icon='INFO')
+            tip.separator(factor=0.8)
             if obj is not None:
                 row.label(text=obj.name, icon='OBJECT_DATA', translate=False)
                 row.separator(factor=0.8)
@@ -519,6 +526,9 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
 
         col.separator()
         if subject_mode == 'OBJECT':
+            tip = col.row(align=True)
+            tip.alert = True
+            tip.label(text=p_("Ctrl+LClick: Switch Subject Mode"), icon='INFO')
             if obj is not None:
                 col.label(text=obj.name, icon='OBJECT_DATA', translate=False)
                 col.label(text=p_("Linked lights: %d") % link_count)

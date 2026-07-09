@@ -56,6 +56,12 @@ class LLP_OT_light_linking_pick(_LLP_LightLinkingToolInvoke, LightHelperOperator
     bl_description = "Select subject or toggle light linking"
     bl_options = {'REGISTER', 'UNDO'}
 
+    switch_subject_mode: bpy.props.BoolProperty(
+        name="Switch Subject Mode",
+        default=False,
+        options={'SKIP_SAVE', 'HIDDEN'},
+    )
+
     @staticmethod
     def _pick_target(context, event):
         from ..utils.overlay import pick_object_under_mouse, view3d_window_at_mouse
@@ -67,18 +73,21 @@ class LLP_OT_light_linking_pick(_LLP_LightLinkingToolInvoke, LightHelperOperator
 
     @staticmethod
     def _finish_pick(context):
+        from ..ui.tool import _tag_sidebar_redraw
         from ..utils.overlay import invalidate_overlay_cache, refresh_overlay_cache, tag_view3d_redraw
         invalidate_overlay_cache()
         refresh_overlay_cache(context)
         tag_view3d_redraw(context)
+        _tag_sidebar_redraw(context)
 
     @staticmethod
     def _set_light(context, light_obj: bpy.types.Object):
         light_obj = resolve_original_id(light_obj)
         wm_props = context.window_manager.light_helper_property
-        wm_props.linking_tool_subject_mode = 'LIGHT'
+        # Assign subject first, then force mode so RNA update cannot wipe it.
         wm_props.linking_tool_light = light_obj
         wm_props.linking_tool_object = None
+        wm_props["linking_tool_subject_mode"] = 0  # LIGHT
         select_tool_light(context, light_obj)
         LLP_OT_light_linking_pick._finish_pick(context)
 
@@ -86,9 +95,10 @@ class LLP_OT_light_linking_pick(_LLP_LightLinkingToolInvoke, LightHelperOperator
     def _set_object(context, obj: bpy.types.Object):
         obj = resolve_original_id(obj)
         wm_props = context.window_manager.light_helper_property
-        wm_props.linking_tool_subject_mode = 'OBJECT'
+        # Assign subject first, then force mode so RNA update cannot wipe it.
         wm_props.linking_tool_object = obj
         wm_props.linking_tool_light = None
+        wm_props["linking_tool_subject_mode"] = 1  # OBJECT
         select_tool_object(context, obj)
         LLP_OT_light_linking_pick._finish_pick(context)
 
@@ -103,19 +113,15 @@ class LLP_OT_light_linking_pick(_LLP_LightLinkingToolInvoke, LightHelperOperator
             return {'CANCELLED'}
 
         obj = resolve_original_id(obj)
-        if is_tool_light_source(obj, context):
-            wm_props = context.window_manager.light_helper_property
-            current_light = resolve_original_id(wm_props.linking_tool_light)
-            if (is_linkable_object(obj)
-                    and wm_props.linking_tool_subject_mode == 'LIGHT'
-                    and current_light is not None
-                    and current_light == obj):
-                LLP_OT_light_linking_pick._set_object(context, obj)
-                operator.report({'INFO'}, p_("Object mode: %s") % obj.name)
-                return {'FINISHED'}
+
+        # True lights always switch to light subject mode.
+        if obj.type == 'LIGHT':
             LLP_OT_light_linking_pick._set_light(context, obj)
             operator.report({'INFO'}, p_("Light mode: %s") % obj.name)
             return {'FINISHED'}
+
+        # Any linkable mesh/object (including emissive) switches to object mode.
+        # Use the hub to stay in light mode when treating an emissive mesh as a light.
         if is_linkable_object(obj):
             LLP_OT_light_linking_pick._set_object(context, obj)
             operator.report({'INFO'}, p_("Object mode: %s") % obj.name)
@@ -164,7 +170,8 @@ class LLP_OT_light_linking_pick(_LLP_LightLinkingToolInvoke, LightHelperOperator
         obj = resolve_original_id(obj)
 
         if object_mode:
-            if is_tool_light_source(obj, context):
+            # True lights toggle linking; any linkable object (incl. emissive) becomes subject.
+            if obj.type == 'LIGHT':
                 if subject == obj:
                     operator.report({'WARNING'}, p_("Cannot link a light source to itself"))
                     return {'CANCELLED'}
@@ -173,8 +180,9 @@ class LLP_OT_light_linking_pick(_LLP_LightLinkingToolInvoke, LightHelperOperator
                     operator, context, obj, subject, toggle_both, coll_type,
                 )
             if is_linkable_object(obj):
-                operator.report({'INFO'}, p_("Use Ctrl+LClick to switch object subject"))
-                return {'CANCELLED'}
+                LLP_OT_light_linking_pick._set_object(context, obj)
+                operator.report({'INFO'}, p_("Object mode: %s") % obj.name)
+                return {'FINISHED'}
             operator.report({'WARNING'}, p_("No light under cursor"))
             return {'CANCELLED'}
 
@@ -200,7 +208,7 @@ class LLP_OT_light_linking_pick(_LLP_LightLinkingToolInvoke, LightHelperOperator
         blocked = self.invoke_tool(context, event, skip_hud=True, clear_hud_click=True)
         if blocked is not None:
             return blocked
-        if event.ctrl:
+        if self.switch_subject_mode or event.ctrl:
             return self.perform_ctrl_pick(self, context, event)
         return self.perform_pick(self, context, event, toggle_both=True)
 

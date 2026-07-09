@@ -236,7 +236,7 @@ class WindowManagerProperty(PropertyGroup):
     linking_tool_hud_x: bpy.props.IntProperty(
         name="HUD X",
         description="Horizontal position of the linking tool HUD",
-        default=16,
+        default=100,
         min=0,
         soft_max=4096,
         get=get_linking_tool_hud_x,
@@ -246,7 +246,7 @@ class WindowManagerProperty(PropertyGroup):
     linking_tool_hud_y: bpy.props.IntProperty(
         name="HUD Y",
         description="Vertical position of the linking tool HUD",
-        default=16,
+        default=150,
         min=0,
         soft_max=4096,
         get=get_linking_tool_hud_y,

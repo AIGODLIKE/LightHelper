@@ -54,8 +54,8 @@ class LLP_OT_reset_linking_hud(LightHelperOperator, bpy.types.Operator):
         from ..utils import get_pref
         from ..utils.overlay import tag_view3d_redraw
         pref = get_pref(context)
-        pref.linking_tool_hud_x = 16
-        pref.linking_tool_hud_y = 16
+        pref.linking_tool_hud_x = 100
+        pref.linking_tool_hud_y = 150
         tag_view3d_redraw(context)
         self.report({'INFO'}, p_("HUD position reset"))
         return {'FINISHED'}
