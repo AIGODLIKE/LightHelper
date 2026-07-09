@@ -54,17 +54,20 @@ def schedule_session_sync():
 
 
 def _deferred_selection_sync():
-    """One-shot timer: sync subject from selection outside depsgraph."""
+    """One-shot timer: sync list (+ tool subject when session is on)."""
     global _deferred_selection_sync_pending
     _deferred_selection_sync_pending = False
     try:
         context = bpy.context
-        if context is None or not is_session_active(context):
+        if context is None:
             return None
-        if not is_light_linking_tool_active(context):
-            schedule_session_sync()
-            return None
-        sync_tool_subject_from_selection(context)
+        # Sidebar list should follow Outliner/viewport even without the tool session.
+        sync_list_from_selection(context)
+        if is_session_active(context):
+            if not is_light_linking_tool_active(context):
+                schedule_session_sync()
+            else:
+                sync_tool_subject_from_selection(context)
     except (AttributeError, ReferenceError, TypeError):
         pass
     return None
@@ -228,19 +231,51 @@ def stop_tool_session(context: bpy.types.Context) -> None:
         context.window.cursor_set('DEFAULT')
 
 
-def _sync_active_object_index(context: bpy.types.Context, obj: bpy.types.Object) -> None:
-    """Keep sidebar UIList highlight in sync without re-entering selection update."""
+def _tag_sidebar_redraw(context: bpy.types.Context) -> None:
+    for window in context.window_manager.windows:
+        screen = window.screen
+        if screen is None:
+            continue
+        for area in screen.areas:
+            if area.type == 'VIEW_3D':
+                area.tag_redraw()
+
+
+_syncing_list_index = False
+
+
+def sync_list_from_selection(context: bpy.types.Context) -> bool:
+    """Keep sidebar UIList highlight in sync with Outliner/viewport active object."""
+    global _syncing_list_index
+    from ..utils import resolve_original_id
+
+    obj = resolve_original_id(context.view_layer.objects.active or context.object)
+    if obj is None:
+        return False
+
     scene_props = context.scene.light_helper_property
     objects = context.scene.objects
     try:
         index = objects.find(obj.name)
     except (AttributeError, TypeError):
-        return
+        return False
     if index < 0:
-        return
-    if scene_props.active_object_index != index:
-        # Assign via RNA path that skips update callback when possible.
-        scene_props["active_object_index"] = index
+        return False
+    if scene_props.active_object_index == index:
+        return False
+
+    # Skip update callback to avoid re-selecting / view jumps from Outliner picks.
+    _syncing_list_index = True
+    try:
+        scene_props.active_object_index = index
+    finally:
+        _syncing_list_index = False
+    _tag_sidebar_redraw(context)
+    return True
+
+
+def is_syncing_list_index() -> bool:
+    return _syncing_list_index
 
 
 def sync_tool_subject_from_selection(context: bpy.types.Context) -> bool:
@@ -262,13 +297,13 @@ def sync_tool_subject_from_selection(context: bpy.types.Context) -> bool:
             if current is None or current.name != obj.name:
                 wm_props.linking_tool_object = obj
                 changed = True
-            _sync_active_object_index(context, obj)
     elif is_tool_light_source(obj, context):
         current = resolve_original_id(wm_props.linking_tool_light)
         if current is None or current.name != obj.name:
             wm_props.linking_tool_light = obj
             changed = True
-        _sync_active_object_index(context, obj)
+
+    sync_list_from_selection(context)
 
     if changed:
         invalidate_overlay_cache()
@@ -283,7 +318,7 @@ def _on_tool_changed(*_args):
 
 @bpy.app.handlers.persistent
 def _depsgraph_sync_selection(_scene, _depsgraph):
-    """Session-only: never mutate RNA here; defer to one-shot timers."""
+    """Session-only fallback for tool subject; list sync uses always-on msgbus."""
     try:
         context = bpy.context
         if context is None or not is_session_active(context):
@@ -314,9 +349,41 @@ def _unregister_depsgraph_sync() -> None:
     _depsgraph_sync_registered = False
 
 
+_active_object_msgbus_owner = object()
+_active_object_subscribed = False
+
+
 def _on_active_object_changed(*_args):
-    """Outliner / viewport active object changes (more reliable than depsgraph alone)."""
+    """Outliner / viewport active object changes."""
     schedule_selection_sync()
+
+
+def _subscribe_active_object():
+    """Always-on: sidebar list follows Outliner selection."""
+    global _active_object_subscribed
+    if _active_object_subscribed:
+        return
+    try:
+        bpy.msgbus.clear_by_owner(_active_object_msgbus_owner)
+        bpy.msgbus.subscribe_rna(
+            key=(bpy.types.LayerObjects, "active"),
+            owner=_active_object_msgbus_owner,
+            args=(),
+            notify=_on_active_object_changed,
+            options={'PERSISTENT'},
+        )
+        _active_object_subscribed = True
+    except (AttributeError, TypeError, RuntimeError):
+        _active_object_subscribed = False
+
+
+def _unsubscribe_active_object():
+    global _active_object_subscribed
+    try:
+        bpy.msgbus.clear_by_owner(_active_object_msgbus_owner)
+    except (AttributeError, TypeError, RuntimeError):
+        pass
+    _active_object_subscribed = False
 
 
 def _subscribe_tool_changes():
@@ -328,13 +395,6 @@ def _subscribe_tool_changes():
             owner=_msgbus_owner,
             args=(),
             notify=_on_tool_changed,
-            options={'PERSISTENT'},
-        )
-        bpy.msgbus.subscribe_rna(
-            key=(bpy.types.LayerObjects, "active"),
-            owner=_msgbus_owner,
-            args=(),
-            notify=_on_active_object_changed,
             options={'PERSISTENT'},
         )
         _msgbus_subscribed = True
@@ -487,10 +547,13 @@ def register():
         group=False,
     )
     _tool_registered = True
-    # msgbus / depsgraph attach in start_tool_session only.
+    _subscribe_active_object()
+    # Tool msgbus / depsgraph attach in start_tool_session only.
     try:
         if bpy.context is not None and is_light_linking_tool_active(bpy.context):
             schedule_session_sync()
+        elif bpy.context is not None:
+            schedule_selection_sync()
     except (AttributeError, ReferenceError, TypeError):
         pass
 
@@ -508,6 +571,7 @@ def unregister():
             stop_tool_session(bpy.context)
     except (AttributeError, ReferenceError, TypeError):
         pass
+    _unsubscribe_active_object()
     _unsubscribe_tool_changes()
     _unregister_depsgraph_sync()
     if _tool_registered:

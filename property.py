@@ -86,8 +86,10 @@ class SceneProperty(PropertyGroup):
     object_linking_pin: bpy.props.BoolProperty(name='Pin', update=update_pin_object2)
 
     def update_active_object_index(self, context):
+        from .ui.tool import is_session_active, is_syncing_list_index, sync_tool_subject_from_selection
+        if is_syncing_list_index():
+            return
         from .utils import view_selected
-        from .ui.tool import is_session_active, sync_tool_subject_from_selection
         index = self.active_object_index
         objects = context.scene.objects
         if index < 0 or index >= len(objects):
