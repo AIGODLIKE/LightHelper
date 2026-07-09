@@ -362,14 +362,21 @@ def get_light_link_item_count(light: bpy.types.Object) -> int:
     return len(get_all_light_effect_items_state(light))
 
 
-def get_object_overlay_lights_state(obj: bpy.types.Object,
-                                    context: bpy.types.Context | None = None) -> dict:
+def get_lights_from_effect_obj(obj: bpy.types.Object, context: bpy.types.Context | None = None) -> dict:
+    """Return lights that affect ``obj`` via light/shadow linking."""
     light_state = {}
-    if obj is None or context is None:
+    if obj is None:
         return light_state
 
     obj = resolve_original_id(obj)
-    for light_obj in context.scene.objects:
+    if _cached_linking_lights:
+        lights = _cached_linking_lights
+    elif context is not None:
+        lights = context.scene.objects
+    else:
+        return light_state
+
+    for light_obj in lights:
         if not is_tool_light_source(light_obj, context) or not hasattr(light_obj, 'light_linking'):
             continue
         linking = light_obj.light_linking
@@ -389,10 +396,14 @@ def get_object_overlay_lights_state(obj: bpy.types.Object,
     return light_state
 
 
+# Keep the overlay-facing name as an alias of the shared query.
+get_object_overlay_lights_state = get_lights_from_effect_obj
+
+
 def get_object_link_light_count(obj: bpy.types.Object, context: bpy.types.Context | None = None) -> int:
     if obj is None:
         return 0
-    return len(get_object_overlay_lights_state(obj, context))
+    return len(get_lights_from_effect_obj(obj, context))
 
 
 def get_filtered_tool_objects(context: bpy.types.Context) -> list[bpy.types.Object]:
@@ -477,34 +488,6 @@ def refresh_drop_poll_context(context: bpy.types.Context) -> None:
 
 def get_view_layer_collections_cache():
     return _view_layer_collections_cache
-
-
-def get_lights_from_effect_obj(obj: bpy.types.Object, context: bpy.types.Context | None = None) -> dict:
-    light_state = {}
-    if _cached_linking_lights:
-        lights = _cached_linking_lights
-    elif context is not None:
-        lights = context.scene.objects
-    else:
-        return light_state
-
-    for light_obj in lights:
-        if not is_tool_light_source(light_obj, context) or not hasattr(light_obj, 'light_linking'):
-            continue
-        if not light_obj.light_linking.receiver_collection and not light_obj.light_linking.blocker_collection:
-            continue
-
-        receiver_on = is_object_affected_in_channel(light_obj, obj, CollectionType.RECEIVER)
-        blocker_on = is_object_affected_in_channel(light_obj, obj, CollectionType.BLOCKER)
-        if not receiver_on and not blocker_on:
-            continue
-
-        light_state[light_obj] = {
-            CollectionType.RECEIVER: True if receiver_on else None,
-            CollectionType.BLOCKER: True if blocker_on else None,
-        }
-
-    return light_state
 
 
 def check_material_including_emission(

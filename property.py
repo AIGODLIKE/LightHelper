@@ -134,13 +134,13 @@ class WindowManagerProperty(PropertyGroup):
         if self.linking_tool_subject_mode == 'OBJECT':
             self.linking_tool_light = None
             if self.linking_tool_active and self.linking_tool_object is None:
-                from .ui.tool import _init_session_object
-                self.linking_tool_object = _init_session_object(context)
+                from .ui.tool import init_session_object
+                self.linking_tool_object = init_session_object(context)
         else:
             self.linking_tool_object = None
             if self.linking_tool_active and self.linking_tool_light is None:
-                from .ui.tool import _init_session_light
-                self.linking_tool_light = _init_session_light(context)
+                from .ui.tool import init_session_light
+                self.linking_tool_light = init_session_light(context)
         if self.linking_tool_active:
             invalidate_overlay_cache()
             refresh_overlay_cache(context)

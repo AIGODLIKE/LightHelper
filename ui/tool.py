@@ -11,10 +11,44 @@ TOOL_ICON = os.path.join(
     "icons",
     "ops.light_helper.light_linking",
 )
-_session_active = False
+DEFAULT_FALLBACK_TOOL = "builtin.select_box"
+
 _previous_tool_idname = None
 _last_seen_tool_idname = None
-DEFAULT_FALLBACK_TOOL = "builtin.select_box"
+_tool_registered = False
+_msgbus_owner = object()
+_depsgraph_sync_registered = False
+_deferred_session_sync_pending = False
+
+
+def _deferred_session_sync():
+    """One-shot timer: sync session outside of UI draw."""
+    global _deferred_session_sync_pending
+    _deferred_session_sync_pending = False
+    try:
+        context = bpy.context
+        if context is None:
+            return None
+        _track_previous_tool(context)
+        if is_light_linking_tool_active(context):
+            if not is_session_active(context):
+                start_tool_session(context)
+        elif is_session_active(context):
+            stop_tool_session(context)
+    except (AttributeError, ReferenceError, TypeError):
+        pass
+    return None
+
+
+def schedule_session_sync():
+    """Queue a one-shot session sync (safe from draw_settings)."""
+    global _deferred_session_sync_pending
+    if _deferred_session_sync_pending:
+        return
+    if bpy.app.timers.is_registered(_deferred_session_sync):
+        return
+    _deferred_session_sync_pending = True
+    bpy.app.timers.register(_deferred_session_sync, first_interval=0.0)
 
 
 def get_active_tool_idname(context: bpy.types.Context) -> str | None:
@@ -33,6 +67,14 @@ def is_light_linking_tool_active(context: bpy.types.Context) -> bool:
     return get_active_tool_idname(context) == TOOL_IDNAME
 
 
+def is_session_active(context: bpy.types.Context | None = None) -> bool:
+    ctx = context if context is not None else bpy.context
+    try:
+        return bool(ctx.window_manager.light_helper_property.linking_tool_active)
+    except (AttributeError, ReferenceError, TypeError):
+        return False
+
+
 def get_fallback_tool_idname() -> str:
     if _previous_tool_idname and _previous_tool_idname != TOOL_IDNAME:
         return _previous_tool_idname
@@ -45,7 +87,7 @@ def activate_tool_by_id(context: bpy.types.Context, tool_idname: str) -> bool:
     try:
         bpy.ops.wm.tool_set_by_id(name=tool_idname, space_type='VIEW_3D')
         return True
-    except Exception:
+    except (RuntimeError, AttributeError, TypeError):
         pass
     for window in context.window_manager.windows:
         screen = window.screen
@@ -61,7 +103,7 @@ def activate_tool_by_id(context: bpy.types.Context, tool_idname: str) -> bool:
                     with context.temp_override(window=window, screen=screen, area=area, region=region):
                         bpy.ops.wm.tool_set_by_id(name=tool_idname, space_type='VIEW_3D')
                     return True
-                except Exception:
+                except (RuntimeError, AttributeError, TypeError):
                     continue
     return False
 
@@ -86,11 +128,7 @@ def _track_previous_tool(context: bpy.types.Context) -> None:
     _last_seen_tool_idname = current
 
 
-def is_session_active() -> bool:
-    return _session_active
-
-
-def _init_session_light(context: bpy.types.Context) -> bpy.types.Object | None:
+def init_session_light(context: bpy.types.Context) -> bpy.types.Object | None:
     from ..utils import get_filtered_tool_lights, is_tool_light_source, select_tool_light
     obj = context.object
     if obj is not None and is_tool_light_source(obj, context):
@@ -103,7 +141,7 @@ def _init_session_light(context: bpy.types.Context) -> bpy.types.Object | None:
     return None
 
 
-def _init_session_object(context: bpy.types.Context) -> bpy.types.Object | None:
+def init_session_object(context: bpy.types.Context) -> bpy.types.Object | None:
     from ..utils import get_filtered_tool_objects, is_linkable_object, select_tool_object
     obj = context.object
     if obj is not None and is_linkable_object(obj):
@@ -117,35 +155,32 @@ def _init_session_object(context: bpy.types.Context) -> bpy.types.Object | None:
 
 
 def start_tool_session(context: bpy.types.Context) -> None:
-    global _session_active
     from ..utils.overlay import refresh_overlay_cache, register_draw_handlers, tag_view3d_redraw
     wm_props = context.window_manager.light_helper_property
-    if _session_active:
+    if wm_props.linking_tool_active:
         if wm_props.linking_tool_subject_mode == 'OBJECT':
             if wm_props.linking_tool_object is None:
-                wm_props.linking_tool_object = _init_session_object(context)
+                wm_props.linking_tool_object = init_session_object(context)
         elif wm_props.linking_tool_light is None:
-            wm_props.linking_tool_light = _init_session_light(context)
+            wm_props.linking_tool_light = init_session_light(context)
         refresh_overlay_cache(context)
         tag_view3d_redraw(context)
         return
     wm_props.linking_tool_subject_mode = 'LIGHT'
-    light = _init_session_light(context)
+    light = init_session_light(context)
     wm_props.linking_tool_active = True
     wm_props.linking_tool_light = light
     wm_props.linking_tool_object = None
     register_draw_handlers()
     refresh_overlay_cache(context)
     tag_view3d_redraw(context)
-    _session_active = True
 
 
 def stop_tool_session(context: bpy.types.Context) -> None:
-    global _session_active
-    if not _session_active:
-        return
     from ..utils.overlay import invalidate_overlay_cache, tag_view3d_redraw, unregister_draw_handlers
     wm_props = context.window_manager.light_helper_property
+    if not wm_props.linking_tool_active:
+        return
     wm_props.linking_tool_active = False
     wm_props.linking_tool_light = None
     wm_props.linking_tool_object = None
@@ -155,7 +190,99 @@ def stop_tool_session(context: bpy.types.Context) -> None:
     tag_view3d_redraw(context)
     if context.window:
         context.window.cursor_set('DEFAULT')
-    _session_active = False
+
+
+def sync_tool_subject_from_selection(context: bpy.types.Context) -> bool:
+    from ..utils import is_linkable_object, is_tool_light_source, resolve_original_id
+    from ..utils.overlay import invalidate_overlay_cache, refresh_overlay_cache, tag_view3d_redraw
+
+    wm_props = context.window_manager.light_helper_property
+    if not wm_props.linking_tool_active:
+        return False
+
+    obj = resolve_original_id(context.object)
+    if obj is None:
+        return False
+
+    changed = False
+    if wm_props.linking_tool_subject_mode == 'OBJECT':
+        if is_linkable_object(obj):
+            current = resolve_original_id(wm_props.linking_tool_object)
+            if current is None or current.name != obj.name:
+                wm_props.linking_tool_object = obj
+                changed = True
+    elif is_tool_light_source(obj, context):
+        current = resolve_original_id(wm_props.linking_tool_light)
+        if current is None or current.name != obj.name:
+            wm_props.linking_tool_light = obj
+            changed = True
+
+    if changed:
+        invalidate_overlay_cache()
+        refresh_overlay_cache(context)
+        tag_view3d_redraw(context)
+    return changed
+
+
+def _on_tool_changed(*_args):
+    schedule_session_sync()
+
+
+@bpy.app.handlers.persistent
+def _depsgraph_sync_selection(_scene, _depsgraph):
+    try:
+        context = bpy.context
+        if context is None:
+            return
+        tool_on = is_light_linking_tool_active(context)
+        session_on = is_session_active(context)
+        if tool_on != session_on:
+            # Avoid mutating session state inside depsgraph; defer to a one-shot timer.
+            schedule_session_sync()
+            return
+        if session_on:
+            sync_tool_subject_from_selection(context)
+    except (AttributeError, ReferenceError, TypeError):
+        pass
+
+
+def _register_depsgraph_sync() -> None:
+    global _depsgraph_sync_registered
+    if _depsgraph_sync_registered:
+        return
+    if _depsgraph_sync_selection not in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.append(_depsgraph_sync_selection)
+    _depsgraph_sync_registered = True
+
+
+def _unregister_depsgraph_sync() -> None:
+    global _depsgraph_sync_registered
+    if not _depsgraph_sync_registered:
+        return
+    if _depsgraph_sync_selection in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.remove(_depsgraph_sync_selection)
+    _depsgraph_sync_registered = False
+
+
+def _subscribe_tool_changes():
+    try:
+        bpy.msgbus.clear_by_owner(_msgbus_owner)
+        bpy.msgbus.subscribe_rna(
+            key=(bpy.types.WorkSpace, "tools"),
+            owner=_msgbus_owner,
+            args=(),
+            notify=_on_tool_changed,
+            options={'PERSISTENT'},
+        )
+    except (AttributeError, TypeError, RuntimeError):
+        pass
+
+
+def _unsubscribe_tool_changes():
+    try:
+        bpy.msgbus.clear_by_owner(_msgbus_owner)
+    except (AttributeError, TypeError, RuntimeError):
+        pass
 
 
 class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
@@ -225,7 +352,7 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
     def draw_settings(context, layout, tool):
         from ..ui.panel import LLT_PT_light_control_panel
         from ..utils import get_light_link_item_count, get_object_link_light_count
-        from ..utils.overlay import _cache_needs_refresh, get_active_link_count, refresh_overlay_cache
+        from ..utils.overlay import get_active_link_count
 
         if not LLT_PT_light_control_panel.check_support_light_linking(context):
             layout.label(
@@ -235,27 +362,21 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
             return
 
         wm_props = context.window_manager.light_helper_property
+        # Read-only draw path: never refresh cache here. Defer session start/stop.
+        if is_light_linking_tool_active(context) != wm_props.linking_tool_active:
+            schedule_session_sync()
         subject_mode = wm_props.linking_tool_subject_mode
         light = wm_props.linking_tool_light
         obj = wm_props.linking_tool_object
         is_header = context.region and context.region.type == 'TOOL_HEADER'
+        session_on = wm_props.linking_tool_active
 
         link_count = 0
         if subject_mode == 'OBJECT':
             if obj is not None:
-                if _session_active:
-                    if _cache_needs_refresh(context):
-                        refresh_overlay_cache(context)
-                    link_count = get_active_link_count(context)
-                else:
-                    link_count = get_object_link_light_count(obj, context)
+                link_count = get_active_link_count() if session_on else get_object_link_light_count(obj, context)
         elif light is not None:
-            if _session_active:
-                if _cache_needs_refresh(context):
-                    refresh_overlay_cache(context)
-                link_count = get_active_link_count(context)
-            else:
-                link_count = get_light_link_item_count(light)
+            link_count = get_active_link_count() if session_on else get_light_link_item_count(light)
 
         if is_header:
             row = layout.row(align=True)
@@ -275,7 +396,7 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
             if obj is not None:
                 col.label(text=obj.name, icon='OBJECT_DATA', translate=False)
                 col.label(text=p_("Linked lights: %d") % link_count)
-            elif wm_props.linking_tool_active:
+            elif session_on:
                 col.label(text=p_("No object selected"), icon='INFO')
         elif light is not None:
             from ..utils.icon import get_item_icon, get_light_icon
@@ -288,76 +409,8 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
             col.row(align=True).prop(
                 light.light_helper_property, "linking_mode", expand=True, text_ctxt="light_helper_zh_CN",
             )
-        elif wm_props.linking_tool_active:
+        elif session_on:
             col.label(text=p_("No light selected"), icon='INFO')
-
-_tool_registered = False
-_session_timer = None
-
-
-def _sync_tool_subject_from_selection(context: bpy.types.Context) -> bool:
-    from ..utils import is_linkable_object, is_tool_light_source, resolve_original_id
-    from ..utils.overlay import invalidate_overlay_cache, refresh_overlay_cache, tag_view3d_redraw
-
-    wm_props = context.window_manager.light_helper_property
-    if not wm_props.linking_tool_active:
-        return False
-
-    obj = resolve_original_id(context.object)
-    if obj is None:
-        return False
-
-    changed = False
-    if wm_props.linking_tool_subject_mode == 'OBJECT':
-        if is_linkable_object(obj):
-            current = resolve_original_id(wm_props.linking_tool_object)
-            if current is None or current.name != obj.name:
-                wm_props.linking_tool_object = obj
-                changed = True
-    elif is_tool_light_source(obj, context):
-        current = resolve_original_id(wm_props.linking_tool_light)
-        if current is None or current.name != obj.name:
-            wm_props.linking_tool_light = obj
-            changed = True
-
-    if changed:
-        invalidate_overlay_cache()
-        refresh_overlay_cache(context)
-        tag_view3d_redraw(context)
-    return changed
-
-
-def _tool_session_poll():
-    try:
-        context = bpy.context
-        if context is None or context.window_manager is None:
-            return 0.5
-        _track_previous_tool(context)
-        if is_light_linking_tool_active(context):
-            if not _session_active:
-                start_tool_session(context)
-            else:
-                _sync_tool_subject_from_selection(context)
-            return 0.2
-        if _session_active:
-            stop_tool_session(context)
-    except Exception:
-        pass
-    # Idle: poll less often while the linking tool is not active.
-    return 0.5
-
-
-def _start_session_timer():
-    global _session_timer
-    if _session_timer is None:
-        _session_timer = bpy.app.timers.register(_tool_session_poll, first_interval=0.1)
-
-
-def _stop_session_timer():
-    global _session_timer
-    if _session_timer is not None:
-        bpy.app.timers.unregister(_tool_session_poll)
-        _session_timer = None
 
 
 def register():
@@ -368,17 +421,27 @@ def register():
         group=False,
     )
     _tool_registered = True
-    _start_session_timer()
+    _subscribe_tool_changes()
+    _register_depsgraph_sync()
+    try:
+        if is_light_linking_tool_active(bpy.context):
+            start_tool_session(bpy.context)
+    except (AttributeError, ReferenceError, TypeError):
+        pass
 
 
 def unregister():
-    global _tool_registered
-    _stop_session_timer()
-    if _tool_registered:
-        bpy.utils.unregister_tool(VIEW3D_WT_light_linking)
-        _tool_registered = False
+    global _tool_registered, _deferred_session_sync_pending
+    _unsubscribe_tool_changes()
+    _unregister_depsgraph_sync()
+    if bpy.app.timers.is_registered(_deferred_session_sync):
+        bpy.app.timers.unregister(_deferred_session_sync)
+    _deferred_session_sync_pending = False
     try:
         if bpy.context is not None:
             stop_tool_session(bpy.context)
-    except Exception:
+    except (AttributeError, ReferenceError, TypeError):
         pass
+    if _tool_registered:
+        bpy.utils.unregister_tool(VIEW3D_WT_light_linking)
+        _tool_registered = False

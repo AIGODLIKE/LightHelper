@@ -26,6 +26,7 @@ data = {
     'No light selected for removal': '未选择要移除的灯光',
     'No object or collection to remove': '没有可移除的物体或集合',
     'No light selected': '未选择灯光',
+    'Light Linking tool is not active': '灯光链接工具未激活',
     'Light linking is not initialized': '灯光链接尚未初始化',
     'Selected object cannot use light linking': '所选物体无法使用灯光链接',
     'Cannot link a light source to itself': '不能将光源链接到自身',

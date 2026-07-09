@@ -204,7 +204,7 @@ def _active_group_targets() -> list[LinkDrawTarget]:
 
 
 def get_active_link_count(context: bpy.types.Context | None = None) -> int:
-    if context is not None and _cache_needs_refresh(context):
+    if context is not None and cache_needs_refresh(context):
         refresh_overlay_cache(context)
     return len(_active_group_targets())
 
@@ -525,7 +525,7 @@ def _current_cache_key(context: bpy.types.Context) -> tuple:
     return (wm_props.linking_tool_overlay_mode, subject_key[0], subject_key[1])
 
 
-def _cache_needs_refresh(context: bpy.types.Context) -> bool:
+def cache_needs_refresh(context: bpy.types.Context) -> bool:
     if _cache.invalid:
         return True
     current_key = _current_cache_key(context)
@@ -540,7 +540,7 @@ def _draw_overlay_3d():
     if not wm_props.linking_tool_active or wm_props.linking_tool_overlay_mode == OVERLAY_MODE_OFF:
         return
 
-    if _cache_needs_refresh(context):
+    if cache_needs_refresh(context):
         refresh_overlay_cache(context)
 
     if not _cache.groups:
@@ -619,7 +619,7 @@ def _hud_lines(context: bpy.types.Context) -> list[str]:
 
     lines.extend(_hud_shortcut_lines(subject_mode))
 
-    if _cache_needs_refresh(context):
+    if cache_needs_refresh(context):
         refresh_overlay_cache(context)
     link_count = len(_active_group_targets())
     if link_count > 0:
@@ -737,7 +737,7 @@ def _depsgraph_update_post(_scene, depsgraph: bpy.types.Depsgraph):
             tag_view3d_redraw(context)
         elif needs_redraw:
             tag_view3d_redraw(context)
-    except Exception:
+    except (AttributeError, ReferenceError, TypeError):
         pass
 
 
@@ -756,7 +756,7 @@ def _undo_redo_post(_dummy):
         invalidate_overlay_cache()
         refresh_overlay_cache(context)
         tag_view3d_redraw(context)
-    except Exception:
+    except (AttributeError, ReferenceError, TypeError):
         pass
 
 
@@ -812,7 +812,7 @@ def unregister_draw_handlers():
         _undo_handler_registered = False
 
 
-def _view3d_window_at_mouse(context: bpy.types.Context, event):
+def view3d_window_at_mouse(context: bpy.types.Context, event):
     if context.area and context.area.type == 'VIEW_3D':
         region = context.region
         if region and region.type == 'WINDOW':
@@ -903,7 +903,7 @@ def _pick_object_at_coord(context: bpy.types.Context, area, region, coord) -> bp
 
 def pick_object_under_mouse(context: bpy.types.Context, event) -> bpy.types.Object | None:
     """Pick the object under the cursor without changing the current selection."""
-    area, region = _view3d_window_at_mouse(context, event)
+    area, region = view3d_window_at_mouse(context, event)
     if area is None or region is None:
         return None
     coord = _region_coord_from_event(event, region)
