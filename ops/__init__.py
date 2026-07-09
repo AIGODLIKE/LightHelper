@@ -16,7 +16,6 @@ from .panel_linking import (
     LLP_OT_remove_light_linking,
     LLP_OT_toggle_light_linking,
 )
-from .question import LLP_OT_question
 from .selection import LLP_OT_select_item
 from .tool_linking import (
     LLP_OT_light_linking_cycle_light,
@@ -30,7 +29,6 @@ from .tool_linking import (
 )
 
 ops_list = [
-    LLP_OT_question,
     LLP_OT_remove_light_linking,
     LLP_OT_clear_light_linking,
     LLP_OT_clear_selected_light_linking,
@@ -69,7 +67,6 @@ def unregister():
 
 __all__ = [
     "LightHelperOperator",
-    "LLP_OT_question",
     "LLP_OT_remove_light_linking",
     "LLP_OT_clear_light_linking",
     "LLP_OT_clear_selected_light_linking",

@@ -119,12 +119,21 @@ def poll_linking_tool_object(_self, obj: bpy.types.Object) -> bool:
     return is_linkable_object(obj)
 
 
+class SoloVisibilityItem(PropertyGroup):
+    object: bpy.props.PointerProperty(type=bpy.types.Object)
+    was_visible: bpy.props.BoolProperty(default=True)
+
+
 class WindowManagerProperty(PropertyGroup):
     drop_light_obj: bpy.props.PointerProperty(type=bpy.types.Object)
     drop_object_obj: bpy.props.PointerProperty(type=bpy.types.Object)
     solo_light: bpy.props.PointerProperty(
         name="Solo Light",
         type=bpy.types.Object,
+        options={'SKIP_SAVE'},
+    )
+    solo_visibility: bpy.props.CollectionProperty(
+        type=SoloVisibilityItem,
         options={'SKIP_SAVE'},
     )
 
@@ -352,6 +361,7 @@ class WindowManagerProperty(PropertyGroup):
 property_list = [
     ObjectProperty,
     SceneProperty,
+    SoloVisibilityItem,
     WindowManagerProperty,
 ]
 register_class, unregister_class = bpy.utils.register_classes_factory(property_list)

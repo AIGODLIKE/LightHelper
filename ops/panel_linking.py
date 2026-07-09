@@ -111,18 +111,16 @@ class LLP_OT_add_light_linking(LightHelperOperator, bpy.types.Operator):
     )
 
     init: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
-    add_all: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
 
     index: bpy.props.IntProperty(default=-1, options={'SKIP_SAVE'})
 
     @classmethod
     def poll(cls, context):
         light = getattr(context, "add_light_linking_light_obj", None)
-        from ..utils import ILLUMINATED_OBJECT_TYPE_LIST
         if light is None:
             cls.poll_message_set(p_("No light selected"))
             return False
-        if light.type not in ILLUMINATED_OBJECT_TYPE_LIST:
+        if light.type != 'LIGHT':
             cls.poll_message_set(p_("Selected object cannot use light linking"))
             return False
         return True
@@ -133,10 +131,8 @@ class LLP_OT_add_light_linking(LightHelperOperator, bpy.types.Operator):
         if not light:
             self.report({'ERROR'}, p_("No light selected"))
             return {"CANCELLED"}
-        if self.init or self.add_all:
+        if self.init:
             init_light_linking(light, context)
-            if self.add_all and obj:
-                link_item_both_channels(light, obj, context)
         else:
             if not obj or not light:
                 return {"CANCELLED"}

@@ -30,7 +30,6 @@ class LLT_UL_light(bpy.types.UIList):
         for i in (
                 "Sort Type",
                 "Show",
-                "Moving View Type",
         ):
             sc.label(text=f"{pgettext_iface(i, tctx)}:")
 
@@ -41,7 +40,6 @@ class LLT_UL_light(bpy.types.UIList):
         row.prop(self, "show_type", emboss=True, toggle=True)
         row.prop(self, "show_in_view", emboss=True, toggle=True)
 
-        sc.row(align=True).prop(pref, "moving_view_type", expand=True)
         sc.prop(pref, "node_search_depth")
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
@@ -59,7 +57,7 @@ class LLT_UL_light(bpy.types.UIList):
 
         if item.type == 'LIGHT':
             solo = context.window_manager.light_helper_property.solo_light
-            solo_active = solo is not None and solo.name == item.name
+            solo_active = solo is not None and solo == item
             solo_row = left.row(align=True)
             solo_row.alert = solo_active
             solo_row.context_pointer_set("solo_light_object", item)
@@ -83,7 +81,7 @@ class LLT_UL_light(bpy.types.UIList):
         if check_link(item):
             rs.context_pointer_set("clear_light_linking_object", item)
             rs.operator(LLP_OT_clear_light_linking.bl_idname, text="Restore").index = index
-        else:
+        elif item.type == 'LIGHT':
             with context.temp_override(add_light_linking_light_obj=item):
                 rs.context_pointer_set("add_light_linking_light_obj", item)
                 op = rs.operator(LLP_OT_add_light_linking.bl_idname, text='Init')

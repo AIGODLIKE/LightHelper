@@ -223,7 +223,6 @@ class LLT_PT_light_control_panel(bpy.types.Panel):
 
     def draw_header(self, context):
         from ..ops import (
-            LLP_OT_question,
             LLP_OT_init_all_light_linking,
             LLP_OT_instances_data_all,
         )
@@ -252,13 +251,6 @@ class LLT_PT_light_control_panel(bpy.types.Panel):
 
         view_row = layout.row(align=True)
         view_row.prop(pref, "moving_view_type", expand=True, icon_only=True)
-        view_row.separator()
-        tips = view_row.operator(LLP_OT_question.bl_idname, text="", icon="QUESTION", emboss=False)
-        tips.data = p_(
-            """Light Linking Panel
-This Panel Lists all the objects that are affected by the selected/pinned light.
-Use Exclude/Include mode to control list semantics, and toggle light or shadow per object."""
-        )
         view_row.separator()
 
     @staticmethod
@@ -391,17 +383,9 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
         return get_panel_effect_obj(context) is not None
 
     def draw_header(self, context):
-        from ..ops import LLP_OT_question
         layout = self.layout
         row = layout.row(align=True)
         row.label(text=p_("Object Linking"))
-        tips = row.operator(LLP_OT_question.bl_idname, text='', icon='QUESTION', emboss=False)
-        if tips:
-            tips.data = p_(
-                """Object Linking Panel
-This Panel Lists all the lights that affected the selected/pinned object.
-Provides buttons to toggle light or shadow channel per light."""
-            )
         row.separator()
 
     def draw(self, context):

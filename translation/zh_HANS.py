@@ -40,8 +40,6 @@ data = {
     'Automatically split shared light linking collections when lights are duplicated, and inherit linking for duplicated objects': '复制灯光时自动拆分共享链接集合，复制物体时继承灯光链接设置',
     'No filtered lights in the list': '列表中没有符合筛选条件的灯光',
     'No object selected': '未选择物体',
-    "Object Linking Panel\nThis Panel Lists all the lights that affected the selected/pinned object.\nProvides buttons to toggle light or shadow channel per light.": "物体链接面板\n此面板列出所有影响选定/固定对象的灯光。\n提供按钮以切换每个灯光的灯光或阴影通道",
-    "Light Linking Panel\nThis Panel Lists all the objects that are affected by the selected/pinned light.\nUse Exclude/Include mode to control list semantics, and toggle light or shadow per object.": "灯光链接面板\n此面板列出所有受选定/固定灯光影响的对象。\n使用排除/包含模式控制列表语义，并可逐物体切换灯光或阴影通道",
     'Drag and Drop to Add': '拖拽添加',
     'Please select light or can be illuminated object': '请选择灯光或可被照射物体',
     'Current type: ': '当前类型: ',

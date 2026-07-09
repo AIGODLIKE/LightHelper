@@ -78,19 +78,28 @@ class LLP_OT_solo_light(LightHelperOperator, bpy.types.Operator):
         return True
 
     @staticmethod
-    def _restore_solo(context) -> None:
-        wm_props = context.window_manager.light_helper_property
+    def _clear_legacy_solo_props(context) -> None:
         for obj in context.scene.objects:
             if "lh_solo_prev" not in obj:
                 continue
             try:
-                obj.light_helper_property.show_in_view = bool(obj["lh_solo_prev"])
-            except (AttributeError, ReferenceError, TypeError, KeyError):
-                pass
-            try:
                 del obj["lh_solo_prev"]
             except (KeyError, TypeError):
                 pass
+
+    @staticmethod
+    def _restore_solo(context) -> None:
+        wm_props = context.window_manager.light_helper_property
+        for item in wm_props.solo_visibility:
+            obj = item.object
+            if obj is None:
+                continue
+            try:
+                obj.light_helper_property.show_in_view = bool(item.was_visible)
+            except (AttributeError, ReferenceError, TypeError):
+                pass
+        wm_props.solo_visibility.clear()
+        LLP_OT_solo_light._clear_legacy_solo_props(context)
         wm_props.solo_light = None
 
     def execute(self, context):
@@ -103,7 +112,7 @@ class LLP_OT_solo_light(LightHelperOperator, bpy.types.Operator):
 
         wm_props = context.window_manager.light_helper_property
         current = wm_props.solo_light
-        if current is not None and current.name == target.name:
+        if current is not None and current == target:
             self._restore_solo(context)
             self.report({'INFO'}, p_("Solo restored"))
             if self.index != -1:
@@ -113,9 +122,12 @@ class LLP_OT_solo_light(LightHelperOperator, bpy.types.Operator):
         if current is not None:
             self._restore_solo(context)
 
+        wm_props.solo_visibility.clear()
         for obj in filter_objects(context):
-            obj["lh_solo_prev"] = bool(obj.light_helper_property.show_in_view)
-            obj.light_helper_property.show_in_view = obj.name == target.name
+            item = wm_props.solo_visibility.add()
+            item.object = obj
+            item.was_visible = bool(obj.light_helper_property.show_in_view)
+            obj.light_helper_property.show_in_view = obj == target
 
         wm_props.solo_light = target
         self.report({'INFO'}, p_("Solo: %s") % target.name)

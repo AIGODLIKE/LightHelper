@@ -28,10 +28,7 @@ def mark_managed_linking_collection(coll: bpy.types.Collection) -> None:
 
 
 def is_managed_linking_collection(coll: bpy.types.Collection) -> bool:
-    if coll.get(LIGHT_HELPER_MANAGED_KEY):
-        return True
-    name = coll.name
-    return name.startswith("Light Linking for ") or name.startswith("Shadow Linking for ")
+    return bool(coll.get(LIGHT_HELPER_MANAGED_KEY))
 
 
 def get_pref(context=None):
@@ -564,7 +561,10 @@ def view_selected(context: bpy.types.Context):
 
 
 def check_link(obj: bpy.types.Object) -> bool:
-    return bool(obj.light_linking.receiver_collection or obj.light_linking.blocker_collection)
+    if not hasattr(obj, "light_linking"):
+        return False
+    linking = obj.light_linking
+    return bool(linking.receiver_collection or linking.blocker_collection)
 
 
 def get_item_visibility_restrictions(
@@ -581,6 +581,7 @@ def get_item_visibility_restrictions(
 
 
 LIGHT_HELPER_DUP_HANDLED_KEY = "light_helper_dup_handled"
+LIGHT_HELPER_DUP_SOURCE_KEY = "light_helper_dup_source"
 
 
 def _managed_linking_coll_name(light: bpy.types.Object, coll_type: CollectionType) -> str:
@@ -627,6 +628,25 @@ def make_light_linking_single_user(light: bpy.types.Object) -> bool:
 
 
 def find_duplicate_source_object(obj: bpy.types.Object) -> bpy.types.Object | None:
+    """Resolve duplicate source via custom property, shared collections, then name fallback."""
+    source = obj.get(LIGHT_HELPER_DUP_SOURCE_KEY)
+    if isinstance(source, bpy.types.Object) and source != obj:
+        return source
+
+    if obj.type == 'LIGHT' and hasattr(obj, "light_linking"):
+        linking = obj.light_linking
+        for coll in (linking.receiver_collection, linking.blocker_collection):
+            if coll is None or coll.users <= 1:
+                continue
+            for other in bpy.data.objects:
+                if other == obj or other.type != 'LIGHT' or not hasattr(other, "light_linking"):
+                    continue
+                other_linking = other.light_linking
+                if (other_linking.receiver_collection == coll
+                        or other_linking.blocker_collection == coll):
+                    return other
+
+    # Fallback for duplicates created before source tracking existed.
     name = obj.name
     if '.' not in name:
         return None
@@ -636,14 +656,17 @@ def find_duplicate_source_object(obj: bpy.types.Object) -> bpy.types.Object | No
     num = int(suffix)
     if num <= 0:
         return None
-    if num == 1:
-        source_name = base
-    else:
-        source_name = f"{base}.{num - 1:03d}"
+    source_name = base if num == 1 else f"{base}.{num - 1:03d}"
     source = bpy.data.objects.get(source_name)
     if source is None or source == obj:
         return None
     return source
+
+
+def track_duplicate_source(source: bpy.types.Object, duplicate: bpy.types.Object) -> None:
+    if source is None or duplicate is None or source == duplicate:
+        return
+    duplicate[LIGHT_HELPER_DUP_SOURCE_KEY] = source
 
 
 def inherit_light_linking_from_object(
@@ -696,6 +719,8 @@ def process_duplicated_object(obj: bpy.types.Object, context: bpy.types.Context 
         return False
     changed = False
     source = find_duplicate_source_object(obj)
+    if source is not None:
+        track_duplicate_source(source, obj)
 
     if obj.type == 'LIGHT':
         if has_shared_linking_collections(obj):

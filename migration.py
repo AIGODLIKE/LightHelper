@@ -2,7 +2,6 @@ import bpy
 
 LIGHT_HELPER_SAFE_KEY = "light_helper_safe"
 LIGHT_HELPER_MIGRATED_KEY = "light_helper_migrated_v047"
-MIGRATION_VERSION = (0, 4, 7)
 
 
 def _is_legacy_safe_object(obj: bpy.types.Object) -> bool:
@@ -44,7 +43,13 @@ def migrate_scene(scene: bpy.types.Scene) -> None:
     if scene.get(LIGHT_HELPER_MIGRATED_KEY):
         return
 
-    from .utils import apply_linking_mode_to_light, is_linking_initialized
+    from .utils import (
+        CollectionType,
+        apply_linking_mode_to_light,
+        get_linking_coll,
+        is_linking_initialized,
+        mark_managed_linking_collection,
+    )
 
     _remove_legacy_safe_objects()
 
@@ -53,12 +58,13 @@ def migrate_scene(scene: bpy.types.Scene) -> None:
             continue
         if not is_linking_initialized(obj):
             continue
+        for coll_type in (CollectionType.RECEIVER, CollectionType.BLOCKER):
+            coll = get_linking_coll(obj, coll_type)
+            if coll is not None:
+                mark_managed_linking_collection(coll)
         mode = _infer_linking_mode_from_collections(obj)
         obj.light_helper_property.linking_mode = mode
         apply_linking_mode_to_light(obj, mode)
-
-    from .utils import fix_all_shared_light_linking
-    fix_all_shared_light_linking(scene)
 
     scene[LIGHT_HELPER_MIGRATED_KEY] = True
 

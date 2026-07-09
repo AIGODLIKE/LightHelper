@@ -25,15 +25,14 @@ def get_item_icon(item: bpy.types.Object | bpy.types.Collection):
             for i in item.data.bl_rna.properties['type'].enum_items:
                 if item.data.type == i.identifier:
                     return {"icon": i.icon}
-
-            from . import check_link
-            return {"icon": "OUTLINER_OB_LIGHT" if check_link(item) else "OUTLINER_DATA_LIGHT"}
+            return {"icon": "OUTLINER_DATA_LIGHT"}
         elif hasattr(item, 'data') and item.data is not None:
             try:
                 icon_value = UILayout.icon(item.data)
             except (TypeError, AttributeError):
                 pass
             else:
+                # 157 is Blender's blank/placeholder icon id.
                 if icon_value != 157:
                     return {"icon_value": icon_value}
         if item.type == "EMPTY":
