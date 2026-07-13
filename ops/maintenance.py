@@ -4,6 +4,36 @@ from bpy.app.translations import pgettext_iface as p_
 from .common import LightHelperOperator, format_lights_report, get_light_obj
 
 
+class LLP_OT_cleanup_legacy_data(LightHelperOperator, bpy.types.Operator):
+    bl_idname = 'wm.light_helper_cleanup_legacy_data'
+    bl_label = "Clean Up Legacy Data"
+    bl_description = (
+        "Remove leftover data from older Light Helper versions "
+        "and update light linking settings"
+    )
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        from ..migration import has_legacy_residue
+        if has_legacy_residue():
+            return True
+        cls.poll_message_set(p_("No legacy Light Helper data found"))
+        return False
+
+    def execute(self, context):
+        from ..migration import run_legacy_cleanup
+        removed, migrated = run_legacy_cleanup()
+        if removed == 0 and migrated == 0:
+            self.report({'INFO'}, p_("No legacy Light Helper data found"))
+            return {'CANCELLED'}
+        self.report(
+            {'INFO'},
+            p_("Cleaned up legacy data: %d object(s), %d scene(s)") % (removed, migrated),
+        )
+        return {'FINISHED'}
+
+
 class LLP_OT_instances_data(LightHelperOperator, bpy.types.Operator):
     bl_idname = 'object.light_helper_instances_data'
     bl_label = "Instances Data"

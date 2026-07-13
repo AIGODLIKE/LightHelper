@@ -50,6 +50,14 @@ class LLP_OT_reset_linking_hud(LightHelperOperator, bpy.types.Operator):
     bl_description = "Reset the linking tool HUD to the default corner position"
     bl_options = {'REGISTER'}
 
+    @classmethod
+    def poll(cls, context):
+        from .. import __package__ as base_package
+        if base_package not in context.preferences.addons:
+            cls.poll_message_set(p_("Add-on preferences unavailable"))
+            return False
+        return True
+
     def execute(self, context):
         from ..utils import get_pref
         from ..utils.overlay import tag_view3d_redraw

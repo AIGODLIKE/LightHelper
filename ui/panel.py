@@ -213,9 +213,9 @@ def draw_add_box(col, context, light_obj):
     row.operator(LLP_OT_link_selected_objs.bl_idname, icon='ADD')
 
 
-class LLT_PT_light_control_panel(bpy.types.Panel):
+class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
     bl_label = ""
-    bl_idname = "LLT_PT_light_control_panel"
+    bl_idname = "VIEW3D_PT_light_helper_light_control"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "LH"
@@ -369,9 +369,9 @@ class LLT_PT_light_control_panel(bpy.types.Panel):
                           "active_object_index")
 
 
-class LLT_PT_obj_control_panel(bpy.types.Panel):
+class VIEW3D_PT_light_helper_object_control(bpy.types.Panel):
     bl_label = ""
-    bl_idname = "LLT_PT_obj_control_panel"
+    bl_idname = "VIEW3D_PT_light_helper_object_control"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "LH"
@@ -380,7 +380,7 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        if not LLT_PT_light_control_panel.check_support_light_linking(context):
+        if not VIEW3D_PT_light_helper_light_control.check_support_light_linking(context):
             return False
         from ..utils import iter_objects_linked_by_lights
         if iter_objects_linked_by_lights(context):
@@ -468,9 +468,9 @@ class LLT_PT_obj_control_panel(bpy.types.Panel):
         box.prop(context.window_manager.light_helper_property, 'object_linking_add_object', text='', icon='ADD')
 
 
-class LLT_PT_light_properties(bpy.types.Panel):
+class VIEW3D_PT_light_helper_light_properties(bpy.types.Panel):
     bl_label = "Light Properties"
-    bl_idname = "LLT_PT_light_properties"
+    bl_idname = "VIEW3D_PT_light_helper_light_properties"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "LH"
@@ -491,13 +491,13 @@ class LLT_PT_light_properties(bpy.types.Panel):
         draw_light_ev_controls(self.layout, context)
 
 
-class LLT_PT_cycles_light(bpy.types.Panel):
+class VIEW3D_PT_light_helper_cycles_light(bpy.types.Panel):
     bl_label = "Light"
-    bl_idname = "LLT_PT_cycles_light"
+    bl_idname = "VIEW3D_PT_light_helper_cycles_light"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "LH"
-    bl_parent_id = "LLT_PT_light_properties"
+    bl_parent_id = "VIEW3D_PT_light_helper_light_properties"
     bl_options = set()
 
     @classmethod
@@ -513,13 +513,13 @@ class LLT_PT_cycles_light(bpy.types.Panel):
         draw_builtin_panel('CYCLES_LIGHT_PT_light', self.layout, context, light_obj, 'CYCLES')
 
 
-class LLT_PT_light_settings(bpy.types.Panel):
+class VIEW3D_PT_light_helper_light_settings(bpy.types.Panel):
     bl_label = "Settings"
-    bl_idname = "LLT_PT_light_settings"
+    bl_idname = "VIEW3D_PT_light_helper_light_settings"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "LH"
-    bl_parent_id = "LLT_PT_light_properties"
+    bl_parent_id = "VIEW3D_PT_light_helper_light_properties"
     bl_options = set()
 
     @classmethod
@@ -535,13 +535,13 @@ class LLT_PT_light_settings(bpy.types.Panel):
         draw_builtin_panel('CYCLES_LIGHT_PT_settings', self.layout, context, light_obj, 'CYCLES')
 
 
-class LLT_PT_eevee_light(bpy.types.Panel):
+class VIEW3D_PT_light_helper_eevee_light(bpy.types.Panel):
     bl_label = "Light"
-    bl_idname = "LLT_PT_eevee_light"
+    bl_idname = "VIEW3D_PT_light_helper_eevee_light"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "LH"
-    bl_parent_id = "LLT_PT_light_properties"
+    bl_parent_id = "VIEW3D_PT_light_helper_light_properties"
     bl_options = set()
 
     @classmethod
@@ -557,13 +557,13 @@ class LLT_PT_eevee_light(bpy.types.Panel):
         draw_builtin_panel('DATA_PT_EEVEE_light', self.layout, context, light_obj)
 
 
-class LLT_PT_eevee_light_shadow(bpy.types.Panel):
+class VIEW3D_PT_light_helper_eevee_light_shadow(bpy.types.Panel):
     bl_label = "Shadow"
-    bl_idname = "LLT_PT_eevee_light_shadow"
+    bl_idname = "VIEW3D_PT_light_helper_eevee_light_shadow"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "LH"
-    bl_parent_id = "LLT_PT_eevee_light"
+    bl_parent_id = "VIEW3D_PT_light_helper_eevee_light"
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
@@ -585,13 +585,13 @@ class LLT_PT_eevee_light_shadow(bpy.types.Panel):
         draw_builtin_panel('DATA_PT_EEVEE_light_shadow', self.layout, context, light_obj)
 
 
-class LLT_PT_eevee_light_influence(bpy.types.Panel):
+class VIEW3D_PT_light_helper_eevee_light_influence(bpy.types.Panel):
     bl_label = "Influence"
-    bl_idname = "LLT_PT_eevee_light_influence"
+    bl_idname = "VIEW3D_PT_light_helper_eevee_light_influence"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "LH"
-    bl_parent_id = "LLT_PT_eevee_light"
+    bl_parent_id = "VIEW3D_PT_light_helper_eevee_light"
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
@@ -608,14 +608,14 @@ class LLT_PT_eevee_light_influence(bpy.types.Panel):
 
 
 panel_list = [
-    LLT_PT_light_control_panel,
-    LLT_PT_obj_control_panel,
-    LLT_PT_light_properties,
-    LLT_PT_cycles_light,
-    LLT_PT_light_settings,
-    LLT_PT_eevee_light,
-    LLT_PT_eevee_light_shadow,
-    LLT_PT_eevee_light_influence,
+    VIEW3D_PT_light_helper_light_control,
+    VIEW3D_PT_light_helper_object_control,
+    VIEW3D_PT_light_helper_light_properties,
+    VIEW3D_PT_light_helper_cycles_light,
+    VIEW3D_PT_light_helper_light_settings,
+    VIEW3D_PT_light_helper_eevee_light,
+    VIEW3D_PT_light_helper_eevee_light_shadow,
+    VIEW3D_PT_light_helper_eevee_light_influence,
 ]
 register_class, unregister_class = bpy.utils.register_classes_factory(panel_list)
 _registered_category = None

@@ -1,4 +1,4 @@
-from . import ui, property, ops, translation, preferences, migration, handlers
+from . import ui, property, ops, translation, preferences, handlers
 
 bl_info = {
     "name": "Light Helper",
@@ -19,7 +19,6 @@ module_list = [
     ops,
     ui,
     translation,
-    migration,
     handlers,
 ]
 

@@ -10,13 +10,14 @@ def _is_legacy_safe_object(obj: bpy.types.Object) -> bool:
     return obj.name.startswith("LLP_SAFE_")
 
 
-def _remove_legacy_safe_objects() -> None:
+def _remove_legacy_safe_objects() -> int:
     to_remove = [obj for obj in bpy.data.objects if _is_legacy_safe_object(obj)]
     for obj in to_remove:
         mesh = obj.data if obj.type == 'MESH' else None
         bpy.data.objects.remove(obj, do_unlink=True)
         if mesh and mesh.users == 0:
             bpy.data.meshes.remove(mesh)
+    return len(to_remove)
 
 
 def _infer_linking_mode_from_collections(light: bpy.types.Object) -> str:
@@ -39,9 +40,40 @@ def _infer_linking_mode_from_collections(light: bpy.types.Object) -> str:
     return StateValue.EXCLUDE.value
 
 
-def migrate_scene(scene: bpy.types.Scene) -> None:
+def _scene_has_initialized_linking(scene: bpy.types.Scene) -> bool:
+    from .utils import is_linking_initialized
+
+    for obj in scene.objects:
+        if not hasattr(obj, "light_linking"):
+            continue
+        if is_linking_initialized(obj):
+            return True
+    return False
+
+
+def scene_needs_migration(scene: bpy.types.Scene) -> bool:
     if scene.get(LIGHT_HELPER_MIGRATED_KEY):
-        return
+        return False
+    return _scene_has_initialized_linking(scene)
+
+
+def has_legacy_residue() -> bool:
+    try:
+        objects = bpy.data.objects
+        scenes = bpy.data.scenes
+    except (AttributeError, TypeError):
+        return False
+    if any(_is_legacy_safe_object(obj) for obj in objects):
+        return True
+    return any(scene_needs_migration(scene) for scene in scenes)
+
+
+def migrate_scene(scene: bpy.types.Scene) -> bool:
+    if scene.get(LIGHT_HELPER_MIGRATED_KEY):
+        return False
+    if not _scene_has_initialized_linking(scene):
+        scene[LIGHT_HELPER_MIGRATED_KEY] = True
+        return False
 
     from .utils import (
         CollectionType,
@@ -50,8 +82,6 @@ def migrate_scene(scene: bpy.types.Scene) -> None:
         is_linking_initialized,
         mark_managed_linking_collection,
     )
-
-    _remove_legacy_safe_objects()
 
     for obj in scene.objects:
         if not hasattr(obj, "light_linking"):
@@ -67,42 +97,17 @@ def migrate_scene(scene: bpy.types.Scene) -> None:
         apply_linking_mode_to_light(obj, mode)
 
     scene[LIGHT_HELPER_MIGRATED_KEY] = True
+    return True
 
 
-@bpy.app.handlers.persistent
-def load_post_handler(_dummy):
+def run_legacy_cleanup() -> tuple[int, int]:
+    """Remove legacy leftovers and migrate unmigrated scenes.
+
+    Returns (removed_safe_object_count, migrated_scene_count).
+    """
+    removed = _remove_legacy_safe_objects()
+    migrated = 0
     for scene in bpy.data.scenes:
-        migrate_scene(scene)
-
-
-_handlers = (load_post_handler,)
-
-
-def run_migration_for_all_scenes() -> None:
-    try:
-        scenes = bpy.data.scenes
-    except (AttributeError, TypeError):
-        return
-    for scene in scenes:
-        migrate_scene(scene)
-
-
-def _deferred_migration():
-    run_migration_for_all_scenes()
-    return None
-
-
-def register():
-    for handler in _handlers:
-        if handler not in bpy.app.handlers.load_post:
-            bpy.app.handlers.load_post.append(handler)
-    if not bpy.app.timers.is_registered(_deferred_migration):
-        bpy.app.timers.register(_deferred_migration, first_interval=0.0)
-
-
-def unregister():
-    if bpy.app.timers.is_registered(_deferred_migration):
-        bpy.app.timers.unregister(_deferred_migration)
-    for handler in _handlers:
-        if handler in bpy.app.handlers.load_post:
-            bpy.app.handlers.load_post.remove(handler)
+        if migrate_scene(scene):
+            migrated += 1
+    return removed, migrated

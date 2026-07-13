@@ -483,11 +483,11 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
 
     @staticmethod
     def draw_settings(context, layout, tool):
-        from ..ui.panel import LLT_PT_light_control_panel
+        from ..ui.panel import VIEW3D_PT_light_helper_light_control
         from ..utils import get_light_link_item_count, get_object_link_light_count
         from ..utils.overlay import get_active_link_count
 
-        if not LLT_PT_light_control_panel.check_support_light_linking(context):
+        if not VIEW3D_PT_light_helper_light_control.check_support_light_linking(context):
             layout.label(
                 text=p_("This rendering engine does not support light linking"),
                 icon='ERROR',

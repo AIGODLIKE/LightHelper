@@ -4,6 +4,7 @@ from .common import LightHelperOperator
 from .filter_ops import LLP_OT_invert_filter_show, LLP_OT_switch_filter_show
 from .light_adjust import LLP_OT_adjust_light_ev, LLP_OT_reset_linking_hud, LLP_OT_solo_light
 from .maintenance import (
+    LLP_OT_cleanup_legacy_data,
     LLP_OT_init_all_light_linking,
     LLP_OT_instances_data,
     LLP_OT_instances_data_all,
@@ -36,6 +37,7 @@ ops_list = [
     LLP_OT_toggle_light_linking,
     LLP_OT_link_selected_objs,
     LLP_OT_select_item,
+    LLP_OT_cleanup_legacy_data,
     LLP_OT_instances_data,
     LLP_OT_init_all_light_linking,
     LLP_OT_instances_data_all,
@@ -74,6 +76,7 @@ __all__ = [
     "LLP_OT_toggle_light_linking",
     "LLP_OT_link_selected_objs",
     "LLP_OT_select_item",
+    "LLP_OT_cleanup_legacy_data",
     "LLP_OT_instances_data",
     "LLP_OT_init_all_light_linking",
     "LLP_OT_instances_data_all",

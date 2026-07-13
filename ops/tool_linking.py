@@ -23,12 +23,12 @@ from .common import LightHelperOperator
 class _LLP_LightLinkingToolPoll:
     @classmethod
     def poll(cls, context):
-        from ..ui.panel import LLT_PT_light_control_panel
+        from ..ui.panel import VIEW3D_PT_light_helper_light_control
         from ..ui.tool import is_light_linking_tool_active
         if not is_light_linking_tool_active(context):
             cls.poll_message_set(p_("Light Linking tool is not active"))
             return False
-        if not LLT_PT_light_control_panel.check_support_light_linking(context):
+        if not VIEW3D_PT_light_helper_light_control.check_support_light_linking(context):
             cls.poll_message_set(p_("This rendering engine does not support light linking"))
             return False
         return True

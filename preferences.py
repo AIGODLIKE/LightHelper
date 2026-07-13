@@ -112,6 +112,7 @@ class LLT_AddonPreferences(AddonPreferences):
     def draw(self, context):
         from bpy.app.translations import pgettext_iface as p_
         from .ops.light_adjust import LLP_OT_reset_linking_hud
+        from .ops.maintenance import LLP_OT_cleanup_legacy_data
         layout = self.layout
         column = layout.column(align=True)
         if bpy.app.version < (4, 3, 0):
@@ -128,6 +129,10 @@ class LLT_AddonPreferences(AddonPreferences):
         row.prop(self, "linking_tool_hud_x")
         row.prop(self, "linking_tool_hud_y")
         column.operator(LLP_OT_reset_linking_hud.bl_idname, icon='LOOP_BACK')
+        column.separator()
+        cleanup_row = column.row(align=True)
+        cleanup_row.enabled = LLP_OT_cleanup_legacy_data.poll(context)
+        cleanup_row.operator(LLP_OT_cleanup_legacy_data.bl_idname, icon='BRUSH_DATA')
         column.separator()
         column.label(
             text=p_("Use Exclude mode to omit listed objects from a light, or Include mode to affect only listed objects."),
