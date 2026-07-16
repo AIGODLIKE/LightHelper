@@ -1,7 +1,7 @@
 import bpy
 from bpy.app.translations import pgettext_iface as p_
 
-from ..utils import view_selected
+from ..utils import is_in_view_layer, view_selected
 from .common import (
     LightHelperOperator,
     get_area,
@@ -54,6 +54,8 @@ class LLP_OT_select_item(LightHelperOperator, bpy.types.Operator):
         return {"FINISHED"}
 
     def select_obj_in_view3d(self, context, obj: bpy.types.Object):
+        if not is_in_view_layer(context, obj):
+            return
         view_layer = context.view_layer
         for selected_obj in view_layer.objects.selected:
             selected_obj.select_set(False)

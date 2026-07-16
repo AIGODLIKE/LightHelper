@@ -454,14 +454,16 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
         row.prop(wm_props, "linking_tool_subject_mode", expand=True, icon_only=True, text_ctxt="light_helper_zh_CN")
 
     @staticmethod
+    def _draw_subject_tip(layout):
+        tip = layout.row(align=True)
+        tip.alert = True
+        tip.label(text=p_("Ctrl+LClick: Switch Subject Mode (Light/Object)"), icon='INFO')
+
+    @staticmethod
     def _draw_subject_status(row, subject_mode, light, obj, link_count):
         from ..utils.icon import get_item_icon, get_light_icon
 
         if subject_mode == 'OBJECT':
-            tip = row.row(align=True)
-            tip.alert = True
-            tip.label(text=p_("Ctrl+LClick: Switch Subject Mode"), icon='INFO')
-            tip.separator(factor=0.8)
             if obj is not None:
                 row.label(text=obj.name, icon='OBJECT_DATA', translate=False)
                 row.separator(factor=0.8)
@@ -525,10 +527,8 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
         VIEW3D_WT_light_linking._draw_mode_controls(row, wm_props)
 
         col.separator()
+        VIEW3D_WT_light_linking._draw_subject_tip(col)
         if subject_mode == 'OBJECT':
-            tip = col.row(align=True)
-            tip.alert = True
-            tip.label(text=p_("Ctrl+LClick: Switch Subject Mode"), icon='INFO')
             if obj is not None:
                 col.label(text=obj.name, icon='OBJECT_DATA', translate=False)
                 col.label(text=p_("Linked lights: %d") % link_count)

@@ -169,17 +169,24 @@ def _hud_info_lines(context: bpy.types.Context) -> list[str]:
     return lines
 
 
+HUD_ALERT_COLOR = (1.0, 0.35, 0.3, 1.0)
+HUD_NORMAL_COLOR = (1.0, 1.0, 1.0, 0.95)
+
+
 def _hud_shortcut_lines(subject_mode: str) -> list[str]:
     from bpy.app.translations import pgettext_iface as p_
 
-    lines = [p_("Ctrl+LClick: Switch Subject Mode")]
+    lines = [p_("Ctrl+LClick: Switch Subject Mode (Light/Object)")]
     if subject_mode == 'OBJECT':
         lines.extend([
-            p_("LClick: Switch Object Subject"),
+            p_("LClick Object: Switch Object Subject"),
             p_("LClick Light: Toggle Light Link"),
         ])
     else:
-        lines.append(p_("LClick: Select/Toggle Link"))
+        lines.extend([
+            p_("LClick Light: Switch Light Subject"),
+            p_("LClick Object: Toggle Object Link"),
+        ])
     lines.extend([
         f"L / {p_('Spacebar')}: {p_('Toggle Light')}",
         f"S: {p_('Toggle Shadow')}",
@@ -203,14 +210,33 @@ def _hud_lines(context: bpy.types.Context) -> list[str]:
     return info + [""] + shortcuts
 
 
-def _hud_line_color(subject_mode: str, line: str) -> tuple[float, float, float, float]:
+def _hud_mode_switch_segments(line: str) -> list[tuple[str, bool]] | None:
+    """Split the subject-mode tip so Light/Object (灯光/物体) can be drawn in red."""
     from bpy.app.translations import pgettext_iface as p_
 
-    if subject_mode == 'OBJECT' and line == p_("Ctrl+LClick: Switch Subject Mode"):
-        return (1.0, 0.35, 0.3, 1.0)
+    if line != p_("Ctrl+LClick: Switch Subject Mode (Light/Object)"):
+        return None
+    for light, obj in (("Light", "Object"), ("灯光", "物体")):
+        needle = f"({light}/{obj})"
+        idx = line.find(needle)
+        if idx < 0:
+            continue
+        end = idx + len(needle)
+        segments = [
+            (line[:idx + 1], False),
+            (light, True),
+            ("/", False),
+            (obj, True),
+            (line[end - 1:], False),
+        ]
+        return [(text, alert) for text, alert in segments if text]
+    return [(line, True)]
+
+
+def _hud_line_color(line: str) -> tuple[float, float, float, float]:
     if not line:
         return (1.0, 1.0, 1.0, 0.0)
-    return (1.0, 1.0, 1.0, 0.95)
+    return HUD_NORMAL_COLOR
 
 
 def _hud_bounds(context: bpy.types.Context, region: bpy.types.Region) -> tuple[float, float, float, float]:
@@ -667,7 +693,6 @@ def _draw_overlay_hud():
     if region is None:
         return
 
-    subject_mode = wm_props.linking_tool_subject_mode
     lines = _hud_lines(context)
     font_id = 0
     margin_x = wm_props.linking_tool_hud_x
@@ -681,9 +706,19 @@ def _draw_overlay_hud():
     for i, line in enumerate(lines):
         if not line:
             continue
-        blf.position(font_id, margin_x, top_y - i * HUD_LINE_HEIGHT, 0)
-        color = _hud_line_color(subject_mode, line)
-        blf.color(font_id, *color)
+        y = top_y - i * HUD_LINE_HEIGHT
+        segments = _hud_mode_switch_segments(line)
+        if segments is not None:
+            x = float(margin_x)
+            for text, alert in segments:
+                blf.position(font_id, x, y, 0)
+                blf.color(font_id, *(HUD_ALERT_COLOR if alert else HUD_NORMAL_COLOR))
+                blf.draw(font_id, text)
+                width, _height = blf.dimensions(font_id, text)
+                x += width
+            continue
+        blf.position(font_id, margin_x, y, 0)
+        blf.color(font_id, *_hud_line_color(line))
         blf.draw(font_id, line)
     blf.disable(font_id, blf.SHADOW)
 

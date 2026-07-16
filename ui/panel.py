@@ -119,8 +119,11 @@ def draw_light_ev_controls(layout, context) -> None:
         op.ev = ev
 
 
-def get_item_visibility_tooltip(item: bpy.types.Object | bpy.types.Collection) -> tuple[str, bool]:
-    viewport_hidden, render_hidden, restricted = get_item_visibility_restrictions(item)
+def get_item_visibility_tooltip(
+        item: bpy.types.Object | bpy.types.Collection,
+        context: bpy.types.Context | None = None,
+) -> tuple[str, bool]:
+    viewport_hidden, render_hidden, restricted = get_item_visibility_restrictions(item, context)
     if not restricted:
         return "", False
 
@@ -325,7 +328,7 @@ class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
         for (item, state_info) in iter_sorted_linking_items(obj_state_dict):
             if isinstance(item, bpy.types.Object) and item not in objects:
                 continue
-            tooltip, restricted = get_item_visibility_tooltip(item)
+            tooltip, restricted = get_item_visibility_tooltip(item, context)
             row = col.row(align=False)
             if restricted:
                 row.active = False
@@ -452,7 +455,7 @@ class VIEW3D_PT_light_helper_object_control(bpy.types.Panel):
         for (light_obj, state_info) in iter_sorted_linking_lights(obj_state_dict):
             if light_obj not in objects:
                 continue
-            tooltip, restricted = get_item_visibility_tooltip(light_obj)
+            tooltip, restricted = get_item_visibility_tooltip(light_obj, context)
             row = col.row()
             if restricted:
                 row.active = False

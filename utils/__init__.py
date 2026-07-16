@@ -307,9 +307,31 @@ def is_linkable_object(obj: bpy.types.Object) -> bool:
     return obj.type in ILLUMINATED_OBJECT_TYPE_LIST and obj.type != "LIGHT"
 
 
+def is_in_view_layer(context: bpy.types.Context, obj: bpy.types.Object) -> bool:
+    """True when ``obj`` is present in the current view layer (not collection-excluded)."""
+    obj = resolve_original_id(obj)
+    if obj is None or context is None or context.view_layer is None:
+        return False
+    return obj.name in context.view_layer.objects
+
+
+def is_shown_in_view_layer(context: bpy.types.Context, obj: bpy.types.Object) -> bool:
+    """True when the object is in the view layer and visible in the viewport."""
+    obj = resolve_original_id(obj)
+    if obj is None or not is_in_view_layer(context, obj):
+        return False
+    try:
+        return bool(obj.visible_get())
+    except ReferenceError:
+        return False
+
+
 def get_filtered_tool_lights(context: bpy.types.Context) -> list[bpy.types.Object]:
     from ..filter import filter_objects
-    return [obj for obj in filter_objects(context) if is_tool_light_source(obj, context)]
+    return [
+        obj for obj in filter_objects(context)
+        if is_tool_light_source(obj, context) and is_shown_in_view_layer(context, obj)
+    ]
 
 
 def cycle_tool_light(context: bpy.types.Context, light: bpy.types.Object | None,
@@ -327,14 +349,16 @@ def cycle_tool_light(context: bpy.types.Context, light: bpy.types.Object | None,
 
 def select_tool_light(context: bpy.types.Context, light: bpy.types.Object) -> None:
     view_layer = context.view_layer
-    for obj in view_layer.objects.selected:
-        obj.select_set(False)
-    view_layer.objects.active = light
-    light.select_set(True)
+    if is_in_view_layer(context, light):
+        for obj in view_layer.objects.selected:
+            obj.select_set(False)
+        view_layer.objects.active = light
+        light.select_set(True)
     objects = context.scene.objects[:]
     if light in objects:
         context.scene.light_helper_property.active_object_index = objects.index(light)
-    view_selected(context)
+    if is_in_view_layer(context, light):
+        view_selected(context)
 
 
 def remove_orphaned_managed_collection(coll: bpy.types.Collection | None) -> None:
@@ -501,8 +525,12 @@ def is_object_linked_by_any_light(obj: bpy.types.Object, context: bpy.types.Cont
 
 def cycle_tool_object(context: bpy.types.Context, obj: bpy.types.Object | None,
                       direction: int) -> bpy.types.Object | None:
-    # Match the Object Linking UIList: only objects already linked by lights.
-    objects = iter_objects_linked_by_lights(context)
+    # Match the Object Linking UIList: only objects already linked by lights,
+    # and skip ones hidden or excluded from the current view layer.
+    objects = [
+        item for item in iter_objects_linked_by_lights(context)
+        if is_shown_in_view_layer(context, item)
+    ]
     if not objects:
         return None
     obj = resolve_original_id(obj)
@@ -515,16 +543,18 @@ def cycle_tool_object(context: bpy.types.Context, obj: bpy.types.Object | None,
 
 def select_tool_object(context: bpy.types.Context, obj: bpy.types.Object) -> None:
     view_layer = context.view_layer
-    for selected in view_layer.objects.selected:
-        selected.select_set(False)
-    view_layer.objects.active = obj
-    obj.select_set(True)
+    if is_in_view_layer(context, obj):
+        for selected in view_layer.objects.selected:
+            selected.select_set(False)
+        view_layer.objects.active = obj
+        obj.select_set(True)
     objects = context.scene.objects[:]
     scene_props = context.scene.light_helper_property
     if obj in objects:
         scene_props.active_object_index = objects.index(obj)
         scene_props.active_linked_object_index = objects.index(obj)
-    view_selected(context)
+    if is_in_view_layer(context, obj):
+        view_selected(context)
 
 
 def linking_item_sort_key(item: bpy.types.Object | bpy.types.Collection) -> tuple:
@@ -662,9 +692,13 @@ def check_link(obj: bpy.types.Object) -> bool:
 
 
 def get_item_visibility_restrictions(
-        item: bpy.types.Object | bpy.types.Collection) -> tuple[bool, bool, bool]:
+        item: bpy.types.Object | bpy.types.Collection,
+        context: bpy.types.Context | None = None,
+) -> tuple[bool, bool, bool]:
     if isinstance(item, bpy.types.Object):
         viewport_hidden = item.hide_viewport or item.hide_get()
+        if context is not None and not is_shown_in_view_layer(context, item):
+            viewport_hidden = True
         render_hidden = item.hide_render
     elif isinstance(item, bpy.types.Collection):
         viewport_hidden = item.hide_viewport

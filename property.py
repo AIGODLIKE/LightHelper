@@ -41,6 +41,29 @@ class ObjectProperty(PropertyGroup):
 
     show_in_view: bpy.props.BoolProperty(name="Show", get=get_show, set=set_show, )
 
+    def get_show_viewport(self):
+        obj = self.id_data
+        if obj.hide_viewport:
+            return False
+        try:
+            return not obj.hide_get()
+        except RuntimeError:
+            return False
+
+    def set_show_viewport(self, value):
+        obj = self.id_data
+        obj.hide_viewport = not value
+        try:
+            obj.hide_set(not value)
+        except RuntimeError:
+            pass
+
+    show_viewport: bpy.props.BoolProperty(
+        name="Show in Viewport",
+        get=get_show_viewport,
+        set=set_show_viewport,
+    )
+
 
 def poll_light_linking_pin_object(_self, obj: bpy.types.Object) -> bool:
     return obj.type == 'LIGHT'
@@ -94,27 +117,26 @@ class SceneProperty(PropertyGroup):
         from .ui.tool import is_session_active, is_syncing_list_index, sync_tool_subject_from_selection
         if is_syncing_list_index():
             return
-        from .utils import view_selected
+        from .utils import is_in_view_layer, view_selected
         index = self.active_object_index
         objects = context.scene.objects
         if index < 0 or index >= len(objects):
             return
         act_obj = objects[index]
-        context.view_layer.objects.active = act_obj
-
-        act_obj.select_set(True)
-        for obj in context.view_layer.objects.selected:
-            if obj != act_obj:
-                obj.select_set(False)
-
-        view_selected(context)
+        if is_in_view_layer(context, act_obj):
+            context.view_layer.objects.active = act_obj
+            act_obj.select_set(True)
+            for obj in context.view_layer.objects.selected:
+                if obj != act_obj:
+                    obj.select_set(False)
+            view_selected(context)
         if is_session_active(context):
             sync_tool_subject_from_selection(context)
 
     active_object_index: bpy.props.IntProperty(default=0, update=update_active_object_index)
 
     def update_active_linked_object_index(self, context):
-        from .utils import is_linkable_object, view_selected
+        from .utils import is_in_view_layer, is_linkable_object, view_selected
         index = self.active_linked_object_index
         objects = context.scene.objects
         if index < 0 or index >= len(objects):
@@ -122,14 +144,15 @@ class SceneProperty(PropertyGroup):
         act_obj = objects[index]
         if not is_linkable_object(act_obj):
             return
-        context.view_layer.objects.active = act_obj
-        act_obj.select_set(True)
-        for obj in context.view_layer.objects.selected:
-            if obj != act_obj:
-                obj.select_set(False)
+        if is_in_view_layer(context, act_obj):
+            context.view_layer.objects.active = act_obj
+            act_obj.select_set(True)
+            for obj in context.view_layer.objects.selected:
+                if obj != act_obj:
+                    obj.select_set(False)
+            view_selected(context)
         if self.object_linking_pin:
             self.object_linking_pin_object = act_obj
-        view_selected(context)
 
     active_linked_object_index: bpy.props.IntProperty(
         default=0,

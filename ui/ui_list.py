@@ -109,14 +109,22 @@ class LLT_UL_linked_object(bpy.types.UIList):
     """Lists objects that are referenced by any light linking collection."""
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
-        from ..utils import get_object_link_light_count
+        from ..utils import get_object_link_light_count, is_shown_in_view_layer
         from ..utils.icon import get_item_icon
 
         row = layout.row(align=True)
-        row.label(text=item.name, translate=False, **get_item_icon(item))
+        view_icon = "HIDE_OFF" if item.light_helper_property.show_viewport else "HIDE_ON"
+        row.prop(item.light_helper_property, "show_viewport", text="", icon=view_icon, emboss=False)
+        render_icon = "RESTRICT_RENDER_OFF" if not item.hide_render else "RESTRICT_RENDER_ON"
+        row.prop(item, "hide_render", text="", icon=render_icon, emboss=False, invert_checkbox=True)
+
+        info = row.row(align=True)
+        if not is_shown_in_view_layer(context, item):
+            info.active = False
+        info.label(text=item.name, translate=False, **get_item_icon(item))
         count = get_object_link_light_count(item, context)
         if count:
-            row.label(text=p_("Linked lights: %d") % count)
+            info.label(text=p_("Linked lights: %d") % count)
 
     def filter_items(self, context, data, propname):
         from ..utils import iter_objects_linked_by_lights
