@@ -839,6 +839,22 @@ def mark_duplicate_handled(obj: bpy.types.Object) -> None:
     obj[LIGHT_HELPER_DUP_HANDLED_KEY] = True
 
 
+def prime_existing_duplicate_objects(scene: bpy.types.Scene,
+                                   context: bpy.types.Context | None = None) -> None:
+    """Mark scene duplicates as handled so later source links do not cascade."""
+    ctx = context if context is not None else bpy.context
+    for obj in scene.objects:
+        if is_duplicate_handled(obj) or obj.type == 'LIGHT':
+            continue
+        source = find_duplicate_source_object(obj)
+        if source is None:
+            continue
+        if (is_object_linked_by_any_light(source, ctx)
+                and not is_object_linked_by_any_light(obj, ctx)):
+            inherit_light_linking_from_object(obj, source, ctx)
+        mark_duplicate_handled(obj)
+
+
 def process_duplicated_object(obj: bpy.types.Object, context: bpy.types.Context | None = None) -> bool:
     obj = resolve_original_id(obj)
     if obj is None or not is_original_id(obj):
@@ -859,7 +875,13 @@ def process_duplicated_object(obj: bpy.types.Object, context: bpy.types.Context 
             obj.light_helper_property.linking_mode = source.light_helper_property.linking_mode
             changed = True
     elif source is not None:
-        changed = inherit_light_linking_from_object(obj, source, context) or changed
+        source_has_links = is_object_linked_by_any_light(source, context)
+        if source_has_links:
+            changed = inherit_light_linking_from_object(obj, source, context) or changed
+        # Always mark handled on first encounter so a later manual link on the
+        # source object does not retroactively link existing name-based duplicates.
+        mark_duplicate_handled(obj)
+        return changed
 
     if changed:
         mark_duplicate_handled(obj)

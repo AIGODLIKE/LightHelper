@@ -5,6 +5,7 @@ from .utils import (
     fix_all_shared_light_linking,
     has_shared_linking_collections,
     make_light_linking_single_user,
+    prime_existing_duplicate_objects,
     process_duplicated_object,
 )
 
@@ -65,7 +66,9 @@ def depsgraph_update_post_handler(_scene, depsgraph: bpy.types.Depsgraph):
 def load_post_fix_handler(_dummy):
     if not _auto_fix_enabled():
         return
+    context = bpy.context
     for scene in bpy.data.scenes:
+        prime_existing_duplicate_objects(scene, context)
         fix_all_shared_light_linking(scene)
 
 
@@ -101,6 +104,12 @@ def register():
     # One-shot fix after enable; do not keep a permanent timer.
     if not bpy.app.timers.is_registered(_deferred_fix):
         bpy.app.timers.register(_deferred_fix, first_interval=0.0)
+    try:
+        context = bpy.context
+        for scene in bpy.data.scenes:
+            prime_existing_duplicate_objects(scene, context)
+    except (AttributeError, ReferenceError, TypeError):
+        pass
 
 
 def unregister():
