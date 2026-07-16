@@ -16,6 +16,19 @@ from ..utils.icon import get_item_icon, get_light_icon
 
 
 def get_panel_light_obj(context) -> bpy.types.Object | None:
+    from ..utils import is_tool_light_source
+    if context.scene.light_helper_property.light_linking_pin:
+        obj = context.scene.light_helper_property.light_linking_pin_object
+        if obj and is_tool_light_source(obj, context):
+            return obj
+    obj = context.object
+    if obj and is_tool_light_source(obj, context):
+        return obj
+    return None
+
+
+def get_panel_blender_light_obj(context) -> bpy.types.Object | None:
+    """Light Properties panels: Blender light objects only, not emissive meshes."""
     if context.scene.light_helper_property.light_linking_pin:
         obj = context.scene.light_helper_property.light_linking_pin_object
         if obj and obj.type == 'LIGHT':
@@ -290,7 +303,11 @@ class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
 
         col = layout.column()
         row = col.row(align=True)
-        row.label(text=f"{light_obj.name}", icon=get_light_icon(light_obj), translate=False)
+        if light_obj.type == 'LIGHT':
+            icon = get_light_icon(light_obj)
+        else:
+            icon = get_item_icon(light_obj).get('icon', 'OBJECT_DATA')
+        row.label(text=f"{light_obj.name}", icon=icon, translate=False)
         row.separator()
         row.prop(context.scene.light_helper_property, 'light_linking_pin', text='', icon='PINNED')
         if LLP_OT_instances_data.poll(context):
@@ -492,10 +509,10 @@ class VIEW3D_PT_light_helper_light_properties(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return get_panel_light_obj(context) is not None
+        return get_panel_blender_light_obj(context) is not None
 
     def draw_header(self, context):
-        light_obj = get_panel_light_obj(context)
+        light_obj = get_panel_blender_light_obj(context)
         if light_obj is None:
             return
         self.layout.label(text=light_obj.name, icon=get_light_icon(light_obj), translate=False)
@@ -517,10 +534,10 @@ class VIEW3D_PT_light_helper_cycles_light(bpy.types.Panel):
     def poll(cls, context):
         if context.scene.render.engine != 'CYCLES':
             return False
-        return builtin_panel_poll('CYCLES_LIGHT_PT_light', context, get_panel_light_obj(context), 'CYCLES')
+        return builtin_panel_poll('CYCLES_LIGHT_PT_light', context, get_panel_blender_light_obj(context), 'CYCLES')
 
     def draw(self, context):
-        light_obj = get_panel_light_obj(context)
+        light_obj = get_panel_blender_light_obj(context)
         if light_obj is None:
             return
         draw_builtin_panel('CYCLES_LIGHT_PT_light', self.layout, context, light_obj, 'CYCLES')
@@ -539,10 +556,10 @@ class VIEW3D_PT_light_helper_light_settings(bpy.types.Panel):
     def poll(cls, context):
         if context.scene.render.engine != 'CYCLES':
             return False
-        return builtin_panel_poll('CYCLES_LIGHT_PT_settings', context, get_panel_light_obj(context), 'CYCLES')
+        return builtin_panel_poll('CYCLES_LIGHT_PT_settings', context, get_panel_blender_light_obj(context), 'CYCLES')
 
     def draw(self, context):
-        light_obj = get_panel_light_obj(context)
+        light_obj = get_panel_blender_light_obj(context)
         if light_obj is None:
             return
         draw_builtin_panel('CYCLES_LIGHT_PT_settings', self.layout, context, light_obj, 'CYCLES')
@@ -561,10 +578,10 @@ class VIEW3D_PT_light_helper_eevee_light(bpy.types.Panel):
     def poll(cls, context):
         if not _is_eevee_engine(context.scene.render.engine):
             return False
-        return builtin_panel_poll('DATA_PT_EEVEE_light', context, get_panel_light_obj(context))
+        return builtin_panel_poll('DATA_PT_EEVEE_light', context, get_panel_blender_light_obj(context))
 
     def draw(self, context):
-        light_obj = get_panel_light_obj(context)
+        light_obj = get_panel_blender_light_obj(context)
         if light_obj is None:
             return
         draw_builtin_panel('DATA_PT_EEVEE_light', self.layout, context, light_obj)
@@ -583,16 +600,16 @@ class VIEW3D_PT_light_helper_eevee_light_shadow(bpy.types.Panel):
     def poll(cls, context):
         if not _is_eevee_engine(context.scene.render.engine):
             return False
-        return builtin_panel_poll('DATA_PT_EEVEE_light_shadow', context, get_panel_light_obj(context))
+        return builtin_panel_poll('DATA_PT_EEVEE_light_shadow', context, get_panel_blender_light_obj(context))
 
     def draw_header(self, context):
-        light_obj = get_panel_light_obj(context)
+        light_obj = get_panel_blender_light_obj(context)
         if light_obj is None:
             return
         draw_builtin_panel_header('DATA_PT_EEVEE_light_shadow', self.layout, context, light_obj)
 
     def draw(self, context):
-        light_obj = get_panel_light_obj(context)
+        light_obj = get_panel_blender_light_obj(context)
         if light_obj is None:
             return
         draw_builtin_panel('DATA_PT_EEVEE_light_shadow', self.layout, context, light_obj)
@@ -611,10 +628,10 @@ class VIEW3D_PT_light_helper_eevee_light_influence(bpy.types.Panel):
     def poll(cls, context):
         if not _is_eevee_engine(context.scene.render.engine):
             return False
-        return builtin_panel_poll('DATA_PT_EEVEE_light_influence', context, get_panel_light_obj(context))
+        return builtin_panel_poll('DATA_PT_EEVEE_light_influence', context, get_panel_blender_light_obj(context))
 
     def draw(self, context):
-        light_obj = get_panel_light_obj(context)
+        light_obj = get_panel_blender_light_obj(context)
         if light_obj is None:
             return
         draw_builtin_panel('DATA_PT_EEVEE_light_influence', self.layout, context, light_obj)

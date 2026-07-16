@@ -42,8 +42,9 @@ class LLP_OT_instances_data(LightHelperOperator, bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
+        from ..utils import is_tool_light_source
         light_obj = get_light_obj(context)
-        if light_obj is None or light_obj.type != 'LIGHT' or not hasattr(light_obj, "light_linking"):
+        if light_obj is None or not is_tool_light_source(light_obj, context) or not hasattr(light_obj, "light_linking"):
             cls.poll_message_set(p_("No light selected"))
             return False
         light = light_obj.light_linking

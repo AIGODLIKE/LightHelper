@@ -78,7 +78,8 @@ class ObjectProperty(PropertyGroup):
 
 
 def poll_light_linking_pin_object(_self, obj: bpy.types.Object) -> bool:
-    return obj.type == 'LIGHT'
+    from .utils import is_tool_light_source
+    return is_tool_light_source(obj)
 
 
 def poll_object_linking_pin_object(_self, obj: bpy.types.Object) -> bool:

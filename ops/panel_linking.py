@@ -116,11 +116,12 @@ class LLP_OT_add_light_linking(LightHelperOperator, bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
+        from ..utils import is_tool_light_source
         light = getattr(context, "add_light_linking_light_obj", None)
         if light is None:
             cls.poll_message_set(p_("No light selected"))
             return False
-        if light.type != 'LIGHT':
+        if not is_tool_light_source(light, context):
             cls.poll_message_set(p_("Selected object cannot use light linking"))
             return False
         return True
