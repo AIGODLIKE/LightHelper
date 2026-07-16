@@ -21,6 +21,7 @@ paths_exclude_pattern = [
     "/*.zip",
     "/.gitignore",
     "/README.md",
+    "*.md",
     "**/*.pyc",
     "**/*.pyo",
     "**/*.log",
