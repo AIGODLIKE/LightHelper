@@ -18,9 +18,14 @@ class LLT_AddonPreferences(AddonPreferences):
         refresh_panel(context)
 
     panel_name: StringProperty(name="Panel Name", default="LH", update=update_panel)
-    node_search_depth: IntProperty(name="Node search depth",
-                                   description="If the setting is too high or the materials in the scene are too complex, stuttering may occur",
-                                   default=10, max=50, min=3, update=update_filter_settings)
+    node_search_depth: IntProperty(
+        name="Emission Node Search Depth",
+        description=(
+            "Maximum recursion depth when walking material node trees to detect emissive objects "
+            "shown in the light list. Higher values may cause stuttering with complex materials"
+        ),
+        default=10, max=50, min=3, update=update_filter_settings,
+    )
     light_list_filter_type: EnumProperty(
         name="List Filter Type",
         default="ALL",

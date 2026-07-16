@@ -64,6 +64,18 @@ class ObjectProperty(PropertyGroup):
         set=set_show_viewport,
     )
 
+    def get_show_render(self):
+        return not self.id_data.hide_render
+
+    def set_show_render(self, value):
+        self.id_data.hide_render = not value
+
+    show_render: bpy.props.BoolProperty(
+        name="Show in Render",
+        get=get_show_render,
+        set=set_show_render,
+    )
+
 
 def poll_light_linking_pin_object(_self, obj: bpy.types.Object) -> bool:
     return obj.type == 'LIGHT'
