@@ -40,6 +40,17 @@ def _draw_search_row(layout, uilist):
     row.prop(uilist, "use_filter_invert", text="", icon="ARROW_LEFTRIGHT")
 
 
+_LINK_COUNT_NARROW_PX = 300
+
+
+def _format_list_link_count(context, count, long_msg):
+    """Shorter link-count text when the sidebar region is narrow."""
+    region = getattr(context, "region", None)
+    if region is not None and region.width < _LINK_COUNT_NARROW_PX:
+        return "×%d" % count
+    return p_(long_msg) % count
+
+
 class LLT_UL_light(bpy.types.UIList):
     sort_type: bpy.props.EnumProperty(
         name="Use Sort",
@@ -70,38 +81,41 @@ class LLT_UL_light(bpy.types.UIList):
         pref = get_pref(context)
 
         _draw_search_row(layout, self)
-        layout.prop(self, "filter_hide_not_shown", toggle=True)
 
-        sp = layout.column(align=True).split(factor=0.2, align=True)
-
+        sp = layout.column(align=True).split(factor=0.35, align=True)
         sc = sp.column(align=True)
-        for i in (
-                "Sort Type",
-                "Show",
+        for i, tctx in (
+                ("Show", _TCTX),
+                ("Sort Type", _TCTX),
+                ("Emission Node Search Depth", None),
         ):
-            sc.label(text=f"{pgettext_iface(i, _TCTX)}:")
+            sc.label(text=f"{pgettext_iface(i, tctx)}:")
 
         sc = sp.column(align=True)
-        sc.row(align=True).prop(self, "sort_type", expand=True, text_ctxt=_TCTX)
-
         row = sc.row(align=True)
         row.prop(self, "show_type", emboss=True, toggle=True, text_ctxt=_TCTX)
         row.prop(self, "show_in_view", emboss=True, toggle=True, text_ctxt=_TCTX)
         row.prop(self, "show_render", emboss=True, toggle=True, text_ctxt=_TCTX)
         row.prop(self, "show_link_count", emboss=True, toggle=True, text_ctxt=_TCTX)
 
-        sc.prop(pref, "node_search_depth")
+        sc.row(align=True).prop(self, "sort_type", expand=True, text_ctxt=_TCTX)
+        sc.prop(pref, "node_search_depth", text="")
+
+        layout.prop(self, "filter_hide_not_shown", toggle=True)
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
         from ..utils import check_link, get_light_link_item_count, is_shown_in_view_layer
         from ..ops import LLP_OT_add_light_linking, LLP_OT_clear_light_linking, LLP_OT_solo_light
 
         props = item.light_helper_property
-        dimmed = not is_shown_in_view_layer(context, item)
         index = context.scene.objects[:].index(item)
 
+        row = layout.row(align=True)
+        if not is_shown_in_view_layer(context, item):
+            row.active = False
+
         # Icons-only left column; type text sits with the name to avoid crowding.
-        split = layout.split(factor=0.28, align=True)
+        split = row.split(factor=0.28, align=True)
         left = split.row(align=True)
 
         if self.show_in_view:
@@ -126,23 +140,18 @@ class LLT_UL_light(bpy.types.UIList):
             )
             op.index = index
 
-        icon_row = left.row(align=True)
-        if dimmed:
-            icon_row.active = False
-        icon_row.label(**get_item_icon(item))
+        left.label(**get_item_icon(item))
 
         # Keep Restore/Init in a fixed-width column so missing link-count text
         # does not stretch the action button.
         rest = split.split(factor=0.72, align=True)
         info_right = rest.row(align=True)
-        if dimmed:
-            info_right.active = False
         if self.show_type:
             info_right.label(text=item.type.title())
         info_right.label(text=item.name, translate=False)
         if self.show_link_count and check_link(item):
             count = get_light_link_item_count(item)
-            info_right.label(text=p_("Linked items: %d") % count)
+            info_right.label(text=_format_list_link_count(context, count, "Links: %d"))
 
         action = rest.row(align=True)
         if check_link(item):
@@ -207,7 +216,6 @@ class LLT_UL_linked_object(bpy.types.UIList):
         from bpy.app.translations import pgettext_iface
 
         _draw_search_row(layout, self)
-        layout.prop(self, "filter_hide_not_shown", toggle=True)
 
         sp = layout.column(align=True).split(factor=0.2, align=True)
         sc = sp.column(align=True)
@@ -215,23 +223,26 @@ class LLT_UL_linked_object(bpy.types.UIList):
         sc = sp.column(align=True)
         sc.row(align=True).prop(self, "sort_type", expand=True, text_ctxt=_TCTX)
 
+        layout.prop(self, "filter_hide_not_shown", toggle=True)
+
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
         from ..utils import get_object_link_light_count, is_shown_in_view_layer
 
         props = item.light_helper_property
         row = layout.row(align=True)
+        if not is_shown_in_view_layer(context, item):
+            row.active = False
+
         view_icon = "HIDE_OFF" if props.show_viewport else "HIDE_ON"
         row.prop(props, "show_viewport", text="", icon=view_icon, emboss=False)
         render_icon = "RESTRICT_RENDER_OFF" if props.show_render else "RESTRICT_RENDER_ON"
         row.prop(props, "show_render", text="", icon=render_icon, emboss=False)
 
         info = row.row(align=True)
-        if not is_shown_in_view_layer(context, item):
-            info.active = False
         info.label(text=item.name, translate=False, **get_item_icon(item))
         count = get_object_link_light_count(item, context)
         if count:
-            info.label(text=p_("Linked lights: %d") % count)
+            info.label(text=_format_list_link_count(context, count, "Lights: %d"))
 
     def filter_items(self, context, data, propname):
         from ..utils import get_object_link_light_count, iter_objects_linked_by_lights

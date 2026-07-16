@@ -120,8 +120,8 @@ def draw_light_ev_controls(layout, context) -> None:
 
 
 def get_item_visibility_tooltip(
-        item: bpy.types.Object | bpy.types.Collection,
-        context: bpy.types.Context | None = None,
+    item: bpy.types.Object | bpy.types.Collection,
+    context: bpy.types.Context | None = None,
 ) -> tuple[str, bool]:
     viewport_hidden, render_hidden, restricted = get_item_visibility_restrictions(item, context)
     if not restricted:
@@ -302,7 +302,8 @@ class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
             with context.temp_override(add_light_linking_light_obj=light_obj):
                 col.context_pointer_set("add_light_linking_light_obj", light_obj)
                 col.label(
-                    text=p_("Init light linking collections. In Exclude mode, listed objects are excluded from this light."),
+                    text=p_(
+                        "Init light linking collections. In Exclude mode, listed objects are excluded from this light."),
                     icon='INFO',
                 )
                 op = col.operator(LLP_OT_add_light_linking.bl_idname, text='Init', icon='ADD')
@@ -316,7 +317,7 @@ class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
 
         col.separator()
         col.row(align=True).prop(light_obj.light_helper_property, 'linking_mode', expand=True,
-                                  text_ctxt="light_helper_zh_CN")
+                                 text_ctxt="light_helper_zh_CN")
 
         obj_state_dict = get_all_light_effect_items_state(light_obj)
         objects = context.scene.objects[:]
@@ -401,7 +402,10 @@ class VIEW3D_PT_light_helper_object_control(bpy.types.Panel):
             "show_object_linking_panel",
             text="",
             icon='HIDE_OFF' if scene_props.show_object_linking_panel else 'HIDE_ON',
+            emboss=False,
         )
+        row.separator()
+        row.separator()
 
     def draw(self, context):
         layout = self.layout

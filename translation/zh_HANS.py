@@ -163,6 +163,9 @@ data = {
     "Ctrl+Wheel: Prev/Next Light": "Ctrl+滚轮：上一个/下一个灯光",
     "Linked items: %d": "链接物体：%d",
     "Linked lights: %d": "链接灯光：%d",
+    "Links: %d": "链接: %d",
+    "Lights: %d": "灯光: %d",
+
     "Object: (none)": "物体：（无）",
     "Light mode: %s": "灯光模式：%s",
     "Object mode: %s": "物体模式：%s",
