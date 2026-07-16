@@ -168,16 +168,17 @@ def apply_linking_mode_to_light(light: bpy.types.Object, mode: str | None = None
 
 
 def init_light_linking(light: bpy.types.Object, context: bpy.types.Context | None = None) -> None:
-    ctx = context if context is not None else bpy.context
-    with ctx.temp_override(object=light, active_object=light, selected_objects=[light]):
-        if light.light_linking.receiver_collection is None:
-            bpy.ops.object.light_linking_receiver_collection_new()
-        if light.light_linking.blocker_collection is None:
-            bpy.ops.object.light_linking_blocker_collection_new()
+    # Prefer RNA over ops: light_linking_*_collection_new.poll rejects hidden objects.
+    linking = light.light_linking
     for coll_type in (CollectionType.RECEIVER, CollectionType.BLOCKER):
         coll = get_linking_coll(light, coll_type)
-        if coll is not None:
-            mark_managed_linking_collection(coll)
+        if coll is None:
+            coll = bpy.data.collections.new(_managed_linking_coll_name(light, coll_type))
+            if coll_type == CollectionType.RECEIVER:
+                linking.receiver_collection = coll
+            else:
+                linking.blocker_collection = coll
+        mark_managed_linking_collection(coll)
     sync_safe_helpers_for_light(light)
 
 

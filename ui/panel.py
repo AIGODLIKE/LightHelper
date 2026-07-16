@@ -369,8 +369,14 @@ class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
         clear_row = col.row(align=True)
         clear_row.enabled = LLP_OT_clear_selected_light_linking.poll(context)
         clear_row.operator(LLP_OT_clear_selected_light_linking.bl_idname, text="", icon='TRASH')
-        row.template_list(LLT_UL_light.__name__, "", context.scene, "objects", context.scene.light_helper_property,
-                          "active_object_index")
+        col.separator()
+        col.prop(pref, "auto_fix_shared_linking", text="", icon='AUTO', toggle=True)
+        row.template_list(
+            LLT_UL_light.__name__, "",
+            context.scene, "objects",
+            context.scene.light_helper_property, "active_object_index",
+            rows=7,
+        )
 
 
 class VIEW3D_PT_light_helper_object_control(bpy.types.Panel):
