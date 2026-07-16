@@ -11,13 +11,8 @@ def _is_legacy_safe_object(obj: bpy.types.Object) -> bool:
 
 
 def _remove_legacy_safe_objects() -> int:
-    to_remove = [obj for obj in bpy.data.objects if _is_legacy_safe_object(obj)]
-    for obj in to_remove:
-        mesh = obj.data if obj.type == 'MESH' else None
-        bpy.data.objects.remove(obj, do_unlink=True)
-        if mesh and mesh.users == 0:
-            bpy.data.meshes.remove(mesh)
-    return len(to_remove)
+    # Safe placeholders are intentional again; do not strip them on cleanup.
+    return 0
 
 
 def _infer_linking_mode_from_collections(light: bpy.types.Object) -> str:
@@ -59,12 +54,9 @@ def scene_needs_migration(scene: bpy.types.Scene) -> bool:
 
 def has_legacy_residue() -> bool:
     try:
-        objects = bpy.data.objects
         scenes = bpy.data.scenes
     except (AttributeError, TypeError):
         return False
-    if any(_is_legacy_safe_object(obj) for obj in objects):
-        return True
     return any(scene_needs_migration(scene) for scene in scenes)
 
 

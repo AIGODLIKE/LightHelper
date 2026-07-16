@@ -3,6 +3,7 @@ from enum import Enum, unique
 import bpy
 
 LIGHT_HELPER_MANAGED_KEY = "light_helper_managed"
+LIGHT_HELPER_SAFE_KEY = "light_helper_safe"
 ILLUMINATED_OBJECT_TYPE_LIST = [
     "LIGHT", "MESH", "CURVE", "SURFACE", "META", "FONT", "GPENCIL", "GREASEPENCIL", "EMPTY",
 ]
@@ -29,6 +30,60 @@ def mark_managed_linking_collection(coll: bpy.types.Collection) -> None:
 
 def is_managed_linking_collection(coll: bpy.types.Collection) -> bool:
     return bool(coll.get(LIGHT_HELPER_MANAGED_KEY))
+
+
+def is_safe_helper_object(obj: bpy.types.Object | None) -> bool:
+    return bool(obj is not None and (obj.get(LIGHT_HELPER_SAFE_KEY) or obj.name.startswith("LLP_SAFE_")))
+
+
+def get_safe_obj(light: bpy.types.Object) -> bpy.types.Object | None:
+    return bpy.data.objects.get(f"LLP_SAFE_{light.name}")
+
+
+def remove_safe_helper_for_light(light: bpy.types.Object) -> None:
+    safe = get_safe_obj(light)
+    if safe is None:
+        return
+    mesh = safe.data if safe.type == 'MESH' else None
+    bpy.data.objects.remove(safe, do_unlink=True)
+    if mesh is not None and mesh.users == 0:
+        bpy.data.meshes.remove(mesh)
+
+
+def sync_safe_helpers_for_light(light: bpy.types.Object) -> None:
+    """Keep LLP_SAFE_* only when a linking collection has no other items (Blender empty-coll quirk)."""
+    if not hasattr(light, "light_linking"):
+        return
+    linking = light.light_linking
+    mode = get_linking_mode(light)
+    used = False
+    for coll in (linking.receiver_collection, linking.blocker_collection):
+        if coll is None:
+            continue
+        safes = [o for o in list(coll.objects) if is_safe_helper_object(o)]
+        has_real = any(not is_safe_helper_object(o) for o in coll.objects) or bool(coll.children)
+        if has_real:
+            for o in safes:
+                coll.objects.unlink(o)
+            continue
+        name = f"LLP_SAFE_{light.name}"
+        mesh = bpy.data.meshes.get(name) or bpy.data.meshes.new(name)
+        safe = bpy.data.objects.get(name)
+        if safe is None:
+            safe = bpy.data.objects.new(name, mesh)
+            safe.hide_viewport = True
+            safe.hide_render = True
+            safe.hide_select = True
+        safe[LIGHT_HELPER_SAFE_KEY] = light.name
+        for o in safes:
+            if o != safe:
+                coll.objects.unlink(o)
+        if safe.name not in coll.objects:
+            coll.objects.link(safe)
+        _set_item_link_state(coll, safe, mode)
+        used = True
+    if not used:
+        remove_safe_helper_for_light(light)
 
 
 def get_pref(context=None):
@@ -123,6 +178,7 @@ def init_light_linking(light: bpy.types.Object, context: bpy.types.Context | Non
         coll = get_linking_coll(light, coll_type)
         if coll is not None:
             mark_managed_linking_collection(coll)
+    sync_safe_helpers_for_light(light)
 
 
 def ensure_linking_coll(coll_type: CollectionType, light: bpy.types.Object,
@@ -204,6 +260,7 @@ def link_item_to_channel(light: bpy.types.Object, item,
     except RuntimeError:
         return
 
+    sync_safe_helpers_for_light(light)
     from .overlay import notify_linking_changed
     notify_linking_changed(context)
 
@@ -298,6 +355,7 @@ def restore_light_linking(light: bpy.types.Object, context: bpy.types.Context | 
     blocker = linking.blocker_collection
     linking.receiver_collection = None
     linking.blocker_collection = None
+    remove_safe_helper_for_light(light)
     remove_orphaned_managed_collection(receiver)
     remove_orphaned_managed_collection(blocker)
     from .overlay import notify_linking_changed
@@ -339,6 +397,8 @@ def get_all_light_effect_items_state(light: bpy.types.Object) -> dict:
             items_state.setdefault(child, {CollectionType.RECEIVER: None, CollectionType.BLOCKER: None})
             items_state[child][CollectionType.RECEIVER] = True
         for obj in enum_coll_objs_from_coll(receiver_coll):
+            if is_safe_helper_object(obj):
+                continue
             items_state.setdefault(obj, {CollectionType.RECEIVER: None, CollectionType.BLOCKER: None})
             items_state[obj][CollectionType.RECEIVER] = True
 
@@ -347,6 +407,8 @@ def get_all_light_effect_items_state(light: bpy.types.Object) -> dict:
             items_state.setdefault(child, {CollectionType.RECEIVER: None, CollectionType.BLOCKER: None})
             items_state[child][CollectionType.BLOCKER] = True
         for obj in enum_coll_objs_from_coll(blocker_coll):
+            if is_safe_helper_object(obj):
+                continue
             items_state.setdefault(obj, {CollectionType.RECEIVER: None, CollectionType.BLOCKER: None})
             items_state[obj][CollectionType.BLOCKER] = True
 
