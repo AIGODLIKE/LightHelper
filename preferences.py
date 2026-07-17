@@ -88,8 +88,8 @@ class LLT_AddonPreferences(AddonPreferences):
 
     auto_fix_shared_linking: bpy.props.BoolProperty(
         name="Auto Fix Shared Linking",
-        description="Automatically split shared light linking collections when lights are duplicated, and inherit linking for duplicated objects",
-        default=True,
+        description="Opt in to splitting shared light-linking collections for explicitly detected duplicates; never runs while opening a file",
+        default=False,
         update=update_auto_fix_shared_linking,
     )
     linking_tool_max_outlines: IntProperty(

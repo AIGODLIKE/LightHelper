@@ -2,10 +2,8 @@ import bpy
 
 from .utils import (
     ILLUMINATED_OBJECT_TYPE_LIST,
-    fix_all_shared_light_linking,
     has_shared_linking_collections,
     make_light_linking_single_user,
-    prime_existing_duplicate_objects,
     process_duplicated_object,
 )
 
@@ -17,7 +15,7 @@ def _auto_fix_enabled() -> bool:
         from . import __package__ as base_package
         return bpy.context.preferences.addons[base_package].preferences.auto_fix_shared_linking
     except (KeyError, AttributeError):
-        return True
+        return False
 
 
 def _collect_candidate_objects(depsgraph: bpy.types.Depsgraph) -> list[bpy.types.Object]:
@@ -62,16 +60,6 @@ def depsgraph_update_post_handler(_scene, depsgraph: bpy.types.Depsgraph):
         _processing = False
 
 
-@bpy.app.handlers.persistent
-def load_post_fix_handler(_dummy):
-    if not _auto_fix_enabled():
-        return
-    context = bpy.context
-    for scene in bpy.data.scenes:
-        prime_existing_duplicate_objects(scene, context)
-        fix_all_shared_light_linking(scene)
-
-
 def sync_auto_fix_depsgraph_handler(enabled: bool | None = None) -> None:
     if enabled is None:
         enabled = _auto_fix_enabled()
@@ -82,39 +70,20 @@ def sync_auto_fix_depsgraph_handler(enabled: bool | None = None) -> None:
         bpy.app.handlers.depsgraph_update_post.remove(depsgraph_update_post_handler)
 
 
-def run_fix_for_all_scenes() -> None:
-    try:
-        scenes = bpy.data.scenes
-    except (AttributeError, TypeError):
-        return
-    for scene in scenes:
-        fix_all_shared_light_linking(scene)
-
-
-def _deferred_fix():
-    run_fix_for_all_scenes()
-    return None
+@bpy.app.handlers.persistent
+def invalidate_filter_cache_handler(_scene, _depsgraph):
+    from .filter import invalidate_filter_cache
+    invalidate_filter_cache()
 
 
 def register():
-    # load_post for file open; depsgraph only while auto-fix is enabled.
-    if load_post_fix_handler not in bpy.app.handlers.load_post:
-        bpy.app.handlers.load_post.append(load_post_fix_handler)
+    # Auto-fix is opt-in and never mutates data during registration or file load.
     sync_auto_fix_depsgraph_handler()
-    # One-shot fix after enable; do not keep a permanent timer.
-    if not bpy.app.timers.is_registered(_deferred_fix):
-        bpy.app.timers.register(_deferred_fix, first_interval=0.0)
-    try:
-        context = bpy.context
-        for scene in bpy.data.scenes:
-            prime_existing_duplicate_objects(scene, context)
-    except (AttributeError, ReferenceError, TypeError):
-        pass
+    if invalidate_filter_cache_handler not in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.append(invalidate_filter_cache_handler)
 
 
 def unregister():
-    if bpy.app.timers.is_registered(_deferred_fix):
-        bpy.app.timers.unregister(_deferred_fix)
     sync_auto_fix_depsgraph_handler(False)
-    if load_post_fix_handler in bpy.app.handlers.load_post:
-        bpy.app.handlers.load_post.remove(load_post_fix_handler)
+    if invalidate_filter_cache_handler in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.remove(invalidate_filter_cache_handler)

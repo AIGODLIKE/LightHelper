@@ -1,13 +1,12 @@
 import bpy
 
 LIGHT_HELPER_SAFE_KEY = "light_helper_safe"
+LIGHT_HELPER_MANAGED_KEY = "light_helper_managed"
 LIGHT_HELPER_MIGRATED_KEY = "light_helper_migrated_v047"
 
 
 def _is_legacy_safe_object(obj: bpy.types.Object) -> bool:
-    if obj.get(LIGHT_HELPER_SAFE_KEY):
-        return True
-    return obj.name.startswith("LLP_SAFE_")
+    return bool(obj.get(LIGHT_HELPER_SAFE_KEY))
 
 
 def _remove_legacy_safe_objects() -> int:
@@ -15,7 +14,7 @@ def _remove_legacy_safe_objects() -> int:
     return 0
 
 
-def _infer_linking_mode_from_collections(light: bpy.types.Object) -> str:
+def _infer_linking_mode_from_collections(light: bpy.types.Object) -> str | None:
     from .utils import CollectionType, get_linking_coll, StateValue
 
     states = []
@@ -29,27 +28,33 @@ def _infer_linking_mode_from_collections(light: bpy.types.Object) -> str:
             states.append(coll_child.light_linking.link_state)
 
     if not states:
-        return StateValue.EXCLUDE.value
+        return None
     if all(s == StateValue.INCLUDE.value for s in states):
         return StateValue.INCLUDE.value
-    return StateValue.EXCLUDE.value
+    if all(s == StateValue.EXCLUDE.value for s in states):
+        return StateValue.EXCLUDE.value
+    return None
 
 
-def _scene_has_initialized_linking(scene: bpy.types.Scene) -> bool:
-    from .utils import is_linking_initialized
+def _scene_has_extension_managed_linking(scene: bpy.types.Scene) -> bool:
+    from .utils import CollectionType, get_linking_coll, is_linking_initialized
 
     for obj in scene.objects:
         if not hasattr(obj, "light_linking"):
             continue
-        if is_linking_initialized(obj):
-            return True
+        if not is_linking_initialized(obj):
+            continue
+        for coll_type in (CollectionType.RECEIVER, CollectionType.BLOCKER):
+            coll = get_linking_coll(obj, coll_type)
+            if coll is not None and coll.get(LIGHT_HELPER_MANAGED_KEY):
+                return True
     return False
 
 
 def scene_needs_migration(scene: bpy.types.Scene) -> bool:
     if scene.get(LIGHT_HELPER_MIGRATED_KEY):
         return False
-    return _scene_has_initialized_linking(scene)
+    return _scene_has_extension_managed_linking(scene)
 
 
 def has_legacy_residue() -> bool:
@@ -63,7 +68,7 @@ def has_legacy_residue() -> bool:
 def migrate_scene(scene: bpy.types.Scene) -> bool:
     if scene.get(LIGHT_HELPER_MIGRATED_KEY):
         return False
-    if not _scene_has_initialized_linking(scene):
+    if not _scene_has_extension_managed_linking(scene):
         scene[LIGHT_HELPER_MIGRATED_KEY] = True
         return False
 
@@ -72,7 +77,6 @@ def migrate_scene(scene: bpy.types.Scene) -> bool:
         apply_linking_mode_to_light,
         get_linking_coll,
         is_linking_initialized,
-        mark_managed_linking_collection,
     )
 
     for obj in scene.objects:
@@ -80,13 +84,17 @@ def migrate_scene(scene: bpy.types.Scene) -> bool:
             continue
         if not is_linking_initialized(obj):
             continue
-        for coll_type in (CollectionType.RECEIVER, CollectionType.BLOCKER):
-            coll = get_linking_coll(obj, coll_type)
-            if coll is not None:
-                mark_managed_linking_collection(coll)
+        managed = any(
+            (coll := get_linking_coll(obj, coll_type)) is not None
+            and bool(coll.get(LIGHT_HELPER_MANAGED_KEY))
+            for coll_type in (CollectionType.RECEIVER, CollectionType.BLOCKER)
+        )
+        if not managed:
+            continue
         mode = _infer_linking_mode_from_collections(obj)
-        obj.light_helper_property.linking_mode = mode
-        apply_linking_mode_to_light(obj, mode)
+        if mode is not None:
+            obj.light_helper_property.linking_mode = mode
+            apply_linking_mode_to_light(obj, mode)
 
     scene[LIGHT_HELPER_MIGRATED_KEY] = True
     return True

@@ -33,7 +33,7 @@ class ObjectProperty(PropertyGroup):
 
     def set_show(self, value):
         obj = self.id_data
-        obj.hide_render = obj.hide_viewport = not value
+        obj.hide_viewport = not value
         if value:
             obj.hide_set(False)
         else:
@@ -185,7 +185,27 @@ def poll_linking_tool_object(_self, obj: bpy.types.Object) -> bool:
 
 class SoloVisibilityItem(PropertyGroup):
     object: bpy.props.PointerProperty(type=bpy.types.Object)
-    was_visible: bpy.props.BoolProperty(default=True)
+    was_hide_viewport: bpy.props.BoolProperty(default=False)
+    was_hide_render: bpy.props.BoolProperty(default=False)
+    was_hide_local: bpy.props.BoolProperty(default=False)
+
+
+def restore_solo_visibility(window_manager: bpy.types.WindowManager) -> None:
+    if window_manager is None or not hasattr(window_manager, "light_helper_property"):
+        return
+    wm_props = window_manager.light_helper_property
+    for item in wm_props.solo_visibility:
+        obj = item.object
+        if obj is None:
+            continue
+        try:
+            obj.hide_viewport = bool(item.was_hide_viewport)
+            obj.hide_render = bool(item.was_hide_render)
+            obj.hide_set(bool(item.was_hide_local))
+        except (AttributeError, ReferenceError, RuntimeError, TypeError):
+            pass
+    wm_props.solo_visibility.clear()
+    wm_props.solo_light = None
 
 
 class WindowManagerProperty(PropertyGroup):
@@ -440,6 +460,8 @@ def register():
 
 
 def unregister():
+    for window_manager in bpy.data.window_managers:
+        restore_solo_visibility(window_manager)
     del bpy.types.Object.light_helper_property
     del bpy.types.Scene.light_helper_property
     del bpy.types.WindowManager.light_helper_property

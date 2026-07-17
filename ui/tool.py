@@ -215,13 +215,12 @@ def start_tool_session(context: bpy.types.Context) -> None:
 
 def stop_tool_session(context: bpy.types.Context) -> None:
     from ..utils.overlay import invalidate_overlay_cache, tag_view3d_redraw, unregister_draw_handlers
-    wm_props = context.window_manager.light_helper_property
-    if not wm_props.linking_tool_active:
-        return
-    wm_props.linking_tool_active = False
-    wm_props.linking_tool_light = None
-    wm_props.linking_tool_object = None
-    wm_props.linking_tool_subject_mode = 'LIGHT'
+    wm_props = getattr(context.window_manager, "light_helper_property", None)
+    if wm_props is not None:
+        wm_props.linking_tool_active = False
+        wm_props.linking_tool_light = None
+        wm_props.linking_tool_object = None
+        wm_props.linking_tool_subject_mode = 'LIGHT'
     unregister_draw_handlers()
     _unsubscribe_tool_changes()
     _unregister_depsgraph_sync()
@@ -570,6 +569,8 @@ def register():
 
 def unregister():
     global _tool_registered, _deferred_session_sync_pending, _deferred_selection_sync_pending
+    from ..utils.overlay import unregister_draw_handlers
+    unregister_draw_handlers()
     if bpy.app.timers.is_registered(_deferred_session_sync):
         bpy.app.timers.unregister(_deferred_session_sync)
     if bpy.app.timers.is_registered(_deferred_selection_sync):

@@ -1,9 +1,12 @@
 from enum import Enum, unique
+from uuid import uuid4
 
 import bpy
 
 LIGHT_HELPER_MANAGED_KEY = "light_helper_managed"
 LIGHT_HELPER_SAFE_KEY = "light_helper_safe"
+LIGHT_HELPER_SAFE_OWNER_KEY = "light_helper_safe_owner"
+LIGHT_HELPER_OWNER_UUID_KEY = "light_helper_owner_uuid"
 ILLUMINATED_OBJECT_TYPE_LIST = [
     "LIGHT", "MESH", "CURVE", "SURFACE", "META", "FONT", "GPENCIL", "GREASEPENCIL", "EMPTY",
 ]
@@ -33,16 +36,38 @@ def is_managed_linking_collection(coll: bpy.types.Collection) -> bool:
 
 
 def is_safe_helper_object(obj: bpy.types.Object | None) -> bool:
-    return bool(obj is not None and (obj.get(LIGHT_HELPER_SAFE_KEY) or obj.name.startswith("LLP_SAFE_")))
+    # Legacy helpers are recognized only by the reserved custom property, never by name.
+    # Deletion still requires the new owner UUID in ``remove_safe_helper_for_light``.
+    return bool(obj is not None and obj.get(LIGHT_HELPER_SAFE_KEY))
+
+
+def _light_owner_uuid(light: bpy.types.Object, create: bool = False) -> str | None:
+    owner_uuid = light.get(LIGHT_HELPER_OWNER_UUID_KEY)
+    if isinstance(owner_uuid, str) and owner_uuid:
+        return owner_uuid
+    if not create:
+        return None
+    owner_uuid = uuid4().hex
+    light[LIGHT_HELPER_OWNER_UUID_KEY] = owner_uuid
+    return owner_uuid
 
 
 def get_safe_obj(light: bpy.types.Object) -> bpy.types.Object | None:
-    return bpy.data.objects.get(f"LLP_SAFE_{light.name}")
+    owner_uuid = _light_owner_uuid(light)
+    if owner_uuid is None:
+        return None
+    for obj in bpy.data.objects:
+        if (is_safe_helper_object(obj)
+                and obj.get(LIGHT_HELPER_SAFE_OWNER_KEY) == owner_uuid):
+            return obj
+    return None
 
 
 def remove_safe_helper_for_light(light: bpy.types.Object) -> None:
     safe = get_safe_obj(light)
-    if safe is None:
+    owner_uuid = _light_owner_uuid(light)
+    if (safe is None or owner_uuid is None
+            or safe.get(LIGHT_HELPER_SAFE_OWNER_KEY) != owner_uuid):
         return
     mesh = safe.data if safe.type == 'MESH' else None
     bpy.data.objects.remove(safe, do_unlink=True)
@@ -66,15 +91,17 @@ def sync_safe_helpers_for_light(light: bpy.types.Object) -> None:
             for o in safes:
                 coll.objects.unlink(o)
             continue
-        name = f"LLP_SAFE_{light.name}"
-        mesh = bpy.data.meshes.get(name) or bpy.data.meshes.new(name)
-        safe = bpy.data.objects.get(name)
+        safe = get_safe_obj(light)
         if safe is None:
+            owner_uuid = _light_owner_uuid(light, create=True)
+            name = f"LLP_SAFE_{light.name}_{owner_uuid[:8]}"
+            mesh = bpy.data.meshes.new(name)
             safe = bpy.data.objects.new(name, mesh)
             safe.hide_viewport = True
             safe.hide_render = True
             safe.hide_select = True
-        safe[LIGHT_HELPER_SAFE_KEY] = light.name
+            safe[LIGHT_HELPER_SAFE_KEY] = True
+            safe[LIGHT_HELPER_SAFE_OWNER_KEY] = owner_uuid
         for o in safes:
             if o != safe:
                 coll.objects.unlink(o)
@@ -757,7 +784,7 @@ def make_light_linking_single_user(light: bpy.types.Object) -> bool:
 
 
 def find_duplicate_source_object(obj: bpy.types.Object) -> bpy.types.Object | None:
-    """Resolve duplicate source via custom property, shared collections, then name fallback."""
+    """Resolve a duplicate source only from explicit tracking or shared light-linking data."""
     source = obj.get(LIGHT_HELPER_DUP_SOURCE_KEY)
     if isinstance(source, bpy.types.Object) and source != obj:
         return source
@@ -775,21 +802,7 @@ def find_duplicate_source_object(obj: bpy.types.Object) -> bpy.types.Object | No
                         or other_linking.blocker_collection == coll):
                     return other
 
-    # Fallback for duplicates created before source tracking existed.
-    name = obj.name
-    if '.' not in name:
-        return None
-    base, suffix = name.rsplit('.', 1)
-    if not suffix.isdigit():
-        return None
-    num = int(suffix)
-    if num <= 0:
-        return None
-    source_name = base if num == 1 else f"{base}.{num - 1:03d}"
-    source = bpy.data.objects.get(source_name)
-    if source is None or source == obj:
-        return None
-    return source
+    return None
 
 
 def track_duplicate_source(source: bpy.types.Object, duplicate: bpy.types.Object) -> None:
@@ -879,8 +892,7 @@ def process_duplicated_object(obj: bpy.types.Object, context: bpy.types.Context 
         source_has_links = is_object_linked_by_any_light(source, context)
         if source_has_links:
             changed = inherit_light_linking_from_object(obj, source, context) or changed
-        # Always mark handled on first encounter so a later manual link on the
-        # source object does not retroactively link existing name-based duplicates.
+        # Mark explicitly tracked duplicates after their first processing pass.
         mark_duplicate_handled(obj)
         return changed
 

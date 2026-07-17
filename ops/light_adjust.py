@@ -97,18 +97,9 @@ class LLP_OT_solo_light(LightHelperOperator, bpy.types.Operator):
 
     @staticmethod
     def _restore_solo(context) -> None:
-        wm_props = context.window_manager.light_helper_property
-        for item in wm_props.solo_visibility:
-            obj = item.object
-            if obj is None:
-                continue
-            try:
-                obj.light_helper_property.show_in_view = bool(item.was_visible)
-            except (AttributeError, ReferenceError, TypeError):
-                pass
-        wm_props.solo_visibility.clear()
+        from ..property import restore_solo_visibility
+        restore_solo_visibility(context.window_manager)
         LLP_OT_solo_light._clear_legacy_solo_props(context)
-        wm_props.solo_light = None
 
     def execute(self, context):
         from ..filter import filter_objects
@@ -134,7 +125,12 @@ class LLP_OT_solo_light(LightHelperOperator, bpy.types.Operator):
         for obj in filter_objects(context):
             item = wm_props.solo_visibility.add()
             item.object = obj
-            item.was_visible = bool(obj.light_helper_property.show_in_view)
+            item.was_hide_viewport = bool(obj.hide_viewport)
+            item.was_hide_render = bool(obj.hide_render)
+            try:
+                item.was_hide_local = bool(obj.hide_get())
+            except RuntimeError:
+                item.was_hide_local = False
             obj.light_helper_property.show_in_view = obj == target
 
         wm_props.solo_light = target
