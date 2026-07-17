@@ -4,7 +4,7 @@ bl_info = {
     "name": "Light Helper",
     "author": "ACGGit Community,Atticus,小萌新",
     "blender": (4, 2, 0),
-    "version": (0, 5, 1),
+    "version": (1, 0, 0),
     "category": "Lighting",
     "support": "COMMUNITY",
     "doc_url": "https://github.com/AIGODLIKE/LightHelper",

@@ -1,5 +1,5 @@
 import bpy
-from bpy.props import StringProperty, EnumProperty, IntProperty
+from bpy.props import StringProperty, EnumProperty, IntProperty, FloatProperty
 from bpy.types import AddonPreferences
 
 is_50 = bpy.app.version >= (5, 0, 0)
@@ -114,6 +114,23 @@ class LLT_AddonPreferences(AddonPreferences):
         soft_max=4096,
     )
 
+    def update_linking_tool_hud_scale(self, context):
+        from .utils.overlay import tag_view3d_redraw
+        tag_view3d_redraw(context)
+
+    linking_tool_hud_scale: FloatProperty(
+        name="Shortcut Tip Scale",
+        description="Scale of the linking tool shortcut tip HUD in the viewport",
+        default=1.0,
+        min=0.5,
+        max=3.0,
+        soft_min=0.5,
+        soft_max=2.0,
+        step=10,
+        precision=2,
+        update=update_linking_tool_hud_scale,
+    )
+
     def draw(self, context):
         from bpy.app.translations import pgettext_iface as p_
         from .ops.light_adjust import LLP_OT_reset_linking_hud
@@ -130,6 +147,7 @@ class LLT_AddonPreferences(AddonPreferences):
         column.prop(self, "auto_fix_shared_linking")
         column.prop(self, "linking_tool_max_outlines")
         column.separator()
+        column.prop(self, "linking_tool_hud_scale")
         row = column.row(align=True)
         row.prop(self, "linking_tool_hud_x")
         row.prop(self, "linking_tool_hud_y")

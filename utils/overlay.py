@@ -239,26 +239,36 @@ def _hud_line_color(line: str) -> tuple[float, float, float, float]:
     return HUD_NORMAL_COLOR
 
 
+def _hud_scale() -> float:
+    return max(0.5, float(get_pref().linking_tool_hud_scale))
+
+
+def _hud_metrics() -> tuple[float, float, float]:
+    scale = _hud_scale()
+    return HUD_FONT_SIZE * scale, HUD_LINE_HEIGHT * scale, HUD_PADDING * scale
+
+
 def _hud_bounds(context: bpy.types.Context, region: bpy.types.Region) -> tuple[float, float, float, float]:
     wm_props = context.window_manager.light_helper_property
     x = float(wm_props.linking_tool_hud_x)
     y = float(wm_props.linking_tool_hud_y)
     lines = _hud_lines(context)
     font_id = 0
-    blf.size(font_id, HUD_FONT_SIZE)
+    font_size, line_height, padding = _hud_metrics()
+    blf.size(font_id, font_size)
     max_w = 0.0
     for line in lines:
         if not line:
             continue
         width, _height = blf.dimensions(font_id, line)
         max_w = max(max_w, width)
-    total_h = len(lines) * HUD_LINE_HEIGHT if lines else HUD_LINE_HEIGHT
+    total_h = len(lines) * line_height if lines else line_height
     # Anchor is bottom-left; content grows upward.
     return (
-        x - HUD_PADDING,
-        y - HUD_PADDING,
-        x + max_w + HUD_PADDING,
-        y + total_h + HUD_PADDING,
+        x - padding,
+        y - padding,
+        x + max_w + padding,
+        y + total_h + padding,
     )
 
 
@@ -697,16 +707,17 @@ def _draw_overlay_hud():
     font_id = 0
     margin_x = wm_props.linking_tool_hud_x
     margin_y = wm_props.linking_tool_hud_y
-    blf.size(font_id, HUD_FONT_SIZE)
+    font_size, line_height, _padding = _hud_metrics()
+    blf.size(font_id, font_size)
 
     # Draw top-to-bottom so list order matches on-screen reading order.
-    top_y = margin_y + max(0, len(lines) - 1) * HUD_LINE_HEIGHT
+    top_y = margin_y + max(0, len(lines) - 1) * line_height
     blf.enable(font_id, blf.SHADOW)
     blf.shadow(font_id, 3, 0.0, 0.0, 0.0, 0.7)
     for i, line in enumerate(lines):
         if not line:
             continue
-        y = top_y - i * HUD_LINE_HEIGHT
+        y = top_y - i * line_height
         segments = _hud_mode_switch_segments(line)
         if segments is not None:
             x = float(margin_x)
