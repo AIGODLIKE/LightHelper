@@ -354,7 +354,7 @@ class LLP_OT_light_linking_toggle_overlay(_LLP_LightLinkingToolInvoke, LightHelp
 class LLP_OT_light_linking_exit(_LLP_LightLinkingToolPoll, LightHelperOperator, bpy.types.Operator):
     bl_idname = 'object.light_helper_light_linking_exit'
     bl_label = "Exit Tool"
-    bl_description = "Exit to the previous tool, or the first tool if none"
+    bl_description = "Exit to the previous tool, or the first tool if none was active"
     bl_options = {'REGISTER'}
 
     def invoke(self, context, event):

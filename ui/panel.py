@@ -328,7 +328,7 @@ class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
                 if LLP_OT_add_light_linking.poll(context) is False:
                     cc = col.column()
                     cc.alert = True
-                    cc.label(text=p_("Please select light or can be illuminated object"))
+                    cc.label(text=p_("Please select a light or an object that can be illuminated"))
                     cc.label(text=p_("Current type: ") + context.object.type)
             return
 
@@ -473,7 +473,7 @@ class VIEW3D_PT_light_helper_object_control(bpy.types.Panel):
 
         obj_state_dict = get_lights_from_effect_obj(item, context)
         if len(obj_state_dict) == 0:
-            col.label(text=p_('No Link type lights effecting this object'), icon='LIGHT')
+            col.label(text=p_("No linking lights are affecting this object"), icon='LIGHT')
             box = col.box()
             box.prop(context.window_manager.light_helper_property, 'object_linking_add_object', text='', icon='ADD')
             return

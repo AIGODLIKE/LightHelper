@@ -33,8 +33,8 @@ class LLT_AddonPreferences(AddonPreferences):
         update=update_filter_settings,
         items=[
             ("ALL", "All", "Display lights and objects that can emit light", "SCENE_DATA", 0),
-            ("LIGHT", "Light", "Only show the lights", "OUTLINER_DATA_LIGHT", 1),
-            ("EMISSION", "Emission Material", "Only luminous material are displayed", "MATERIAL", 2),
+            ("LIGHT", "Light", "Only show lights", "OUTLINER_DATA_LIGHT", 1),
+            ("EMISSION", "Emission Material", "Only luminous materials are displayed", "MATERIAL", 2),
         ]
     )
 
@@ -73,13 +73,13 @@ class LLT_AddonPreferences(AddonPreferences):
         update=update_filter_settings,
     )
     moving_view_type: EnumProperty(
-        name="Moving View Type",
+        name="View Movement Type",
         default="NONE",
         translation_context="light_helper_zh_CN",
         items=[
-            ("NONE", "None", "Only Select, Do not move the view", "RESTRICT_SELECT_OFF", 0),
-            ("MAINTAINING_ZOOM", "Maintaining Zoom", "Direct switching of view position,no animation", "VIEWZOOM", 1),
-            ("ANIMATION", "Animation", "Animation switching, no fixed zoom", "ANIM", 2),
+            ("NONE", "None", "Only select; do not move the view", "RESTRICT_SELECT_OFF", 0),
+            ("MAINTAINING_ZOOM", "Maintaining Zoom", "Switch view position directly, with no animation", "VIEWZOOM", 1),
+            ("ANIMATION", "Animation", "Animated switching without fixed zoom", "ANIM", 2),
         ]
     )
     def update_auto_fix_shared_linking(self, _context):
@@ -138,7 +138,7 @@ class LLT_AddonPreferences(AddonPreferences):
         layout = self.layout
         column = layout.column(align=True)
         if bpy.app.version < (4, 3, 0):
-            column.label(text=p_("Version lower than 4.3.0, only the CYCLE renderer can set light exclusion"))
+            column.label(text=p_("Version lower than 4.3.0, only the Cycles renderer can set light exclusion"))
         column.prop(self, "panel_name")
         column.prop(self, "node_search_depth")
         column.prop(self, "light_list_filter_type")

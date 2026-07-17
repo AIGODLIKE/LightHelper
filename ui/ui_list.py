@@ -69,7 +69,7 @@ class LLT_UL_light(bpy.types.UIList):
     show_render: bpy.props.BoolProperty(name="Render", default=True)
     show_link_count: bpy.props.BoolProperty(name="Link Count", default=True)
     filter_hide_not_shown: bpy.props.BoolProperty(
-        name="Hide Not Shown in Scene",
+        name="Hide Items Not in Scene",
         default=False,
         description="Hide lights and emissive objects that are not shown in the current scene",
     )
@@ -207,7 +207,7 @@ class LLT_UL_linked_object(bpy.types.UIList):
         description="",
     )
     filter_hide_not_shown: bpy.props.BoolProperty(
-        name="Hide Not Shown in Scene",
+        name="Hide Items Not in Scene",
         default=False,
         description="Hide objects that are not shown in the current scene",
     )

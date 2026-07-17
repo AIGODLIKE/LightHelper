@@ -36,7 +36,7 @@ class LLP_OT_cleanup_legacy_data(LightHelperOperator, bpy.types.Operator):
 
 class LLP_OT_instances_data(LightHelperOperator, bpy.types.Operator):
     bl_idname = 'object.light_helper_instances_data'
-    bl_label = "Instances Data"
+    bl_label = "Instance Data"
     bl_description = "Make shared light linking collections single-user for this light"
     bl_options = {'REGISTER', 'UNDO'}
 

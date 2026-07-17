@@ -68,6 +68,6 @@ class LLP_OT_select_item(LightHelperOperator, bpy.types.Operator):
             selected_obj.select_set(False)
         lc = get_layer_collection_by_coll(context, coll)
         if not lc:
-            self.report({'ERROR'}, p_("Collection not in scene found"))
+            self.report({'ERROR'}, p_("Collection not found in the scene"))
             return
         view_layer.active_layer_collection = lc
