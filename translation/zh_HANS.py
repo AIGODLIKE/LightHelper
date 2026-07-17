@@ -37,7 +37,7 @@ data = {
     'Light linking collections are not shared': '灯光链接集合未被共享',
     'Light linking collections are now single-user': '灯光链接集合已变为单用户',
     'Auto Fix Shared Linking': '自动修复共享链接',
-    'Automatically split shared light linking collections when lights are duplicated, and inherit linking for duplicated objects': '复制灯光时自动拆分共享链接集合，复制物体时继承灯光链接设置',
+    'Opt in to splitting shared light-linking collections for explicitly detected duplicates; never runs while opening a file': '可选：仅在明确检测到重复时拆分共享灯光链接集合；打开文件时不会运行',
     'No filtered lights in the list': '列表中没有符合筛选条件的灯光',
     'No object selected': '未选择物体',
     'Drag and Drop to Add': '拖拽添加',
