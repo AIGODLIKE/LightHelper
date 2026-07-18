@@ -1,7 +1,7 @@
 name = "Light Helper"
 id = "LightHelper"
 maintainer = "ACGGit"
-version = "1.0.3"
+version = "2.0.0"
 tagline = "Manage light linking and exclusions from the sidebar"
 blender_version_min = "4.2.0"
 type = "add-on"
