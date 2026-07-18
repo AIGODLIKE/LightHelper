@@ -131,14 +131,21 @@ class LLP_OT_light_linking_pick(_LLP_LightLinkingToolInvoke, LightHelperOperator
         return {'CANCELLED'}
 
     @staticmethod
-    def _toggle_link(operator, context, light, item, toggle_both: bool, coll_type):
+    def _toggle_link(operator, context, light, item, toggle_both: bool, coll_type,
+                     restore_default_when_empty: bool = False):
         if toggle_both:
-            enabled = toggle_item_both_channels(light, item, context)
+            enabled = toggle_item_both_channels(
+                light, item, context,
+                restore_default_when_empty=restore_default_when_empty,
+            )
             action = p_("linked") if enabled else p_("unlinked")
             operator.report({'INFO'}, f"{item.name} {action}")
         elif coll_type is not None:
             in_channel = is_item_in_channel(light, item, coll_type)
-            link_item_to_channel(light, item, coll_type, not in_channel, context)
+            link_item_to_channel(
+                light, item, coll_type, not in_channel, context,
+                restore_default_when_empty=restore_default_when_empty,
+            )
             channel = p_("light") if coll_type == CollectionType.RECEIVER else p_("shadow")
             state = p_("on") if not in_channel else p_("off")
             operator.report({'INFO'}, f"{item.name} {channel} {state}")
@@ -178,6 +185,7 @@ class LLP_OT_light_linking_pick(_LLP_LightLinkingToolInvoke, LightHelperOperator
                 init_light_linking(obj, context)
                 return LLP_OT_light_linking_pick._toggle_link(
                     operator, context, obj, subject, toggle_both, coll_type,
+                    restore_default_when_empty=True,
                 )
             if is_linkable_object(obj):
                 LLP_OT_light_linking_pick._set_object(context, obj)

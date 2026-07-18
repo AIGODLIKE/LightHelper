@@ -25,6 +25,7 @@ class LLP_OT_remove_light_linking(LightHelperOperator, bpy.types.Operator):
     )
 
     remove_all: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
+    restore_default_when_empty: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
     tooltip: bpy.props.StringProperty(default="", options={'SKIP_SAVE'})
 
     @classmethod
@@ -55,12 +56,21 @@ class LLP_OT_remove_light_linking(LightHelperOperator, bpy.types.Operator):
             return {"CANCELLED"}
 
         if self.remove_all:
-            link_item_to_channel(light, item, CollectionType.RECEIVER, False, context)
-            link_item_to_channel(light, item, CollectionType.BLOCKER, False, context)
+            link_item_to_channel(
+                light, item, CollectionType.RECEIVER, False, context,
+                restore_default_when_empty=self.restore_default_when_empty,
+            )
+            link_item_to_channel(
+                light, item, CollectionType.BLOCKER, False, context,
+                restore_default_when_empty=self.restore_default_when_empty,
+            )
         else:
             coll_type = (CollectionType.RECEIVER if self.coll_type == CollectionType.RECEIVER.value
                          else CollectionType.BLOCKER)
-            link_item_to_channel(light, item, coll_type, False, context)
+            link_item_to_channel(
+                light, item, coll_type, False, context,
+                restore_default_when_empty=self.restore_default_when_empty,
+            )
 
         return {"FINISHED"}
 
@@ -167,6 +177,7 @@ class LLP_OT_toggle_light_linking(LightHelperOperator, bpy.types.Operator):
     coll_type: bpy.props.EnumProperty(
         items=enum_coll_type, options={'SKIP_SAVE'}
     )
+    restore_default_when_empty: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
     tooltip: bpy.props.StringProperty(default="", options={'SKIP_SAVE'})
 
     @classmethod
@@ -201,7 +212,10 @@ class LLP_OT_toggle_light_linking(LightHelperOperator, bpy.types.Operator):
         coll_type = (CollectionType.RECEIVER if self.coll_type == CollectionType.RECEIVER.value
                      else CollectionType.BLOCKER)
         in_channel = is_item_in_channel(light, item, coll_type)
-        link_item_to_channel(light, item, coll_type, not in_channel, context)
+        link_item_to_channel(
+            light, item, coll_type, not in_channel, context,
+            restore_default_when_empty=self.restore_default_when_empty,
+        )
         return {"FINISHED"}
 
 

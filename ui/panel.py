@@ -167,7 +167,8 @@ def draw_select_btn(layout, item, tooltip: str = ""):
 def draw_toggle_btn(layout,
                     light_obj: bpy.types.Object,
                     item: bpy.types.Object | bpy.types.Collection,
-                    tooltip: str = ""):
+                    tooltip: str = "",
+                    restore_default_when_empty: bool = False):
     """Draw channel toggle buttons for receiver / blocker membership."""
     from ..ops import LLP_OT_toggle_light_linking
     from ..utils import is_item_in_channel
@@ -188,6 +189,7 @@ def draw_toggle_btn(layout,
         depress=receiver_on,
     )
     op.coll_type = CollectionType.RECEIVER.value
+    op.restore_default_when_empty = restore_default_when_empty
     op.tooltip = tooltip
 
     sub = row.row(align=True)
@@ -196,13 +198,15 @@ def draw_toggle_btn(layout,
         depress=blocker_on,
     )
     op.coll_type = CollectionType.BLOCKER.value
+    op.restore_default_when_empty = restore_default_when_empty
     op.tooltip = tooltip
 
 
 def draw_remove_button(layout,
                        light_obj: bpy.types.Object,
                        item: bpy.types.Object | bpy.types.Collection,
-                       tooltip: str = ""):
+                       tooltip: str = "",
+                       restore_default_when_empty: bool = False):
     from ..ops import LLP_OT_remove_light_linking
     row = layout.row()
     row.context_pointer_set("remove_light_linking_light_obj", light_obj)
@@ -212,6 +216,7 @@ def draw_remove_button(layout,
         row.context_pointer_set("remove_light_linking_collection", item)
     op = row.operator(LLP_OT_remove_light_linking.bl_idname, text='', icon="X", translate=False)
     op.remove_all = True
+    op.restore_default_when_empty = restore_default_when_empty
     op.tooltip = tooltip
 
 
@@ -490,9 +495,15 @@ class VIEW3D_PT_light_helper_object_control(bpy.types.Panel):
             sub.label(text='', icon=get_light_icon(light_obj))
             sub.prop(light_obj.light_helper_property, 'linking_mode', text='', text_ctxt="light_helper_zh_CN")
             draw_select_btn(row, light_obj, tooltip)
-            draw_toggle_btn(row, light_obj, item, tooltip)
+            draw_toggle_btn(
+                row, light_obj, item, tooltip,
+                restore_default_when_empty=True,
+            )
             row.separator()
-            draw_remove_button(row, light_obj, item, tooltip)
+            draw_remove_button(
+                row, light_obj, item, tooltip,
+                restore_default_when_empty=True,
+            )
 
         box = col.box()
         box.prop(context.window_manager.light_helper_property, 'object_linking_add_object', text='', icon='ADD')

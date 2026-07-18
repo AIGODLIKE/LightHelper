@@ -259,17 +259,35 @@ def is_object_affected_in_channel(light: bpy.types.Object, obj: bpy.types.Object
     return False
 
 
+def has_real_linking_items(light: bpy.types.Object) -> bool:
+    """Return whether either linking channel contains a non-helper item."""
+    if not hasattr(light, "light_linking"):
+        return False
+    linking = light.light_linking
+    for coll in (linking.receiver_collection, linking.blocker_collection):
+        if coll is None:
+            continue
+        if coll.children or any(not is_safe_helper_object(obj) for obj in coll.objects):
+            return True
+    return False
+
+
 def link_item_to_channel(light: bpy.types.Object, item,
                          coll_type: CollectionType, enabled: bool,
-                         context: bpy.types.Context | None = None) -> None:
+                         context: bpy.types.Context | None = None, *,
+                         restore_default_when_empty: bool = False) -> None:
     light = resolve_original_id(light)
     item = resolve_original_id(item)
     if not is_original_id(light) or not is_original_id(item):
         return
-    try:
-        coll = ensure_linking_coll(coll_type, light, context)
-    except RuntimeError:
-        return
+    coll = get_linking_coll(light, coll_type)
+    if coll is None:
+        if not enabled:
+            return
+        try:
+            coll = ensure_linking_coll(coll_type, light, context)
+        except RuntimeError:
+            return
     mode = get_linking_mode(light)
     try:
         if isinstance(item, bpy.types.Object):
@@ -289,6 +307,10 @@ def link_item_to_channel(light: bpy.types.Object, item,
     except RuntimeError:
         return
 
+    if restore_default_when_empty and not enabled and not has_real_linking_items(light):
+        restore_light_linking(light, context)
+        return
+
     sync_safe_helpers_for_light(light)
     from .overlay import notify_linking_changed
     notify_linking_changed(context)
@@ -301,15 +323,22 @@ def link_item_both_channels(light: bpy.types.Object, item,
 
 
 def toggle_item_both_channels(light: bpy.types.Object, item,
-                              context: bpy.types.Context | None = None) -> bool:
+                              context: bpy.types.Context | None = None, *,
+                              restore_default_when_empty: bool = False) -> bool:
     """Toggle receiver and blocker channels together. Returns True if channels are enabled."""
     if not is_linking_initialized(light):
         init_light_linking(light, context)
     receiver = is_item_in_channel(light, item, CollectionType.RECEIVER)
     blocker = is_item_in_channel(light, item, CollectionType.BLOCKER)
     enable = not (receiver and blocker)
-    link_item_to_channel(light, item, CollectionType.RECEIVER, enable, context)
-    link_item_to_channel(light, item, CollectionType.BLOCKER, enable, context)
+    link_item_to_channel(
+        light, item, CollectionType.RECEIVER, enable, context,
+        restore_default_when_empty=restore_default_when_empty,
+    )
+    link_item_to_channel(
+        light, item, CollectionType.BLOCKER, enable, context,
+        restore_default_when_empty=restore_default_when_empty,
+    )
     return enable
 
 
