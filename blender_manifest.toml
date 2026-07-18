@@ -1,14 +1,14 @@
 name = "Light Helper"
 id = "LightHelper"
 maintainer = "ACGGit Community,Atticus,小萌新"
-version = "1.0.1"
+version = "1.0.2"
 tagline = "Manage light linking and exclusions from the sidebar"
 blender_version_min = "4.2.0"
 type = "add-on"
 schema_version = "1.0.0"
 tags = ["Lighting"]
 license = ["SPDX:GPL-3.0-or-later"]
-support = "https://github.com/AIGODLIKE/LightHelper/issues"
+support = "https://github.com/AIGODLIKE/LightHelper/issues/9"
 website = "https://github.com/AIGODLIKE/LightHelper"
 
 [build]

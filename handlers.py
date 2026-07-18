@@ -76,11 +76,15 @@ def invalidate_filter_cache_handler(_scene, _depsgraph):
     invalidate_filter_cache()
 
 
+def ensure_filter_cache_invalidation_handler() -> None:
+    """Register cache invalidation only after the filtered list is used."""
+    if invalidate_filter_cache_handler not in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.append(invalidate_filter_cache_handler)
+
+
 def register():
     # Auto-fix is opt-in and never mutates data during registration or file load.
     sync_auto_fix_depsgraph_handler()
-    if invalidate_filter_cache_handler not in bpy.app.handlers.depsgraph_update_post:
-        bpy.app.handlers.depsgraph_update_post.append(invalidate_filter_cache_handler)
 
 
 def unregister():

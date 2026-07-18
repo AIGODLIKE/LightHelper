@@ -19,8 +19,10 @@ def _filter_cache_key(context, bitflag, pref):
 
 
 def filter_list(context, bitflag=None):
+    from .handlers import ensure_filter_cache_invalidation_handler
     from .utils import check_material_including_emission, get_pref, check_link
 
+    ensure_filter_cache_invalidation_handler()
     pref = get_pref(context)
     cache_key = _filter_cache_key(context, bitflag, pref)
     cached = _filter_list_cache.get(cache_key)

@@ -3,6 +3,8 @@ from uuid import uuid4
 
 import bpy
 
+from .. import __package__ as base_package
+
 LIGHT_HELPER_MANAGED_KEY = "light_helper_managed"
 LIGHT_HELPER_SAFE_KEY = "light_helper_safe"
 LIGHT_HELPER_SAFE_OWNER_KEY = "light_helper_safe_owner"
@@ -10,7 +12,6 @@ LIGHT_HELPER_OWNER_UUID_KEY = "light_helper_owner_uuid"
 ILLUMINATED_OBJECT_TYPE_LIST = [
     "LIGHT", "MESH", "CURVE", "SURFACE", "META", "FONT", "GPENCIL", "GREASEPENCIL", "EMPTY",
 ]
-from .. import __package__ as base_package
 
 
 @unique

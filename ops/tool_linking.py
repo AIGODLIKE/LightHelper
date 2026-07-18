@@ -223,7 +223,7 @@ class LLP_OT_light_linking_hud_drag(_LLP_LightLinkingToolPoll, LightHelperOperat
 
     def invoke(self, context, event):
         from ..ui.tool import start_tool_session
-        from ..utils.overlay import mark_hud_consumed_click, mouse_over_hud
+        from ..utils.overlay import mouse_over_hud
         start_tool_session(context)
         if event.value != 'PRESS' or not mouse_over_hud(context, event):
             return {'PASS_THROUGH'}
