@@ -86,7 +86,7 @@ class LinkDrawGroup:
 
 
 class LinkOverlayCache:
-    __slots__ = ("overlay_mode", "subject_mode", "light", "object", "groups", "outlines_hidden", "invalid")
+    __slots__ = ("overlay_mode", "subject_mode", "light", "object", "groups", "outlines_hidden", "engine", "invalid")
 
     def __init__(self):
         self.overlay_mode = OVERLAY_MODE_SELECTED
@@ -95,6 +95,7 @@ class LinkOverlayCache:
         self.object = None
         self.groups: list[LinkDrawGroup] = []
         self.outlines_hidden = False
+        self.engine = None
         self.invalid = True
 
     def invalidate(self):
@@ -134,6 +135,7 @@ def mark_hud_consumed_click() -> None:
 
 def _hud_info_lines(context: bpy.types.Context) -> list[str]:
     from bpy.app.translations import pgettext_iface as p_
+    from . import is_tool_light_source
 
     wm_props = context.window_manager.light_helper_property
     subject_mode = wm_props.linking_tool_subject_mode
@@ -147,7 +149,7 @@ def _hud_info_lines(context: bpy.types.Context) -> list[str]:
             lines.append(f"{p_('Object')}: {obj.name}")
     else:
         light = wm_props.linking_tool_light
-        if light is None:
+        if light is None or not is_tool_light_source(light, context):
             lines.append(p_("Light: (none)"))
         else:
             mode = get_linking_mode(light)
@@ -571,7 +573,7 @@ def _draw_subject_outline(context: bpy.types.Context, subject: bpy.types.Object,
 
 
 def refresh_overlay_cache(context: bpy.types.Context):
-    from . import refresh_drop_poll_context
+    from . import is_tool_light_source, refresh_drop_poll_context
 
     wm_props = context.window_manager.light_helper_property
     pref = get_pref(context)
@@ -580,6 +582,7 @@ def refresh_overlay_cache(context: bpy.types.Context):
     max_outlines = pref.linking_tool_max_outlines
 
     _cache.overlay_mode = overlay_mode
+    _cache.engine = context.scene.render.engine
 
     if overlay_mode == OVERLAY_MODE_OFF:
         _cache.subject_mode = subject_mode
@@ -607,6 +610,8 @@ def refresh_overlay_cache(context: bpy.types.Context):
         _cache.object = active_obj
     else:
         active_light = wm_props.linking_tool_light
+        if active_light is not None and not is_tool_light_source(active_light, context):
+            active_light = None
         if overlay_mode == OVERLAY_MODE_SELECTED:
             if active_light is not None:
                 targets, outlines_hidden = _build_targets_from_light(active_light, max_outlines)
@@ -664,6 +669,8 @@ def _current_cache_key(context: bpy.types.Context) -> tuple:
 
 def cache_needs_refresh(context: bpy.types.Context) -> bool:
     if _cache.invalid:
+        return True
+    if _cache.engine != context.scene.render.engine:
         return True
     current_key = _current_cache_key(context)
     cached_subject = _cache.object if _cache.subject_mode == 'OBJECT' else _cache.light

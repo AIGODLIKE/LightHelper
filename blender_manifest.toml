@@ -1,8 +1,8 @@
 name = "Light Helper"
 id = "LightHepler"
 maintainer = "ACGGit"
-version = "2.0.0"
-tagline = "Manage light linking and exclusions from the sidebar"
+version = "2.1.0"
+tagline = "Manage light and world environment linking from the sidebar"
 blender_version_min = "4.2.0"
 type = "add-on"
 schema_version = "1.0.0"
@@ -17,6 +17,8 @@ paths_exclude_pattern = [
     "/.git/",
     "/.github/",
     "/.idea/",
+    "/.ruff_cache/",
+    "/.pytest_cache/",
     "/dist/",
     "/*.zip",
     "/.gitignore",

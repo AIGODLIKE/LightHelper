@@ -18,11 +18,8 @@ def enum_coll_type(self, context):
 
 
 def get_light_obj(context):
-    if context.scene.light_helper_property.light_linking_pin:
-        light_obj = context.scene.light_helper_property.light_linking_pin_object
-    else:
-        light_obj = context.object
-    return light_obj
+    from ..utils import get_active_light_source
+    return get_active_light_source(context)
 
 
 def get_area(context, area_type: str):

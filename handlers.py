@@ -76,6 +76,13 @@ def invalidate_filter_cache_handler(_scene, _depsgraph):
     invalidate_filter_cache()
 
 
+@bpy.app.handlers.persistent
+def world_environment_sun_sync_handler(scene, depsgraph):
+    """Keep newly added Sun lights from illuminating a managed environment dome."""
+    from .utils.world_environment import sync_world_environment_suns_from_depsgraph
+    sync_world_environment_suns_from_depsgraph(scene, depsgraph)
+
+
 def ensure_filter_cache_invalidation_handler() -> None:
     """Register cache invalidation only after the filtered list is used."""
     if invalidate_filter_cache_handler not in bpy.app.handlers.depsgraph_update_post:
@@ -83,11 +90,19 @@ def ensure_filter_cache_invalidation_handler() -> None:
 
 
 def register():
+    from .utils.world_environment import clear_world_environment_sync_state
+    clear_world_environment_sync_state()
     # Auto-fix is opt-in and never mutates data during registration or file load.
     sync_auto_fix_depsgraph_handler()
+    if world_environment_sun_sync_handler not in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.append(world_environment_sun_sync_handler)
 
 
 def unregister():
+    from .utils.world_environment import clear_world_environment_sync_state
     sync_auto_fix_depsgraph_handler(False)
     if invalidate_filter_cache_handler in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.remove(invalidate_filter_cache_handler)
+    if world_environment_sun_sync_handler in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.remove(world_environment_sun_sync_handler)
+    clear_world_environment_sync_state()

@@ -16,15 +16,8 @@ from ..utils.icon import get_item_icon, get_light_icon
 
 
 def get_panel_light_obj(context) -> bpy.types.Object | None:
-    from ..utils import is_tool_light_source
-    if context.scene.light_helper_property.light_linking_pin:
-        obj = context.scene.light_helper_property.light_linking_pin_object
-        if obj and is_tool_light_source(obj, context):
-            return obj
-    obj = context.object
-    if obj and is_tool_light_source(obj, context):
-        return obj
-    return None
+    from ..ops.common import get_light_obj
+    return get_light_obj(context)
 
 
 def get_panel_blender_light_obj(context) -> bpy.types.Object | None:
@@ -296,8 +289,19 @@ class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
 
     def draw_light_objs_control(self, context, layout):
         from ..ops import LLP_OT_add_light_linking, LLP_OT_clear_light_linking, LLP_OT_instances_data
+        from ..utils import is_tool_light_source
 
         refresh_drop_poll_context(context)
+
+        scene_props = context.scene.light_helper_property
+        pinned = scene_props.light_linking_pin_object
+        invalid_pin = scene_props.light_linking_pin and not is_tool_light_source(pinned, context)
+        if invalid_pin and context.scene.render.engine == 'CYCLES':
+            warning = layout.box()
+            warning.alert = True
+            row = warning.row(align=True)
+            row.label(text=p_("Pinned light source is unavailable in the current renderer"), icon='INFO')
+            row.prop(scene_props, 'light_linking_pin', text="", icon='PINNED')
 
         light_obj = get_panel_light_obj(context)
         if not light_obj:
@@ -382,7 +386,8 @@ class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
 
         row = column.row(align=True)
         col = row.column(align=True)
-        col.prop(pref, "light_list_filter_type", expand=True, text="", icon_only=True)
+        if context.scene.render.engine == 'CYCLES':
+            col.prop(pref, "light_list_filter_type", expand=True, text="", icon_only=True)
         col.separator()
         col.operator(LLP_OT_switch_filter_show.bl_idname, text="", icon=icon)
         invert_row = col.row(align=True)
@@ -399,8 +404,6 @@ class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
             context.scene.light_helper_property, "active_object_index",
             rows=7,
         )
-
-
 class VIEW3D_PT_light_helper_object_control(bpy.types.Panel):
     bl_label = ""
     bl_idname = "VIEW3D_PT_light_helper_object_control"
@@ -509,13 +512,157 @@ class VIEW3D_PT_light_helper_object_control(bpy.types.Panel):
         box.prop(context.window_manager.light_helper_property, 'object_linking_add_object', text='', icon='ADD')
 
 
+class VIEW3D_PT_light_helper_world_environment(bpy.types.Panel):
+    bl_label = "World Environment Linking"
+    bl_idname = "VIEW3D_PT_light_helper_world_environment"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "LH"
+    bl_order = 2
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene is not None and context.scene.render.engine == 'CYCLES'
+
+    def draw(self, context):
+        from ..ops import (
+            LLP_OT_convert_world_environment,
+            LLP_OT_restore_world_environment,
+            LLP_OT_select_world_environment_dome,
+            LLP_OT_sync_world_sun_exclusions,
+        )
+        from ..utils.world_environment import (
+            WORLD_DOME_SOURCE_IMAGE_KEY,
+            WORLD_DOME_SOURCE_TYPE_KEY,
+            WORLD_SOURCE_COLOR,
+            WORLD_SOURCE_HDRI,
+            count_synced_suns,
+            find_world_environment,
+            get_world_dome,
+        )
+
+        layout = self.layout
+        scene = context.scene
+        props = scene.light_helper_property
+        dome = get_world_dome(scene)
+
+        if dome is None:
+            info = find_world_environment(scene)
+            world = scene.world
+            if world is None:
+                box = layout.box()
+                box.alert = True
+                box.label(text=p_("The current scene has no World"), icon='ERROR')
+            elif not info.has_source:
+                box = layout.box()
+                box.alert = True
+                box.label(text=p_("No usable World environment source was found"), icon='ERROR')
+            else:
+                source = layout.box()
+                source.label(text=p_("Source World: %s") % world.name, icon='WORLD_DATA', translate=False)
+                if info.source_type == WORLD_SOURCE_HDRI:
+                    source.label(text=p_("HDRI: %s") % info.image.name, icon='IMAGE_DATA', translate=False)
+                    packed = bool(
+                        getattr(info.image, "packed_file", None)
+                        or getattr(info.image, "packed_files", ())
+                    )
+                    if packed:
+                        source.label(text=p_("The source image is packed in the blend file"), icon='PACKAGE')
+                    if info.connected_image_count > 1:
+                        source.alert = True
+                        source.label(
+                            text=p_("%d connected HDRI images found; the nearest active image will be used")
+                            % info.connected_image_count,
+                            icon='ERROR',
+                        )
+                else:
+                    source.label(text=p_("Source: Solid Color"), icon='COLOR')
+            convert = layout.row()
+            convert.enabled = info.has_source
+            convert.operator(LLP_OT_convert_world_environment.bl_idname, icon='WORLD')
+            return
+
+        header = layout.box()
+        row = header.row(align=True)
+        row.label(text=dome.name, icon='SPHERE', translate=False)
+        row.operator(LLP_OT_convert_world_environment.bl_idname, text="", icon='FILE_REFRESH')
+        row.operator(LLP_OT_select_world_environment_dome.bl_idname, text="", icon='RESTRICT_SELECT_OFF')
+        row.prop(props, "world_dome_show_viewport", text="", icon='HIDE_OFF' if props.world_dome_show_viewport else 'HIDE_ON')
+        row.prop(props, "world_dome_lock_selection", text="", icon='LOCKED' if props.world_dome_lock_selection else 'UNLOCKED')
+        image_name = dome.get(WORLD_DOME_SOURCE_IMAGE_KEY, "")
+        source_type = dome.get(
+            WORLD_DOME_SOURCE_TYPE_KEY,
+            WORLD_SOURCE_HDRI if image_name else WORLD_SOURCE_COLOR,
+        )
+        if image_name:
+            header.label(text=p_("HDRI: %s") % image_name, icon='IMAGE_DATA', translate=False)
+        else:
+            header.label(text=p_("Source: Solid Color"), icon='COLOR')
+
+        depths = layout.box()
+        depths.label(text=p_("Ray Depth Limits (Cycles)"), icon='NODE_MATERIAL')
+        row = depths.row(align=True)
+        row.prop(props, "world_dome_max_bounces")
+        row.prop(props, "world_dome_max_diffuse_bounces")
+        row = depths.row(align=True)
+        row.prop(props, "world_dome_max_glossy_bounces")
+        row.prop(props, "world_dome_max_transmission_bounces")
+        depths.label(text=p_("0 keeps direct rays and blocks indirect rays of that type"), icon='INFO')
+
+        visibility = layout.box()
+        visibility.label(text=p_("Ray Visibility"), icon='HIDE_OFF')
+        row = visibility.row(align=True)
+        row.prop(props, "world_dome_visible_camera", toggle=True)
+        row.prop(props, "world_dome_visible_diffuse", toggle=True)
+        row.prop(props, "world_dome_visible_glossy", toggle=True)
+        row = visibility.row(align=True)
+        row.prop(props, "world_dome_visible_transmission", toggle=True)
+        row.prop(props, "world_dome_visible_volume_scatter", toggle=True)
+
+        color = layout.box()
+        color.label(text=p_("Environment"), icon='WORLD_DATA')
+        if source_type == WORLD_SOURCE_COLOR:
+            color.prop(props, "world_dome_color")
+        color.prop(props, "world_dome_strength")
+        row = color.row(align=True)
+        row.prop(props, "world_dome_gamma")
+        row.prop(props, "world_dome_saturation")
+        color.prop(props, "world_dome_tint_factor", slider=True)
+        tint_row = color.row()
+        tint_row.enabled = props.world_dome_tint_factor > 0.0
+        tint_row.prop(props, "world_dome_tint")
+        if source_type == WORLD_SOURCE_HDRI:
+            color.prop(props, "world_dome_rotation")
+
+        geometry = layout.box()
+        geometry.label(
+            text=p_("Dome and Mapping") if source_type == WORLD_SOURCE_HDRI else p_("Dome"),
+            icon='MESH_UVSPHERE',
+        )
+        geometry.prop(props, "world_dome_radius")
+        if source_type == WORLD_SOURCE_HDRI:
+            geometry.prop(props, "world_dome_mapping_location")
+            geometry.prop(props, "world_dome_mapping_scale")
+
+        synced, total = count_synced_suns(scene, dome)
+        suns = layout.box()
+        suns.label(text=p_("Sun Exclusion: %d / %d") % (synced, total), icon='LIGHT_SUN')
+        suns.label(text=p_("Sun exclusions are internal and do not replace user-authored links"), icon='INFO')
+        suns.operator(LLP_OT_sync_world_sun_exclusions.bl_idname, icon='FILE_REFRESH')
+
+        restore = layout.row()
+        restore.alert = True
+        restore.operator(LLP_OT_restore_world_environment.bl_idname, icon='LOOP_BACK')
+
+
 class VIEW3D_PT_light_helper_light_properties(bpy.types.Panel):
     bl_label = "Light Properties"
     bl_idname = "VIEW3D_PT_light_helper_light_properties"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "LH"
-    bl_order = 2
+    bl_order = 3
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
@@ -651,6 +798,7 @@ class VIEW3D_PT_light_helper_eevee_light_influence(bpy.types.Panel):
 panel_list = [
     VIEW3D_PT_light_helper_light_control,
     VIEW3D_PT_light_helper_object_control,
+    VIEW3D_PT_light_helper_world_environment,
     VIEW3D_PT_light_helper_light_properties,
     VIEW3D_PT_light_helper_cycles_light,
     VIEW3D_PT_light_helper_light_settings,

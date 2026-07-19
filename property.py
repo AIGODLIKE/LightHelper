@@ -14,6 +14,14 @@ def check_light_object(obj: bpy.types.Object) -> bool:
     return obj.type in ILLUMINATED_OBJECT_TYPE_LIST
 
 
+def update_world_dome_settings(self, context):
+    scene = self.id_data
+    if not isinstance(scene, bpy.types.Scene):
+        return
+    from .utils.world_environment import update_world_dome_from_properties
+    update_world_dome_from_properties(scene)
+
+
 class ObjectProperty(PropertyGroup):
     linking_mode: bpy.props.EnumProperty(
         name="Linking Mode",
@@ -79,12 +87,20 @@ class ObjectProperty(PropertyGroup):
 
 def poll_light_linking_pin_object(_self, obj: bpy.types.Object) -> bool:
     from .utils import is_tool_light_source
-    return is_tool_light_source(obj)
+    return is_tool_light_source(obj, bpy.context)
 
 
 def poll_object_linking_pin_object(_self, obj: bpy.types.Object) -> bool:
     from .utils import ILLUMINATED_OBJECT_TYPE_LIST
     return obj.type in ILLUMINATED_OBJECT_TYPE_LIST and obj.type != "LIGHT"
+
+
+class WorldSunLinkRecord(PropertyGroup):
+    light: bpy.props.PointerProperty(type=bpy.types.Object)
+    original_receiver: bpy.props.PointerProperty(type=bpy.types.Collection)
+    managed_receiver: bpy.props.PointerProperty(type=bpy.types.Collection)
+    proxy_collection: bpy.props.PointerProperty(type=bpy.types.Collection)
+    receiver_created: bpy.props.BoolProperty(default=False)
 
 
 class SceneProperty(PropertyGroup):
@@ -124,6 +140,182 @@ class SceneProperty(PropertyGroup):
         name="Show Linked Objects List",
         description="Show the linked objects UI list in the Object Linking panel",
         default=True,
+    )
+
+    world_environment_dome: bpy.props.PointerProperty(
+        name="World Environment Dome",
+        type=bpy.types.Object,
+    )
+    world_environment_original_world: bpy.props.PointerProperty(
+        name="Original World",
+        type=bpy.types.World,
+    )
+    world_environment_managed_world: bpy.props.PointerProperty(
+        name="Managed Fallback World",
+        type=bpy.types.World,
+    )
+    world_environment_sun_records: bpy.props.CollectionProperty(
+        type=WorldSunLinkRecord,
+    )
+    world_dome_color: bpy.props.FloatVectorProperty(
+        name="Environment Color",
+        description="Base color of a solid-color world environment dome",
+        subtype='COLOR',
+        size=3,
+        default=(0.050876, 0.050876, 0.050876),
+        min=0.0,
+        soft_max=1.0,
+        update=update_world_dome_settings,
+    )
+    world_dome_strength: bpy.props.FloatProperty(
+        name="Strength",
+        description="Emission strength of the world environment dome",
+        default=1.0,
+        min=0.0,
+        soft_max=16.0,
+        update=update_world_dome_settings,
+    )
+    world_dome_tint: bpy.props.FloatVectorProperty(
+        name="Tint",
+        description="Color multiplier applied to the environment source",
+        subtype='COLOR',
+        size=3,
+        default=(1.0, 1.0, 1.0),
+        min=0.0,
+        soft_max=2.0,
+        update=update_world_dome_settings,
+    )
+    world_dome_tint_factor: bpy.props.FloatProperty(
+        name="Tint Factor",
+        description="Blend amount for the environment tint multiplier",
+        subtype='FACTOR',
+        default=0.0,
+        min=0.0,
+        max=1.0,
+        update=update_world_dome_settings,
+    )
+    world_dome_gamma: bpy.props.FloatProperty(
+        name="Gamma",
+        description="Gamma correction applied to the environment source",
+        default=1.0,
+        min=0.001,
+        soft_max=4.0,
+        update=update_world_dome_settings,
+    )
+    world_dome_saturation: bpy.props.FloatProperty(
+        name="Saturation",
+        description="Saturation applied to the environment source",
+        default=1.0,
+        min=0.0,
+        soft_max=2.0,
+        update=update_world_dome_settings,
+    )
+    world_dome_rotation: bpy.props.FloatVectorProperty(
+        name="Rotation",
+        description="HDRI mapping rotation",
+        subtype='EULER',
+        size=3,
+        default=(0.0, 0.0, 0.0),
+        update=update_world_dome_settings,
+    )
+    world_dome_mapping_location: bpy.props.FloatVectorProperty(
+        name="Mapping Location",
+        description="Advanced HDRI mapping offset copied from the World",
+        subtype='TRANSLATION',
+        size=3,
+        default=(0.0, 0.0, 0.0),
+        update=update_world_dome_settings,
+    )
+    world_dome_mapping_scale: bpy.props.FloatVectorProperty(
+        name="Mapping Scale",
+        description="Advanced HDRI mapping scale copied from the World",
+        subtype='XYZ',
+        size=3,
+        default=(1.0, 1.0, 1.0),
+        update=update_world_dome_settings,
+    )
+    world_dome_radius: bpy.props.FloatProperty(
+        name="Radius",
+        description="Radius of the generated inward-facing environment sphere",
+        subtype='DISTANCE',
+        default=50.0,
+        min=0.1,
+        soft_max=10000.0,
+        update=update_world_dome_settings,
+    )
+    world_dome_max_bounces: bpy.props.IntProperty(
+        name="Total",
+        description="Maximum total indirect ray depth allowed to see the environment dome; 0 keeps direct rays only",
+        default=2,
+        min=0,
+        max=1024,
+        update=update_world_dome_settings,
+    )
+    world_dome_max_diffuse_bounces: bpy.props.IntProperty(
+        name="Diffuse",
+        description="Maximum diffuse indirect ray depth allowed to see the environment dome",
+        default=1,
+        min=0,
+        max=1024,
+        update=update_world_dome_settings,
+    )
+    world_dome_max_glossy_bounces: bpy.props.IntProperty(
+        name="Glossy",
+        description="Maximum glossy indirect ray depth allowed to see the environment dome",
+        default=1,
+        min=0,
+        max=1024,
+        update=update_world_dome_settings,
+    )
+    world_dome_max_transmission_bounces: bpy.props.IntProperty(
+        name="Transmission",
+        description="Maximum transmission indirect ray depth allowed to see the environment dome",
+        default=2,
+        min=0,
+        max=1024,
+        update=update_world_dome_settings,
+    )
+    world_dome_visible_camera: bpy.props.BoolProperty(
+        name="Camera",
+        description="Show the environment dome to camera rays",
+        default=True,
+        update=update_world_dome_settings,
+    )
+    world_dome_visible_diffuse: bpy.props.BoolProperty(
+        name="Diffuse",
+        description="Allow the environment dome to contribute to diffuse rays",
+        default=True,
+        update=update_world_dome_settings,
+    )
+    world_dome_visible_glossy: bpy.props.BoolProperty(
+        name="Glossy",
+        description="Allow the environment dome to appear in glossy rays",
+        default=True,
+        update=update_world_dome_settings,
+    )
+    world_dome_visible_transmission: bpy.props.BoolProperty(
+        name="Transmission",
+        description="Allow the environment dome to appear through transmission rays",
+        default=True,
+        update=update_world_dome_settings,
+    )
+    world_dome_visible_volume_scatter: bpy.props.BoolProperty(
+        name="Volume Scatter",
+        description="Allow the environment dome to contribute to volume scattering rays",
+        default=True,
+        update=update_world_dome_settings,
+    )
+    world_dome_show_viewport: bpy.props.BoolProperty(
+        name="Show in Viewport",
+        description="Show the generated environment dome in the viewport",
+        default=True,
+        update=update_world_dome_settings,
+    )
+    world_dome_lock_selection: bpy.props.BoolProperty(
+        name="Lock Selection",
+        description="Prevent accidental selection of the large environment dome",
+        default=True,
+        update=update_world_dome_settings,
     )
 
     def update_active_object_index(self, context):
@@ -175,7 +367,7 @@ class SceneProperty(PropertyGroup):
 
 def poll_linking_tool_light(_self, obj: bpy.types.Object) -> bool:
     from .utils import is_tool_light_source
-    return is_tool_light_source(obj)
+    return is_tool_light_source(obj, bpy.context)
 
 
 def poll_linking_tool_object(_self, obj: bpy.types.Object) -> bool:
@@ -343,10 +535,8 @@ class WindowManagerProperty(PropertyGroup):
         if wm.light_helper_property.light_linking_add_collection is None:
             return
 
-        if context.scene.light_helper_property.light_linking_pin:
-            obj = context.scene.light_helper_property.light_linking_pin_object
-        else:
-            obj = context.object
+        from .utils import get_active_light_source
+        obj = get_active_light_source(context)
         if obj is None:
             wm.light_helper_property.light_linking_add_collection = None
             return
@@ -363,10 +553,8 @@ class WindowManagerProperty(PropertyGroup):
         if wm.light_helper_property.light_linking_add_object is None:
             return
 
-        if context.scene.light_helper_property.light_linking_pin:
-            obj = context.scene.light_helper_property.light_linking_pin_object
-        else:
-            obj = context.object
+        from .utils import get_active_light_source
+        obj = get_active_light_source(context)
         if obj is None:
             wm.light_helper_property.light_linking_add_object = None
             return
@@ -445,6 +633,7 @@ class WindowManagerProperty(PropertyGroup):
 
 property_list = [
     ObjectProperty,
+    WorldSunLinkRecord,
     SceneProperty,
     SoloVisibilityItem,
     WindowManagerProperty,

@@ -182,6 +182,32 @@ def _set_item_link_state(coll: bpy.types.Collection, item, mode: str) -> None:
             coll_child.light_linking.link_state = mode
 
 
+def is_internal_world_dome_link(
+        light: bpy.types.Object,
+        item,
+        coll_type: CollectionType,
+) -> bool:
+    """World dome exclusions are infrastructure, not user-authored light links."""
+    if coll_type != CollectionType.RECEIVER:
+        return False
+    if light.type != 'LIGHT' or light.data is None or light.data.type != 'SUN':
+        return False
+    try:
+        from .world_environment import (
+            ROLE_DOME_OBJECT,
+            ROLE_SUN_PROXY,
+            WORLD_DOME_ROLE_KEY,
+        )
+        role = item.get(WORLD_DOME_ROLE_KEY)
+        if isinstance(item, bpy.types.Object):
+            return role == ROLE_DOME_OBJECT
+        if isinstance(item, bpy.types.Collection):
+            return role == ROLE_SUN_PROXY
+        return False
+    except (ImportError, AttributeError, ReferenceError):
+        return False
+
+
 def apply_linking_mode_to_light(light: bpy.types.Object, mode: str | None = None) -> None:
     if mode is None:
         mode = get_linking_mode(light)
@@ -189,9 +215,17 @@ def apply_linking_mode_to_light(light: bpy.types.Object, mode: str | None = None
         coll = get_linking_coll(light, coll_type)
         if coll is None:
             continue
-        for coll_obj in coll.collection_objects:
+        for index, coll_obj in enumerate(coll.collection_objects):
+            item = coll.objects[index]
+            if is_internal_world_dome_link(light, item, coll_type):
+                coll_obj.light_linking.link_state = StateValue.EXCLUDE.value
+                continue
             coll_obj.light_linking.link_state = mode
-        for coll_child in coll.collection_children:
+        for index, coll_child in enumerate(coll.collection_children):
+            item = coll.children[index]
+            if is_internal_world_dome_link(light, item, coll_type):
+                coll_child.light_linking.link_state = StateValue.EXCLUDE.value
+                continue
             coll_child.light_linking.link_state = mode
 
 
@@ -264,10 +298,20 @@ def has_real_linking_items(light: bpy.types.Object) -> bool:
     if not hasattr(light, "light_linking"):
         return False
     linking = light.light_linking
-    for coll in (linking.receiver_collection, linking.blocker_collection):
+    for coll_type, coll in (
+        (CollectionType.RECEIVER, linking.receiver_collection),
+        (CollectionType.BLOCKER, linking.blocker_collection),
+    ):
         if coll is None:
             continue
-        if coll.children or any(not is_safe_helper_object(obj) for obj in coll.objects):
+        if any(
+                not is_safe_helper_object(obj)
+                and not is_internal_world_dome_link(light, obj, coll_type)
+                for obj in coll.objects):
+            return True
+        if any(
+                not is_internal_world_dome_link(light, child, coll_type)
+                for child in coll.children):
             return True
     return False
 
@@ -342,14 +386,40 @@ def toggle_item_both_channels(light: bpy.types.Object, item,
     return enable
 
 
-def is_emissive_light_source(obj: bpy.types.Object, context: bpy.types.Context | None = None) -> bool:
+def supports_emissive_light_sources(context: bpy.types.Context | None = None) -> bool:
+    """Whether material-emission objects can act as Light Linking sources.
+
+    Blender supports Light Linking for emissive mesh objects only in Cycles.
+    A missing context intentionally keeps this a data-level check for RNA pointer
+    polls and migration code; all interactive entry points pass a context.
+    """
+    if context is None:
+        return True
+    scene = getattr(context, "scene", None)
+    if scene is None and isinstance(context, bpy.types.Scene):
+        scene = context
+    if scene is None:
+        return True
+    return scene.render.engine == 'CYCLES'
+
+
+def is_emissive_light_source(
+        obj: bpy.types.Object,
+        context: bpy.types.Context | None = None,
+        *,
+        search_depth: int | None = None,
+        cache: dict | None = None,
+) -> bool:
     obj = resolve_original_id(obj)
     if obj is None or obj.type == 'LIGHT':
         return False
     if not hasattr(obj, "light_linking"):
         return False
-    pref = get_pref(context)
-    return check_material_including_emission(obj, pref.node_search_depth)
+    if not supports_emissive_light_sources(context):
+        return False
+    if search_depth is None:
+        search_depth = get_pref(context).node_search_depth
+    return check_material_including_emission(obj, search_depth, cache=cache)
 
 
 def is_tool_light_source(obj: bpy.types.Object, context: bpy.types.Context | None = None) -> bool:
@@ -359,6 +429,21 @@ def is_tool_light_source(obj: bpy.types.Object, context: bpy.types.Context | Non
     if obj.type == 'LIGHT':
         return True
     return is_emissive_light_source(obj, context)
+
+
+def get_active_light_source(context: bpy.types.Context) -> bpy.types.Object | None:
+    """Resolve the pinned or selected source using the current render engine."""
+    if context is None or context.scene is None:
+        return None
+    scene_props = context.scene.light_helper_property
+    if scene_props.light_linking_pin:
+        light_obj = resolve_original_id(scene_props.light_linking_pin_object)
+        if is_tool_light_source(light_obj, context):
+            return light_obj
+    light_obj = resolve_original_id(context.object)
+    if is_tool_light_source(light_obj, context):
+        return light_obj
+    return None
 
 
 def is_linkable_object(obj: bpy.types.Object) -> bool:
@@ -432,6 +517,18 @@ def remove_orphaned_managed_collection(coll: bpy.types.Collection | None) -> Non
 
 
 def restore_light_linking(light: bpy.types.Object, context: bpy.types.Context | None = None) -> None:
+    active_world_domes = []
+    if light.type == 'LIGHT' and light.data is not None and light.data.type == 'SUN':
+        from .world_environment import get_world_dome, remove_sun_exclusions
+        for scene in bpy.data.scenes:
+            if light.name not in scene.objects:
+                continue
+            dome = get_world_dome(scene)
+            if dome is None:
+                continue
+            remove_sun_exclusions(scene, dome, [light])
+            if scene.render.engine == 'CYCLES':
+                active_world_domes.append((scene, dome))
     linking = light.light_linking
     receiver = linking.receiver_collection
     blocker = linking.blocker_collection
@@ -440,6 +537,12 @@ def restore_light_linking(light: bpy.types.Object, context: bpy.types.Context | 
     remove_safe_helper_for_light(light)
     remove_orphaned_managed_collection(receiver)
     remove_orphaned_managed_collection(blocker)
+    # A converted world dome must remain excluded from Sun lights even when the
+    # user restores all ordinary links for that Sun.
+    if active_world_domes:
+        from .world_environment import ensure_sun_exclusions
+        for scene, dome in active_world_domes:
+            ensure_sun_exclusions(scene, dome, [light])
     from .overlay import notify_linking_changed
     notify_linking_changed(context)
 
@@ -476,20 +579,28 @@ def get_all_light_effect_items_state(light: bpy.types.Object) -> dict:
 
     if receiver_coll:
         for child in enum_coll_children_from_coll(receiver_coll):
+            if is_internal_world_dome_link(light, child, CollectionType.RECEIVER):
+                continue
             items_state.setdefault(child, {CollectionType.RECEIVER: None, CollectionType.BLOCKER: None})
             items_state[child][CollectionType.RECEIVER] = True
         for obj in enum_coll_objs_from_coll(receiver_coll):
             if is_safe_helper_object(obj):
+                continue
+            if is_internal_world_dome_link(light, obj, CollectionType.RECEIVER):
                 continue
             items_state.setdefault(obj, {CollectionType.RECEIVER: None, CollectionType.BLOCKER: None})
             items_state[obj][CollectionType.RECEIVER] = True
 
     if blocker_coll:
         for child in enum_coll_children_from_coll(blocker_coll):
+            if is_internal_world_dome_link(light, child, CollectionType.BLOCKER):
+                continue
             items_state.setdefault(child, {CollectionType.RECEIVER: None, CollectionType.BLOCKER: None})
             items_state[child][CollectionType.BLOCKER] = True
         for obj in enum_coll_objs_from_coll(blocker_coll):
             if is_safe_helper_object(obj):
+                continue
+            if is_internal_world_dome_link(light, obj, CollectionType.BLOCKER):
                 continue
             items_state.setdefault(obj, {CollectionType.RECEIVER: None, CollectionType.BLOCKER: None})
             items_state[obj][CollectionType.BLOCKER] = True
@@ -524,8 +635,14 @@ def get_lights_from_effect_obj(obj: bpy.types.Object, context: bpy.types.Context
         if not linking.receiver_collection and not linking.blocker_collection:
             continue
 
-        receiver_on = is_object_affected_in_channel(light_obj, obj, CollectionType.RECEIVER)
-        blocker_on = is_object_affected_in_channel(light_obj, obj, CollectionType.BLOCKER)
+        receiver_on = (
+            is_object_affected_in_channel(light_obj, obj, CollectionType.RECEIVER)
+            and not is_internal_world_dome_link(light_obj, obj, CollectionType.RECEIVER)
+        )
+        blocker_on = (
+            is_object_affected_in_channel(light_obj, obj, CollectionType.BLOCKER)
+            and not is_internal_world_dome_link(light_obj, obj, CollectionType.BLOCKER)
+        )
         if not receiver_on and not blocker_on:
             continue
 
@@ -649,10 +766,7 @@ def refresh_drop_poll_context(context: bpy.types.Context) -> None:
     global _view_layer_collections_cache, _cached_linking_lights
     wm_props = context.window_manager.light_helper_property
     scene_props = context.scene.light_helper_property
-    if scene_props.light_linking_pin:
-        wm_props.drop_light_obj = scene_props.light_linking_pin_object
-    else:
-        wm_props.drop_light_obj = context.object
+    wm_props.drop_light_obj = get_active_light_source(context)
     if scene_props.object_linking_pin:
         wm_props.drop_object_obj = scene_props.object_linking_pin_object
     else:
@@ -660,7 +774,8 @@ def refresh_drop_poll_context(context: bpy.types.Context) -> None:
     _view_layer_collections_cache = frozenset(get_all_view_layout_collection(context))
     _cached_linking_lights = tuple(
         light_obj for light_obj in context.scene.objects
-        if hasattr(light_obj, "light_linking")
+        if is_tool_light_source(light_obj, context)
+        and hasattr(light_obj, "light_linking")
         and (light_obj.light_linking.receiver_collection or light_obj.light_linking.blocker_collection)
     )
 

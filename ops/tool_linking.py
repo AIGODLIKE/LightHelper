@@ -165,6 +165,9 @@ class LLP_OT_light_linking_pick(_LLP_LightLinkingToolInvoke, LightHelperOperator
                 p_("No object selected") if object_mode else p_("No light selected"),
             )
             return {'CANCELLED'}
+        if not object_mode and not is_tool_light_source(subject, context):
+            operator.report({'WARNING'}, p_("No light selected"))
+            return {'CANCELLED'}
 
         area, region, obj = LLP_OT_light_linking_pick._pick_target(context, event)
         if area is None:
@@ -320,7 +323,7 @@ class LLP_OT_light_linking_toggle_mode(_LLP_LightLinkingToolInvoke, LightHelperO
                 return {'CANCELLED'}
         else:
             light = resolve_original_id(wm_props.linking_tool_light)
-            if light is None:
+            if light is None or not is_tool_light_source(light, context):
                 self.report({'WARNING'}, p_("No light selected"))
                 return {'CANCELLED'}
 

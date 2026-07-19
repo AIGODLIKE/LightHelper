@@ -187,14 +187,17 @@ def init_session_object(context: bpy.types.Context) -> bpy.types.Object | None:
 
 
 def start_tool_session(context: bpy.types.Context) -> None:
+    from ..utils import is_tool_light_source
     from ..utils.overlay import refresh_overlay_cache, register_draw_handlers, tag_view3d_redraw
     wm_props = context.window_manager.light_helper_property
     if wm_props.linking_tool_active:
         if wm_props.linking_tool_subject_mode == 'OBJECT':
             if wm_props.linking_tool_object is None:
                 wm_props.linking_tool_object = init_session_object(context)
-        elif wm_props.linking_tool_light is None:
-            wm_props.linking_tool_light = init_session_light(context)
+        else:
+            light = wm_props.linking_tool_light
+            if light is None or not is_tool_light_source(light, context):
+                wm_props.linking_tool_light = init_session_light(context)
         _subscribe_tool_changes()
         _register_depsgraph_sync()
         register_draw_handlers()
@@ -485,7 +488,7 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
     @staticmethod
     def draw_settings(context, layout, tool):
         from ..ui.panel import VIEW3D_PT_light_helper_light_control
-        from ..utils import get_light_link_item_count, get_object_link_light_count
+        from ..utils import get_light_link_item_count, get_object_link_light_count, is_tool_light_source
         from ..utils.overlay import get_active_link_count
 
         if not VIEW3D_PT_light_helper_light_control.check_support_light_linking(context):
@@ -501,6 +504,8 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
             schedule_session_sync()
         subject_mode = wm_props.linking_tool_subject_mode
         light = wm_props.linking_tool_light
+        if light is not None and not is_tool_light_source(light, context):
+            light = None
         obj = wm_props.linking_tool_object
         is_header = context.region and context.region.type == 'TOOL_HEADER'
         session_on = wm_props.linking_tool_active

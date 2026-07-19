@@ -14,13 +14,14 @@ def _filter_cache_key(context, bitflag, pref):
         pref.light_list_filter_type,
         pref.light_link_filter_type,
         pref.node_search_depth,
+        scene.render.engine,
         bitflag,
     )
 
 
 def filter_list(context, bitflag=None):
     from .handlers import ensure_filter_cache_invalidation_handler
-    from .utils import check_material_including_emission, get_pref, check_link
+    from .utils import check_link, get_pref, is_emissive_light_source
 
     ensure_filter_cache_invalidation_handler()
     pref = get_pref(context)
@@ -30,6 +31,11 @@ def filter_list(context, bitflag=None):
         return cached
 
     filter_type = pref.light_list_filter_type
+    if context.scene.render.engine != "CYCLES":
+        # EEVEE does not expose emissive meshes as Light Linking sources.
+        # Keep the stored Cycles preference intact, but present a useful
+        # native-light list while the unsupported filter UI is hidden.
+        filter_type = "LIGHT"
     link_type = pref.light_link_filter_type
     search_deep = pref.node_search_depth
 
@@ -39,14 +45,14 @@ def filter_list(context, bitflag=None):
 
     for idx, obj in enumerate(objects):
         if filter_type == "ALL":
-            is_show = obj.type == "LIGHT" or check_material_including_emission(
-                obj, search_deep, cache=emission_cache)
+            is_show = obj.type == "LIGHT" or is_emissive_light_source(
+                obj, context, search_depth=search_deep, cache=emission_cache)
             flag = bitflag if is_show else EMPTY
         elif filter_type == "LIGHT":
             flag = bitflag if obj.type == 'LIGHT' else EMPTY
         elif filter_type == "EMISSION":
-            flag = bitflag if check_material_including_emission(
-                obj, search_deep, cache=emission_cache) else EMPTY
+            flag = bitflag if is_emissive_light_source(
+                obj, context, search_depth=search_deep, cache=emission_cache) else EMPTY
         else:
             flag = EMPTY
 
