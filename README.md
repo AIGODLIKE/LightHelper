@@ -1,7 +1,8 @@
 # LightHelper
 
-**A more intuitive way to control which objects a light illuminates—and to manage lights directly from the objects they affect.**
+[English](README.md) | [简体中文](README_CN.md)
 
+**A more intuitive way to control which objects a light illuminates—and to manage lights directly from the objects they affect.**
 
 LightHelper is a Blender extension that turns Light Linking and Shadow Linking into a fast, two-way workflow. Edit a light to choose the objects it affects, or start from an object and choose the lights that include or exclude it.
 
@@ -50,42 +51,39 @@ Every initialized light has its own linking mode:
 | **Include** | The light illuminates only the objects or collections listed in its links. |
 | **Exclude** | The light illuminates everything except the objects or collections listed in its links. |
 
-Use **Include** when a light should affect a small, controlled group. Use **Exclude** when a light should behave normally except for a few objects.
+Use **Include** when a light should affect only a small, specified set of objects. Use **Exclude** when a light should illuminate the scene normally but skip a few objects.
 
 ### Illumination and shadows
 
 LightHelper exposes Blender's two independent linking channels:
 
-- **Light channel** — controls whether the object receives illumination from the light.
-- **Shadow channel** — controls whether the object can cast a shadow for that light.
+- **Illumination channel** — controls whether the object receives illumination from the light.
+- **Shadow channel** — controls whether the object casts a shadow for that light.
 
-The light and shadow buttons can be toggled separately. This makes it possible to keep illumination while disabling a shadow, or to manage shadow linking without changing the light link.
+The illumination and shadow buttons can be toggled separately. This makes it possible to keep illumination while disabling a shadow, or to adjust shadow linking without changing the illumination link.
 
 ## Quick start
 
 ### Start from a light
 
-Use this workflow when you know which light you want to edit.
+Use this workflow when you already know which light you want to edit.
 
-1. Select a Light object, or choose a detected emissive-material source from the **Light Linking** list.
-2. Open **3D View → Sidebar → LH → Light Linking**.
-3. Click **Init** if the light has not been initialized.
-4. Choose **Include** or **Exclude**.
-5. Add an object, add a collection, or select objects in the viewport and use **Add Selected Objects**.
-6. Use the light and shadow buttons beside each item to control the two channels independently.
-
-![Editing links from a light](https://github.com/user-attachments/assets/eff68fc8-f2e2-4d68-bd0a-cd298b62a424)
+1. Select a light and activate the **Light Linking** tool in the left toolbar.
+2. Include mode — the light illuminates only the selected objects.
+<img width="1920" height="1034" alt="light-include" src="https://github.com/user-attachments/assets/5f676665-1308-4a64-83ec-27ea2274f2a0" />
+3. Exclude mode — the light does not illuminate the selected objects.
+<img width="1920" height="1034" alt="light-exclude" src="https://github.com/user-attachments/assets/b8987008-a24b-422a-96ee-8c9c536b02ac" />
 
 ### Start from an object
 
-Use this workflow when you know which object you want to control.
+Use this workflow when you already know which object you want to manage lights from.
 
 1. Select the object and open **Object Linking** in the `LH` sidebar.
 2. Choose the lights that should include or exclude the object.
-3. Each light uses its own current **Include/Exclude** mode, shown beside the light name.
+3. Each light uses its own current **Include/Exclude** mode.
 4. Toggle the illumination or shadow channel as needed.
+<img width="1920" height="1034" alt="object-light-exclusion" src="https://github.com/user-attachments/assets/e196495a-bff2-4308-8cd7-31b1c3441d4a" />
 
-![Editing lights from an object](https://github.com/user-attachments/assets/efd17d36-cb3e-4593-85fb-3530c8edba33)
 
 ### Restore default full lighting
 
@@ -104,7 +102,7 @@ The **Light Linking** tool is available in the left toolbar of the 3D View while
 | **Light** | Click a light to make it the subject; click an object to toggle that object's link. |
 | **Object** | Click an object to make it the subject; click a light to toggle that light's link to the object. |
 
-Use `Ctrl` + left-click to switch the subject mode from the item under the cursor. A true Blender Light becomes the light subject; a linkable non-light object becomes the object subject.
+Hold `Ctrl` and left-click to switch the subject mode from the item under the cursor. A native Blender Light becomes the light subject; a linkable non-light object becomes the object subject.
 
 ### Shortcuts
 
@@ -120,9 +118,13 @@ Use `Ctrl` + left-click to switch the subject mode from the item under the curso
 | Left-drag on the HUD | Reposition the shortcut HUD. |
 | `Esc` | Exit to the previously active tool. |
 
+Shadow toggle
+<img width="1920" height="1034" alt="shadow-toggle" src="https://github.com/user-attachments/assets/9ee58c6a-88e1-4d5a-a003-aa878f461efb" />
+
+
 ### Viewport overlays
 
-The default **Selected** overlay shows links for the current subject. **All** displays every visible link at once, while **Off** hides the visualization.
+The default **Selected** overlay shows links for the current subject only. **All** displays every visible link, while **Off** hides the visualization.
 
 - Green indicates Include illumination links.
 - Red indicates Exclude illumination links.
@@ -164,6 +166,9 @@ LightHelper brings the relevant Blender light settings into the same sidebar wor
 
 Each EV operation multiplies the light energy by `2^EV`.
 
+<img width="1920" height="1034" alt="ev-control" src="https://github.com/user-attachments/assets/213f3bc7-63d8-4254-a41c-4bd93c181d9e" />
+
+
 ## Other features
 
 ### Emissive-material detection
@@ -179,12 +184,16 @@ https://github.com/user-attachments/assets/833e55e3-7bd2-4476-a275-78cbcd96f6f8
 ### Solo Light
 
 Solo isolates the chosen native Light from the currently filtered light set. Press it again to restore the previous viewport, render, and local-hide states.
+<img width="1920" height="1034" alt="light-solo" src="https://github.com/user-attachments/assets/66429420-9350-4cad-90b3-c1261348c7c8" />
+
 
 ### Shared linking data and duplicates
 
 Duplicated lights can share Blender linking collections. Use **Make Single-User** for one light or **Make All Single-User** when each duplicate needs independent links.
 
 **Auto Fix Shared Linking** is optional and disabled by default. When enabled, it separates shared linking collections only for explicitly detected duplicates and does not run while a file is opening.
+<img width="1440" height="776" alt="auto-separate-linking" src="https://github.com/user-attachments/assets/9376a75b-8559-48b9-8350-428f51fe5703" />
+
 
 ### View movement
 
@@ -196,23 +205,6 @@ Choose how selecting a light or linked object affects the viewport:
 
 https://github.com/user-attachments/assets/9ab4f865-904a-4030-976e-2d6b3d0b5e13
 
-## Additional workflow examples
-
-Create exclusions from lights and emissive sources:
-
-https://github.com/user-attachments/assets/19dbc501-e501-43d4-a0cd-50ad1fae7993
-
-Exclude a light from the illuminated object:
-
-https://github.com/user-attachments/assets/148198df-3886-43a5-8b65-91353f642ad3
-
-Quickly select linked objects:
-
-https://github.com/user-attachments/assets/667f8efc-6102-4559-a724-23071a143399
-
-Quickly select lights linked to an object:
-
-https://github.com/user-attachments/assets/216b665c-66dd-4fa0-90c2-59fa6c2cc686
 
 ## Preferences
 
@@ -229,11 +221,11 @@ https://github.com/user-attachments/assets/216b665c-66dd-4fa0-90c2-59fa6c2cc686
 | **Reset Linking HUD** | Restore the default HUD size and position. |
 | **Clean Up Legacy Data** | Remove only legacy data explicitly managed by older LightHelper versions. |
 
-## Known limitation
+## Known limitations
 
 When an emissive material is used as a light source, indirect-light exclusion may not behave reliably in Eevee. This is a limitation of Blender's current Light Linking implementation rather than a LightHelper setting. Use native Blender Light objects when predictable exclusion is required.
 
-## Troubleshooting
+## FAQ
 
 ### The `LH` tab is missing
 

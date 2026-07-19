@@ -1,6 +1,6 @@
 # LightHelper
 
-[English](README.md) | [简体中文](README.zh-CN.md)
+[English](README.md) | [简体中文](README_CN.md)
 
 **更直观地控制灯光照亮物体，或根据物体反向管理灯光。**
 
