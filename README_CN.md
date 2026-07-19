@@ -84,6 +84,22 @@ LightHelper 将 Blender 的两种链接通道分别提供出来：
 4. 根据需要切换照明或阴影通道。
 <img width="1920" height="1034" alt="object-light-exclusion" src="https://github.com/user-attachments/assets/e196495a-bff2-4308-8cd7-31b1c3441d4a" />
 
+### 从世界环境开始（Cycles）
+
+当你决定使用全景照明，并决定在某些物体上排除其效果时，使用此工作流。(非必要不推荐)
+
+1.切换至Cycles渲染器。
+2.有世界环境且包含自发光或者环境纹理。
+3.点击转换(将世界环境转为了网格球体)
+4.进入链接模式并选中世界环境球（可使用快速选择小按钮）
+5.包含或排除物体
+
+<img width="1920" height="1034" alt="World-Environment-Linking" src="https://github.com/user-attachments/assets/2b2a7d6d-4cc8-4529-a302-12b98a912ad0" />
+
+6.由于日光特殊性，其将会屏蔽照明世界环境球
+
+<img width="1920" height="1034" alt="Sun-Isolation" src="https://github.com/user-attachments/assets/66a7b5cd-a679-415c-95ef-a85773c0731f" />
+
 
 ### 恢复默认全照明
 
