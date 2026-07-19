@@ -84,6 +84,22 @@ Use this workflow when you already know which object you want to manage lights f
 4. Toggle the illumination or shadow channel as needed.
 <img width="1920" height="1034" alt="object-light-exclusion" src="https://github.com/user-attachments/assets/e196495a-bff2-4308-8cd7-31b1c3441d4a" />
 
+### Start from a World Environment (Cycles)
+
+Use this workflow when you want panoramic lighting but need to exclude its effect on specific objects. (Not recommended unless necessary.)
+
+1. Switch to the Cycles render engine.
+2. Ensure the scene has a World with an emissive or environment texture setup.
+3. Click **Convert** (this turns the world environment into a linkable mesh sphere).
+4. Enter the linking workflow and select the world environment sphere (use the quick-select button if needed).
+5. Include or exclude objects.
+
+<img width="1920" height="1034" alt="World-Environment-Linking" src="https://github.com/user-attachments/assets/2b2a7d6d-4cc8-4529-a302-12b98a912ad0" />
+
+6. Because of how Sun lights behave, they automatically exclude the world environment sphere from illumination.
+
+<img width="1920" height="1034" alt="Sun-Isolation" src="https://github.com/user-attachments/assets/66a7b5cd-a679-415c-95ef-a85773c0731f" />
+
 
 ### Restore default full lighting
 
