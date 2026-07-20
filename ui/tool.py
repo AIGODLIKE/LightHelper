@@ -54,20 +54,18 @@ def schedule_session_sync():
 
 
 def _deferred_selection_sync():
-    """One-shot timer: sync list (+ tool subject when session is on)."""
+    """One-shot timer: sync selection while the linking tool session is active."""
     global _deferred_selection_sync_pending
     _deferred_selection_sync_pending = False
     try:
         context = bpy.context
-        if context is None:
+        if context is None or not is_session_active(context):
             return None
-        # Sidebar list should follow Outliner/viewport even without the tool session.
         sync_list_from_selection(context)
-        if is_session_active(context):
-            if not is_light_linking_tool_active(context):
-                schedule_session_sync()
-            else:
-                sync_tool_subject_from_selection(context)
+        if not is_light_linking_tool_active(context):
+            schedule_session_sync()
+        else:
+            sync_tool_subject_from_selection(context)
     except (AttributeError, ReferenceError, TypeError):
         pass
     return None
@@ -199,6 +197,7 @@ def start_tool_session(context: bpy.types.Context) -> None:
             if light is None or not is_tool_light_source(light, context):
                 wm_props.linking_tool_light = init_session_light(context)
         _subscribe_tool_changes()
+        _subscribe_active_object()
         _register_depsgraph_sync()
         register_draw_handlers()
         refresh_overlay_cache(context)
@@ -210,6 +209,7 @@ def start_tool_session(context: bpy.types.Context) -> None:
     wm_props.linking_tool_light = light
     wm_props.linking_tool_object = None
     _subscribe_tool_changes()
+    _subscribe_active_object()
     _register_depsgraph_sync()
     register_draw_handlers()
     refresh_overlay_cache(context)
@@ -226,6 +226,7 @@ def stop_tool_session(context: bpy.types.Context) -> None:
         wm_props.linking_tool_subject_mode = 'LIGHT'
     unregister_draw_handlers()
     _unsubscribe_tool_changes()
+    _unsubscribe_active_object()
     _unregister_depsgraph_sync()
     invalidate_overlay_cache()
     tag_view3d_redraw(context)
@@ -256,10 +257,9 @@ def sync_list_from_selection(context: bpy.types.Context) -> bool:
         return False
 
     scene_props = context.scene.light_helper_property
-    objects = context.scene.objects[:]
-    try:
-        index = objects.index(obj)
-    except ValueError:
+    objects = context.scene.objects
+    index = objects.find(obj.name)
+    if index < 0 or objects[index] != obj:
         return False
     if index < 0:
         return False
@@ -320,7 +320,7 @@ def _on_tool_changed(*_args):
 
 @bpy.app.handlers.persistent
 def _depsgraph_sync_selection(_scene, _depsgraph):
-    """Session-only fallback for tool subject; list sync uses always-on msgbus."""
+    """Session-only fallback for tool and sidebar selection synchronization."""
     try:
         context = bpy.context
         if context is None or not is_session_active(context):
@@ -361,7 +361,7 @@ def _on_active_object_changed(*_args):
 
 
 def _subscribe_active_object():
-    """Always-on: sidebar list follows Outliner selection."""
+    """Subscribe while the interactive linking tool is active."""
     global _active_object_subscribed
     if _active_object_subscribed:
         return
@@ -561,13 +561,10 @@ def register():
         group=False,
     )
     _tool_registered = True
-    _subscribe_active_object()
-    # Tool msgbus / depsgraph attach in start_tool_session only.
+    # Selection/tool subscriptions and depsgraph handlers attach in the session only.
     try:
         if bpy.context is not None and is_light_linking_tool_active(bpy.context):
             schedule_session_sync()
-        elif bpy.context is not None:
-            schedule_selection_sync()
     except (AttributeError, ReferenceError, TypeError):
         pass
 

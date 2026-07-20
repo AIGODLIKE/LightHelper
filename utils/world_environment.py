@@ -599,7 +599,11 @@ def _object_is_in_scene(scene: bpy.types.Scene, obj: bpy.types.Object | None) ->
     )
 
 
-def _raw_world_dome(scene: bpy.types.Scene) -> bpy.types.Object | None:
+def _raw_world_dome(
+        scene: bpy.types.Scene,
+        *,
+        repair_pointer: bool = False,
+) -> bpy.types.Object | None:
     if scene is None:
         return None
     props = getattr(scene, "light_helper_property", None)
@@ -617,12 +621,17 @@ def _raw_world_dome(scene: bpy.types.Scene) -> bpy.types.Object | None:
     if not matches:
         return None
     dome = sorted(matches, key=lambda obj: obj.name_full.casefold())[0]
-    if props is not None:
+    if repair_pointer and props is not None:
         props.world_environment_dome = dome
     return dome
 
 
-def _dome_owner_scene(dome: bpy.types.Object, owner_uuid: str) -> bpy.types.Scene | None:
+def _dome_owner_scene(
+        dome: bpy.types.Object,
+        owner_uuid: str,
+        *,
+        repair_pointer: bool = False,
+) -> bpy.types.Scene | None:
     owner_scene = dome.get(WORLD_DOME_OWNER_SCENE_POINTER_KEY)
     if isinstance(owner_scene, bpy.types.Scene) and _object_is_in_scene(owner_scene, dome):
         return owner_scene
@@ -632,7 +641,8 @@ def _dome_owner_scene(dome: bpy.types.Object, owner_uuid: str) -> bpy.types.Scen
     for candidate in bpy.data.scenes:
         if (candidate.get(WORLD_DOME_SCENE_UUID_KEY) == owner_uuid
                 and _object_is_in_scene(candidate, dome)):
-            dome[WORLD_DOME_OWNER_SCENE_POINTER_KEY] = candidate
+            if repair_pointer:
+                dome[WORLD_DOME_OWNER_SCENE_POINTER_KEY] = candidate
             return candidate
     return None
 
@@ -763,11 +773,32 @@ def _isolate_copied_scene_environment(
 
 
 def get_world_dome(scene: bpy.types.Scene) -> bpy.types.Object | None:
-    dome = _raw_world_dome(scene)
+    """Return the managed dome without modifying or isolating scene data."""
+    return _raw_world_dome(scene)
+
+
+def is_world_dome_owned_by_scene(
+        scene: bpy.types.Scene,
+        dome: bpy.types.Object | None = None,
+) -> bool:
+    """Whether ``dome`` belongs to ``scene`` rather than a copied source scene."""
+    dome = dome or _raw_world_dome(scene)
+    if dome is None:
+        return False
+    owner_uuid = dome.get(WORLD_DOME_OWNER_KEY)
+    if not isinstance(owner_uuid, str) or not owner_uuid:
+        return False
+    owner_scene = _dome_owner_scene(dome, owner_uuid)
+    return owner_scene is None or owner_scene == scene
+
+
+def ensure_world_dome_ownership(scene: bpy.types.Scene) -> bpy.types.Object | None:
+    """Repair the scene pointer and isolate copied dome data for a mutating action."""
+    dome = _raw_world_dome(scene, repair_pointer=True)
     if dome is None:
         return None
     owner_uuid = dome.get(WORLD_DOME_OWNER_KEY)
-    owner_scene = _dome_owner_scene(dome, owner_uuid)
+    owner_scene = _dome_owner_scene(dome, owner_uuid, repair_pointer=True)
     if owner_scene is not None and owner_scene != scene:
         return _isolate_copied_scene_environment(scene, dome)
     return dome
@@ -1093,7 +1124,7 @@ def _set_scene_properties_from_info(scene: bpy.types.Scene, info: WorldEnvironme
 
 
 def update_world_dome_from_properties(scene: bpy.types.Scene) -> None:
-    dome = get_world_dome(scene)
+    dome = ensure_world_dome_ownership(scene)
     props = getattr(scene, "light_helper_property", None)
     if dome is None or props is None:
         return
@@ -1309,7 +1340,11 @@ def remove_sun_exclusions(
         dome: bpy.types.Object | None = None,
         sun_objects=None,
 ) -> None:
-    dome = dome or get_world_dome(scene)
+    scene_dome = ensure_world_dome_ownership(scene)
+    if scene_dome is not None and (
+            dome is None or not _object_is_in_scene(scene, dome)
+            or dome.get(WORLD_DOME_OWNER_KEY) != scene_dome.get(WORLD_DOME_OWNER_KEY)):
+        dome = scene_dome
     if dome is None:
         return
     owner_uuid = dome.get(WORLD_DOME_OWNER_KEY)
@@ -1359,7 +1394,7 @@ def ensure_sun_exclusions(
         dome: bpy.types.Object | None = None,
         sun_objects=None,
 ) -> int:
-    scene_dome = get_world_dome(scene)
+    scene_dome = ensure_world_dome_ownership(scene)
     if scene_dome is not None and (
             dome is None or not _object_is_in_scene(scene, dome)
             or dome.get(WORLD_DOME_OWNER_KEY) != scene_dome.get(WORLD_DOME_OWNER_KEY)):
@@ -1552,11 +1587,13 @@ def count_synced_suns(scene: bpy.types.Scene, dome: bpy.types.Object | None = No
 def convert_world_environment(scene: bpy.types.Scene) -> tuple[bpy.types.Object | None, str]:
     if scene is None or scene.render.engine != 'CYCLES':
         return None, "UNSUPPORTED_ENGINE"
-    existing = get_world_dome(scene)
+    existing = ensure_world_dome_ownership(scene)
     if existing is not None:
         remove_duplicate_managed_domes(scene)
         ensure_sun_exclusions(scene, existing)
         update_world_dome_from_properties(scene)
+        from ..handlers import sync_world_environment_sun_handler
+        sync_world_environment_sun_handler(True)
         return existing, "EXISTS"
     info = find_world_environment(scene)
     if not info.has_source:
@@ -1611,6 +1648,8 @@ def convert_world_environment(scene: bpy.types.Scene) -> tuple[bpy.types.Object 
         scene.world = fallback_world
         update_world_dome_from_properties(scene)
         ensure_sun_exclusions(scene, dome)
+        from ..handlers import sync_world_environment_sun_handler
+        sync_world_environment_sun_handler(True)
         return dome, "CONVERTED"
     except Exception:
         if dome is not None:
@@ -1671,7 +1710,7 @@ def _other_environment_consumers(
 
 
 def restore_world_environment(scene: bpy.types.Scene) -> tuple[bool, str]:
-    dome = get_world_dome(scene)
+    dome = ensure_world_dome_ownership(scene)
     if dome is None:
         return False, "NOT_CONVERTED"
     if _other_environment_consumers(scene, dome):
@@ -1680,7 +1719,7 @@ def restore_world_environment(scene: bpy.types.Scene) -> tuple[bool, str]:
         # impossible, fail closed instead of deleting another scene's data.
         return False, "SHARED_SCENE_DATA"
     remove_duplicate_managed_domes(scene)
-    dome = get_world_dome(scene)
+    dome = ensure_world_dome_ownership(scene)
     if dome is None:
         return False, "NOT_CONVERTED"
     owner_uuid = dome.get(WORLD_DOME_OWNER_KEY)
@@ -1729,6 +1768,8 @@ def restore_world_environment(scene: bpy.types.Scene) -> tuple[bool, str]:
         del scene[WORLD_DOME_SCENE_UUID_KEY]
     except KeyError:
         pass
+    from ..handlers import sync_world_environment_sun_handler
+    sync_world_environment_sun_handler()
     return True, "RESTORED" if original_world is not None else "RESTORED_NO_WORLD"
 
 
@@ -1777,7 +1818,7 @@ def sync_world_environment_suns_from_depsgraph(scene, depsgraph) -> None:
     if engine != 'CYCLES':
         return
     dome = get_world_dome(scene)
-    if dome is None:
+    if dome is None or not is_world_dome_owned_by_scene(scene, dome):
         return
     if previous_engine != 'CYCLES':
         _syncing_suns = True

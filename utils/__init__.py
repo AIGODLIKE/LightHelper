@@ -616,12 +616,19 @@ def get_light_link_item_count(light: bpy.types.Object) -> int:
 
 def get_lights_from_effect_obj(obj: bpy.types.Object, context: bpy.types.Context | None = None) -> dict:
     """Return lights that affect ``obj`` via light/shadow linking."""
-    light_state = {}
     if obj is None:
-        return light_state
+        return {}
 
     obj = resolve_original_id(obj)
-    if _cached_linking_lights:
+    if context is not None:
+        _ensure_linking_ui_cache(context)
+    cache_key = obj.as_pointer()
+    cached = _cached_object_light_states.get(cache_key)
+    if cached is not None:
+        return cached
+
+    light_state = {}
+    if _linking_ui_cache_key is not None:
         lights = _cached_linking_lights
     elif context is not None:
         lights = context.scene.objects
@@ -651,6 +658,8 @@ def get_lights_from_effect_obj(obj: bpy.types.Object, context: bpy.types.Context
             CollectionType.BLOCKER: True if blocker_on else None,
         }
 
+    if _linking_ui_cache_key is not None:
+        _cached_object_light_states[cache_key] = light_state
     return light_state
 
 
@@ -671,15 +680,16 @@ def get_filtered_tool_objects(context: bpy.types.Context) -> list[bpy.types.Obje
 
 def iter_objects_linked_by_lights(context: bpy.types.Context) -> list[bpy.types.Object]:
     """Objects that appear in any light's receiver/blocker linking collections."""
+    _ensure_linking_ui_cache(context)
+    return list(_cached_linked_objects)
+
+
+def _collect_objects_linked_by_lights(
+        context: bpy.types.Context,
+        lights,
+) -> tuple[bpy.types.Object, ...]:
     linked: set[bpy.types.Object] = set()
-    for light_obj in context.scene.objects:
-        if not is_tool_light_source(light_obj, context):
-            continue
-        if not hasattr(light_obj, "light_linking"):
-            continue
-        linking = light_obj.light_linking
-        if not linking.receiver_collection and not linking.blocker_collection:
-            continue
+    for light_obj in lights:
         for item in get_all_light_effect_items_state(light_obj):
             if isinstance(item, bpy.types.Object):
                 if is_linkable_object(item):
@@ -688,7 +698,7 @@ def iter_objects_linked_by_lights(context: bpy.types.Context) -> list[bpy.types.
                 for child in item.objects:
                     if is_linkable_object(child):
                         linked.add(resolve_original_id(child) or child)
-    return sorted(linked, key=lambda o: o.name.casefold())
+    return tuple(sorted(linked, key=lambda o: o.name.casefold()))
 
 
 def is_object_linked_by_any_light(obj: bpy.types.Object, context: bpy.types.Context) -> bool:
@@ -747,6 +757,10 @@ def iter_sorted_linking_lights(light_state: dict):
 
 _view_layer_collections_cache = frozenset()
 _cached_linking_lights = ()
+_cached_linked_objects = ()
+_cached_object_light_states = {}
+_linking_ui_cache_key = None
+_linking_ui_cache_generation = 0
 
 
 def get_all_view_layout_collection(context: bpy.types.Context) -> list[bpy.types.Collection]:
@@ -762,22 +776,83 @@ def get_all_view_layout_collection(context: bpy.types.Context) -> list[bpy.types
     return res
 
 
+def invalidate_linking_ui_cache() -> None:
+    """Invalidate panel/linking lookups after relevant data changes."""
+    global _view_layer_collections_cache
+    global _cached_linking_lights
+    global _cached_linked_objects
+    global _cached_object_light_states
+    global _linking_ui_cache_key
+    global _linking_ui_cache_generation
+    _view_layer_collections_cache = frozenset()
+    _cached_linking_lights = ()
+    _cached_linked_objects = ()
+    _cached_object_light_states = {}
+    _linking_ui_cache_key = None
+    _linking_ui_cache_generation += 1
+
+
+def _linking_context_cache_key(context: bpy.types.Context) -> tuple:
+    return (
+        context.scene.as_pointer(),
+        context.view_layer.as_pointer(),
+        context.scene.render.engine,
+        len(context.scene.objects),
+        _linking_ui_cache_generation,
+    )
+
+
+def _ensure_linking_ui_cache(context: bpy.types.Context) -> None:
+    global _view_layer_collections_cache
+    global _cached_linking_lights
+    global _cached_linked_objects
+    global _cached_object_light_states
+    global _linking_ui_cache_key
+    if context is None or context.scene is None or context.view_layer is None:
+        return
+    cache_key = _linking_context_cache_key(context)
+    if cache_key == _linking_ui_cache_key:
+        return
+
+    linking_lights = []
+    emission_cache = {}
+    for light_obj in context.scene.objects:
+        if not hasattr(light_obj, "light_linking"):
+            continue
+        linking = light_obj.light_linking
+        if not linking.receiver_collection and not linking.blocker_collection:
+            continue
+        if light_obj.type != 'LIGHT' and not is_emissive_light_source(
+                light_obj,
+                context,
+                cache=emission_cache,
+        ):
+            continue
+        linking_lights.append(light_obj)
+
+    _view_layer_collections_cache = frozenset(get_all_view_layout_collection(context))
+    _cached_linking_lights = tuple(linking_lights)
+    _cached_linked_objects = _collect_objects_linked_by_lights(
+        context,
+        _cached_linking_lights,
+    )
+    _cached_object_light_states = {}
+    _linking_ui_cache_key = cache_key
+
+
 def refresh_drop_poll_context(context: bpy.types.Context) -> None:
-    global _view_layer_collections_cache, _cached_linking_lights
     wm_props = context.window_manager.light_helper_property
     scene_props = context.scene.light_helper_property
-    wm_props.drop_light_obj = get_active_light_source(context)
+    drop_light = get_active_light_source(context)
+    if wm_props.drop_light_obj != drop_light:
+        wm_props.drop_light_obj = drop_light
     if scene_props.object_linking_pin:
-        wm_props.drop_object_obj = scene_props.object_linking_pin_object
+        drop_object = scene_props.object_linking_pin_object
     else:
-        wm_props.drop_object_obj = context.object
-    _view_layer_collections_cache = frozenset(get_all_view_layout_collection(context))
-    _cached_linking_lights = tuple(
-        light_obj for light_obj in context.scene.objects
-        if is_tool_light_source(light_obj, context)
-        and hasattr(light_obj, "light_linking")
-        and (light_obj.light_linking.receiver_collection or light_obj.light_linking.blocker_collection)
-    )
+        drop_object = context.object
+    if wm_props.drop_object_obj != drop_object:
+        wm_props.drop_object_obj = drop_object
+    _ensure_linking_ui_cache(context)
 
 
 def get_view_layer_collections_cache():

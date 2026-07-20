@@ -12,16 +12,15 @@ class LLP_OT_convert_world_environment(LightHelperOperator, bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        from ..utils.world_environment import find_world_environment, get_world_dome
+        from ..utils.world_environment import get_world_dome
         scene = context.scene
         if scene.render.engine != 'CYCLES':
             cls.poll_message_set(p_("World HDRI conversion is only available in Cycles"))
             return False
         if get_world_dome(scene) is not None:
             return True
-        info = find_world_environment(scene)
-        if not info.has_source:
-            cls.poll_message_set(p_("No usable World environment source was found in the active World"))
+        if scene.world is None:
+            cls.poll_message_set(p_("The current scene has no World"))
             return False
         return True
 

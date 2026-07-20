@@ -107,7 +107,9 @@ _cache = LinkOverlayCache()
 
 def notify_linking_changed(context: bpy.types.Context | None = None) -> None:
     from ..filter import invalidate_filter_cache
+    from . import invalidate_linking_ui_cache
     invalidate_filter_cache()
+    invalidate_linking_ui_cache()
     ctx = context if context is not None else bpy.context
     if ctx is None or ctx.window_manager is None:
         return

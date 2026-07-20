@@ -1,14 +1,14 @@
 name = "Light Helper"
 id = "LightHepler"
 maintainer = "ACGGit"
-version = "2.1.0"
+version = "2.1.1"
 tagline = "Manage light and world environment linking from the sidebar"
 blender_version_min = "4.2.0"
 type = "add-on"
 schema_version = "1.0.0"
 tags = ["Lighting"]
 license = ["SPDX:GPL-3.0-or-later"]
-support = "https://github.com/AIGODLIKE/LightHelper/issues/9"
+support = "https://github.com/AIGODLIKE/LightHelper/issues"
 website = "https://github.com/AIGODLIKE/LightHelper"
 
 [build]

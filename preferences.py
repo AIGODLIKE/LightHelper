@@ -7,7 +7,9 @@ is_50 = bpy.app.version >= (5, 0, 0)
 
 def update_filter_settings(_self, context):
     from .filter import invalidate_filter_cache
+    from .utils import invalidate_linking_ui_cache
     invalidate_filter_cache()
+    invalidate_linking_ui_cache()
 
 
 class LLT_AddonPreferences(AddonPreferences):

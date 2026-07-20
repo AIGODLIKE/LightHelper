@@ -76,14 +76,6 @@ class LLP_OT_init_all_light_linking(LightHelperOperator, bpy.types.Operator):
     bl_description = "Initialize light linking collections for all lights in the scene"
     bl_options = {'REGISTER', 'UNDO'}
 
-    @classmethod
-    def poll(cls, context):
-        from ..utils import scene_has_uninitialized_lights
-        if scene_has_uninitialized_lights(context.scene):
-            return True
-        cls.poll_message_set(p_("All lights are already initialized"))
-        return False
-
     def execute(self, context):
         from ..utils import init_all_light_linking
         initialized = init_all_light_linking(context.scene, context)
@@ -104,15 +96,6 @@ class LLP_OT_instances_data_all(LightHelperOperator, bpy.types.Operator):
     bl_label = "Make All Single-User"
     bl_description = "Make shared light linking collections single-user for all lights in the scene"
     bl_options = {'REGISTER', 'UNDO'}
-
-    @classmethod
-    def poll(cls, context):
-        from ..utils import has_shared_linking_collections
-        for obj in context.scene.objects:
-            if obj.type == 'LIGHT' and has_shared_linking_collections(obj):
-                return True
-        cls.poll_message_set(p_("No lights with shared linking collections"))
-        return False
 
     def execute(self, context):
         from ..utils import fix_all_shared_light_linking

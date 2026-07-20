@@ -1,9 +1,20 @@
 EMPTY = 0
 _filter_list_cache = {}
+_filtered_objects_cache = {}
+_filter_visibility_state_cache = {}
+_filter_cache_generation = 0
 
 
 def invalidate_filter_cache():
+    global _filter_cache_generation
     _filter_list_cache.clear()
+    _filtered_objects_cache.clear()
+    _filter_visibility_state_cache.clear()
+    _filter_cache_generation += 1
+
+
+def get_filter_cache_generation() -> int:
+    return _filter_cache_generation
 
 
 def _filter_cache_key(context, bitflag, pref):
@@ -69,8 +80,41 @@ def filter_list(context, bitflag=None):
 
 
 def filter_objects(context):
-    return [
+    from .utils import get_pref
+
+    key = (_filter_cache_key(context, True, get_pref(context)), _filter_cache_generation)
+    cached = _filtered_objects_cache.get(key)
+    if cached is not None:
+        return cached
+    objects = tuple(
         context.scene.objects[i]
         for i, flag in enumerate(filter_list(context, bitflag=True))
         if flag
-    ]
+    )
+    if len(_filtered_objects_cache) > 16:
+        _filtered_objects_cache.clear()
+    _filtered_objects_cache[key] = objects
+    return objects
+
+
+def get_filter_visibility_state(context):
+    from .utils import get_pref
+
+    key = (_filter_cache_key(context, True, get_pref(context)), _filter_cache_generation)
+    cached = _filter_visibility_state_cache.get(key)
+    if cached is not None:
+        return cached
+    last_show = None
+    for obj in filter_objects(context):
+        show = obj.light_helper_property.show_in_view
+        if last_show is None:
+            last_show = show
+        elif show != last_show:
+            result = ('REMOVE', show)
+            break
+    else:
+        result = ('HIDE_OFF', True) if last_show is True else ('HIDE_ON', False)
+    if len(_filter_visibility_state_cache) > 16:
+        _filter_visibility_state_cache.clear()
+    _filter_visibility_state_cache[key] = result
+    return result

@@ -249,16 +249,12 @@ class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
         action_row.label(text=p_("Light Linking"))
         action_row.separator(factor=1.5)
         buttons = action_row.row(align=True)
-        init_row = buttons.row(align=True)
-        init_row.enabled = LLP_OT_init_all_light_linking.poll(context)
-        init_row.operator(
+        buttons.operator(
             LLP_OT_init_all_light_linking.bl_idname,
             text="",
             icon='OUTLINER_OB_LIGHT',
         )
-        inst_row = buttons.row(align=True)
-        inst_row.enabled = LLP_OT_instances_data_all.poll(context)
-        inst_row.operator(
+        buttons.operator(
             LLP_OT_instances_data_all.bl_idname,
             text="",
             icon='RESTRICT_INSTANCED_ON',
@@ -346,14 +342,14 @@ class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
                                  text_ctxt="light_helper_zh_CN")
 
         obj_state_dict = get_all_light_effect_items_state(light_obj)
-        objects = context.scene.objects[:]
 
         if not obj_state_dict:
             draw_add_box(col, context, light_obj)
             return
 
         for (item, state_info) in iter_sorted_linking_items(obj_state_dict):
-            if isinstance(item, bpy.types.Object) and item not in objects:
+            if (isinstance(item, bpy.types.Object)
+                    and context.scene.objects.get(item.name) != item):
                 continue
             tooltip, restricted = get_item_visibility_tooltip(item, context)
             row = col.row(align=False)
@@ -390,12 +386,8 @@ class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
             col.prop(pref, "light_list_filter_type", expand=True, text="", icon_only=True)
         col.separator()
         col.operator(LLP_OT_switch_filter_show.bl_idname, text="", icon=icon)
-        invert_row = col.row(align=True)
-        invert_row.enabled = LLP_OT_invert_filter_show.poll(context)
-        invert_row.operator(LLP_OT_invert_filter_show.bl_idname, text="", icon='ARROW_LEFTRIGHT')
-        clear_row = col.row(align=True)
-        clear_row.enabled = LLP_OT_clear_selected_light_linking.poll(context)
-        clear_row.operator(LLP_OT_clear_selected_light_linking.bl_idname, text="", icon='TRASH')
+        col.operator(LLP_OT_invert_filter_show.bl_idname, text="", icon='ARROW_LEFTRIGHT')
+        col.operator(LLP_OT_clear_selected_light_linking.bl_idname, text="", icon='TRASH')
         col.separator()
         col.prop(pref, "auto_fix_shared_linking", text="", icon='AUTO', toggle=True)
         row.template_list(
@@ -415,12 +407,7 @@ class VIEW3D_PT_light_helper_object_control(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        if not VIEW3D_PT_light_helper_light_control.check_support_light_linking(context):
-            return False
-        from ..utils import iter_objects_linked_by_lights
-        if iter_objects_linked_by_lights(context):
-            return True
-        return get_panel_effect_obj(context) is not None
+        return VIEW3D_PT_light_helper_light_control.check_support_light_linking(context)
 
     def draw_header(self, context):
         layout = self.layout
@@ -486,9 +473,8 @@ class VIEW3D_PT_light_helper_object_control(bpy.types.Panel):
             box.prop(context.window_manager.light_helper_property, 'object_linking_add_object', text='', icon='ADD')
             return
 
-        objects = context.scene.objects[:]
         for (light_obj, state_info) in iter_sorted_linking_lights(obj_state_dict):
-            if light_obj not in objects:
+            if context.scene.objects.get(light_obj.name) != light_obj:
                 continue
             tooltip, restricted = get_item_visibility_tooltip(light_obj, context)
             row = col.row()
@@ -537,8 +523,6 @@ class VIEW3D_PT_light_helper_world_environment(bpy.types.Panel):
             WORLD_DOME_SOURCE_TYPE_KEY,
             WORLD_SOURCE_COLOR,
             WORLD_SOURCE_HDRI,
-            count_synced_suns,
-            find_world_environment,
             get_world_dome,
         )
 
@@ -548,38 +532,20 @@ class VIEW3D_PT_light_helper_world_environment(bpy.types.Panel):
         dome = get_world_dome(scene)
 
         if dome is None:
-            info = find_world_environment(scene)
             world = scene.world
             if world is None:
                 box = layout.box()
                 box.alert = True
                 box.label(text=p_("The current scene has no World"), icon='ERROR')
-            elif not info.has_source:
-                box = layout.box()
-                box.alert = True
-                box.label(text=p_("No usable World environment source was found"), icon='ERROR')
             else:
                 source = layout.box()
                 source.label(text=p_("Source World: %s") % world.name, icon='WORLD_DATA', translate=False)
-                if info.source_type == WORLD_SOURCE_HDRI:
-                    source.label(text=p_("HDRI: %s") % info.image.name, icon='IMAGE_DATA', translate=False)
-                    packed = bool(
-                        getattr(info.image, "packed_file", None)
-                        or getattr(info.image, "packed_files", ())
-                    )
-                    if packed:
-                        source.label(text=p_("The source image is packed in the blend file"), icon='PACKAGE')
-                    if info.connected_image_count > 1:
-                        source.alert = True
-                        source.label(
-                            text=p_("%d connected HDRI images found; the nearest active image will be used")
-                            % info.connected_image_count,
-                            icon='ERROR',
-                        )
-                else:
-                    source.label(text=p_("Source: Solid Color"), icon='COLOR')
+                source.label(
+                    text=p_("The HDRI or solid-color source is detected when conversion starts"),
+                    icon='INFO',
+                )
             convert = layout.row()
-            convert.enabled = info.has_source
+            convert.enabled = world is not None
             convert.operator(LLP_OT_convert_world_environment.bl_idname, icon='WORLD')
             return
 
@@ -645,9 +611,8 @@ class VIEW3D_PT_light_helper_world_environment(bpy.types.Panel):
             geometry.prop(props, "world_dome_mapping_location")
             geometry.prop(props, "world_dome_mapping_scale")
 
-        synced, total = count_synced_suns(scene, dome)
         suns = layout.box()
-        suns.label(text=p_("Sun Exclusion: %d / %d") % (synced, total), icon='LIGHT_SUN')
+        suns.label(text=p_("Sun exclusions are synchronized automatically"), icon='LIGHT_SUN')
         suns.label(text=p_("Sun exclusions are internal and do not replace user-authored links"), icon='INFO')
         suns.operator(LLP_OT_sync_world_sun_exclusions.bl_idname, icon='FILE_REFRESH')
 

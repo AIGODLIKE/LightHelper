@@ -19,27 +19,17 @@ class LLP_OT_switch_filter_show(LightHelperOperator, bpy.types.Operator):
         return True
 
     def execute(self, context):
-        from ..filter import filter_objects
+        from ..filter import filter_objects, invalidate_filter_cache
         _, show = self.get_icon(context)
         for obj in filter_objects(context):
             obj.light_helper_property.show_in_view = not show
+        invalidate_filter_cache()
         return {"FINISHED"}
 
     @staticmethod
     def get_icon(context):
-        from ..filter import filter_objects
-        last_show = None
-        for obj in filter_objects(context):
-            show = obj.light_helper_property.show_in_view
-            if last_show is None:
-                last_show = show
-            if show != last_show:
-                return 'REMOVE', show
-            last_show = show
-
-        if last_show is True:
-            return 'HIDE_OFF', True
-        return 'HIDE_ON', False
+        from ..filter import get_filter_visibility_state
+        return get_filter_visibility_state(context)
 
 
 class LLP_OT_invert_filter_show(LightHelperOperator, bpy.types.Operator):
@@ -57,7 +47,8 @@ class LLP_OT_invert_filter_show(LightHelperOperator, bpy.types.Operator):
         return True
 
     def execute(self, context):
-        from ..filter import filter_objects
+        from ..filter import filter_objects, invalidate_filter_cache
         for obj in filter_objects(context):
             obj.light_helper_property.show_in_view = not obj.light_helper_property.show_in_view
+        invalidate_filter_cache()
         return {"FINISHED"}

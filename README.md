@@ -14,21 +14,24 @@ LightHelper is a Blender extension that turns Light Linking and Shadow Linking i
 - Switch each light between **Include** and **Exclude** behavior.
 - Control **illumination** and **shadow** links independently.
 - Edit links directly in the 3D View with a dedicated interactive tool.
-- Detect both Blender Light objects and objects using emissive materials.
+- Detect Blender Light objects in supported renderers and emissive-material sources in Cycles.
 - Solo lights, adjust energy in EV steps, filter large light lists, and pin working subjects.
 - Separate shared linking data manually, or opt in to automatic duplicate handling.
 - Restore Blender's default full-lighting behavior with one action.
+- Convert a nested or packed World HDRI—or a solid World Background—into one linkable environment dome and restore the original World safely.
 
 ## Compatibility
 
-| Blender version | Cycles | Eevee |
+| Workflow | Cycles | Eevee |
 | --- | :---: | :---: |
-| 4.2 | Yes | No |
-| 4.3 or newer | Yes | Yes |
+| Native Light / Shadow Linking (Blender 4.2+) | Yes | Blender 4.3+ |
+| Emissive-material Light Linking | Yes | No |
+| World HDRI / solid-color environment dome | Yes | Hidden |
 
 - Minimum supported Blender version: **4.2**.
 - The Light Linking controls are disabled for unsupported render engines.
 - LightHelper follows Blender's own Light Linking capabilities and renderer limitations.
+- **World Environment Linking and emissive-material light sources require Cycles.** Native Blender Light objects remain available in Eevee where Blender supports Light Linking.
 
 ## Installation
 
@@ -83,22 +86,6 @@ Use this workflow when you already know which object you want to manage lights f
 3. Each light uses its own current **Include/Exclude** mode.
 4. Toggle the illumination or shadow channel as needed.
 <img width="1920" height="1034" alt="object-light-exclusion" src="https://github.com/user-attachments/assets/e196495a-bff2-4308-8cd7-31b1c3441d4a" />
-
-### Start from a World Environment (Cycles)
-
-Use this workflow when you want panoramic lighting but need to exclude its effect on specific objects. (Not recommended unless necessary.)
-
-1. Switch to the Cycles render engine.
-2. Ensure the scene has a World with an emissive or environment texture setup.
-3. Click **Convert** (this turns the world environment into a linkable mesh sphere).
-4. Enter the linking workflow and select the world environment sphere (use the quick-select button if needed).
-5. Include or exclude objects.
-
-<img width="1920" height="1034" alt="World-Environment-Linking" src="https://github.com/user-attachments/assets/2b2a7d6d-4cc8-4529-a302-12b98a912ad0" />
-
-6. Because of how Sun lights behave, they automatically exclude the world environment sphere from illumination.
-
-<img width="1920" height="1034" alt="Sun-Isolation" src="https://github.com/user-attachments/assets/66a7b5cd-a679-415c-95ef-a85773c0731f" />
 
 
 ### Restore default full lighting
@@ -184,12 +171,43 @@ Each EV operation multiplies the light energy by `2^EV`.
 
 <img width="1920" height="1034" alt="ev-control" src="https://github.com/user-attachments/assets/213f3bc7-63d8-4254-a41c-4bd93c181d9e" />
 
+### World Environment Linking
+
+The **World Environment Linking** panel converts the HDRI or solid Background color connected to the active Cycles World Output into a code-generated inward-facing sphere. This makes the World illumination available as an emissive-mesh source for object-level Light Linking. The workflow is Cycles-only and the panel is hidden in Eevee.
+
+1. Switch the render engine to **Cycles**.
+2. Open **3D View → Sidebar → LH → World Environment Linking**.
+3. Check the detected World source, then choose **Convert World Environment**.
+4. Select the generated environment dome from the light list and use the normal Include/Exclude workflow.
+5. Choose **Restore Original World** to remove managed dome data and reassign the untouched original World.
+
+<img width="1920" height="1034" alt="World-Environment-Linking" src="https://github.com/user-attachments/assets/2b2a7d6d-4cc8-4529-a302-12b98a912ad0" />
+
+The converter:
+
+- follows the active World Output through nested node groups, directly reuses packed Image data-blocks, and falls back to the connected Background color when no usable image exists;
+- keeps one managed dome per scene, isolates copied scenes on first access, and never identifies user objects by name alone;
+- preserves the original World, including its Volume connection, in a scene-local fallback copy while converted;
+- automatically gives each Sun an internal Exclude proxy without replacing user-authored receiver links;
+- repairs replaced or damaged Sun receivers/proxies without accumulating duplicate records;
+- preserves shared, mixed Include/Exclude, and library-linked Sun receiver collections;
+- keeps transparent-film renders transparent by disabling the dome's Camera visibility at conversion time;
+- exposes the base color for solid-color sources, plus strength, tint, gamma, saturation, radius, ray visibility, and integer Total/Diffuse/Glossy/Transmission depth limits; HDRI sources also expose rotation and mapping.
+
+<img width="1920" height="1034" alt="Sun-Isolation" src="https://github.com/user-attachments/assets/66a7b5cd-a679-415c-95ef-a85773c0731f" />
+
+The four depth controls are material-level artistic gates: `0` keeps direct rays and blocks indirect rays of that type. They do not change the scene-wide Cycles bounce settings.
+
+If no usable Environment Texture image is found, LightHelper converts a constant Background color on the active output path instead. Unsupported procedural World color graphs remain unchanged. If several connected HDRI images are found, LightHelper reports the ambiguity and uses the nearest image on the active output path.
+
+If a converted scene is opened or switched to Eevee, LightHelper preserves the managed dome and its settings without modifying user data. The unsupported World Environment panel and emissive-material source filter are hidden there; switch back to Cycles to edit or restore the managed World.
+
 
 ## Other features
 
 ### Emissive-material detection
 
-Objects with a connected, non-zero emissive material can appear in the source list. LightHelper follows nested node groups up to the configured **Emission Node Search Depth**.
+In Cycles, objects with a connected, non-zero emissive material can appear in the source list. LightHelper follows nested node groups up to the configured **Emission Node Search Depth**. In Eevee, the source list intentionally keeps only native Blender Light objects because Blender does not support Light Linking for emissive meshes there.
 
 For complex materials, a high search depth can make list refreshes slower. Reduce the value if the interface stutters. To use an emissive source as the interactive tool's light subject, select it from the sidebar first or left-click it while the tool is already in Light mode; `Ctrl` + left-click on a non-Light object selects it as an object subject.
 
@@ -239,7 +257,7 @@ https://github.com/user-attachments/assets/9ab4f865-904a-4030-976e-2d6b3d0b5e13
 
 ## Known limitations
 
-When an emissive material is used as a light source, indirect-light exclusion may not behave reliably in Eevee. This is a limitation of Blender's current Light Linking implementation rather than a LightHelper setting. Use native Blender Light objects when predictable exclusion is required.
+Emissive surfaces can still be visible in Eevee and may contribute through limited screen-space indirect lighting or baked light probes. However, Blender supports emissive-mesh Light Linking only in Cycles. Enabling Eevee ray tracing does not make the inward environment dome replace the native World, nor does it provide this workflow's reliable per-object linking and Light Path depth gates. LightHelper therefore hides these unsupported controls in Eevee; use Cycles for World environment exclusion.
 
 ## FAQ
 
@@ -261,6 +279,7 @@ The lights are probably sharing linking collections. Use **Make Single-User**, o
 
 ### An emissive object does not appear in the source list
 
+- Switch the render engine to **Cycles**; emissive-material sources are intentionally hidden in Eevee.
 - Confirm that the material uses nodes and has a connected, non-zero emission path.
 - Switch the source filter to **All** or **Emission Material**.
 - Increase **Emission Node Search Depth** if the emission is inside deeply nested node groups.

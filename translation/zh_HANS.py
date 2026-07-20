@@ -263,6 +263,7 @@ data = {
     "The current scene has no World": "当前场景没有世界环境",
     "No usable World environment source was found": "未找到可用的世界环境 HDRI 或纯色背景",
     "Source World: %s": "源世界环境：%s",
+    "The HDRI or solid-color source is detected when conversion starts": "开始转换时检测 HDRI 或纯色环境来源",
     "HDRI: %s": "HDRI：%s",
     "Source: Solid Color": "来源：纯色",
     "The source image is packed in the blend file": "源图像已打包在 blend 文件中",
@@ -316,4 +317,5 @@ data = {
     "Show the generated environment dome in the viewport": "在视口中显示生成的环境球",
     "Sun Exclusion: %d / %d": "日光排除：%d / %d",
     "Sun exclusions are internal and do not replace user-authored links": "日光排除为内部链接，不会替换用户创建的链接",
+    "Sun exclusions are synchronized automatically": "日光排除会自动保持同步",
 }

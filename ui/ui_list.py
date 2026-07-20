@@ -4,6 +4,38 @@ from bpy.app.translations import pgettext_iface as p_
 from ..utils.icon import get_item_icon
 
 _TCTX = "light_helper_zh_CN"
+_UI_LIST_FILTER_CACHE = {}
+
+
+def _ui_list_cache_key(context, list_type, generation, bitflag, uilist):
+    return (
+        list_type,
+        context.scene.as_pointer(),
+        context.view_layer.as_pointer(),
+        context.scene.render.engine,
+        len(context.scene.objects),
+        generation,
+        bitflag,
+        uilist.filter_name,
+        bool(uilist.use_filter_invert),
+        bool(uilist.filter_hide_not_shown),
+        uilist.sort_type,
+    )
+
+
+def _cached_ui_list_result(key):
+    cached = _UI_LIST_FILTER_CACHE.get(key)
+    if cached is None:
+        return None
+    flags, order = cached
+    return list(flags), list(order)
+
+
+def _store_ui_list_result(key, flags, order):
+    if len(_UI_LIST_FILTER_CACHE) > 32:
+        _UI_LIST_FILTER_CACHE.clear()
+    _UI_LIST_FILTER_CACHE[key] = (tuple(flags), tuple(order))
+    return flags, order
 
 
 def _apply_name_filter(helper_funcs, objects, flt_flags, filter_name, use_filter_invert, bitflag):
@@ -108,7 +140,10 @@ class LLT_UL_light(bpy.types.UIList):
         from ..ops import LLP_OT_add_light_linking, LLP_OT_clear_light_linking, LLP_OT_solo_light
 
         props = item.light_helper_property
-        index = context.scene.objects[:].index(item)
+        index = context.scene.objects.find(item.name)
+        if index < 0:
+            return
+        has_link = check_link(item)
 
         row = layout.row(align=True)
         if not is_shown_in_view_layer(context, item):
@@ -130,13 +165,12 @@ class LLT_UL_light(bpy.types.UIList):
             solo = context.window_manager.light_helper_property.solo_light
             solo_active = solo is not None and solo == item
             solo_row = left.row(align=True)
-            solo_row.alert = solo_active
             solo_row.context_pointer_set("solo_light_object", item)
             op = solo_row.operator(
                 LLP_OT_solo_light.bl_idname,
                 text="",
-                icon="CLIPUV_DEHLT" if solo_active else "CLIPUV_HLT",
-                emboss=solo_active,
+                icon="SOLO_ON" if solo_active else "SOLO_OFF",
+                depress=solo_active,
             )
             op.index = index
 
@@ -149,12 +183,12 @@ class LLT_UL_light(bpy.types.UIList):
         if self.show_type:
             info_right.label(text=item.type.title())
         info_right.label(text=item.name, translate=False)
-        if self.show_link_count and check_link(item):
+        if self.show_link_count and has_link:
             count = get_light_link_item_count(item)
             info_right.label(text=_format_list_link_count(context, count, "Links: %d"))
 
         action = rest.row(align=True)
-        if check_link(item):
+        if has_link:
             action.context_pointer_set("clear_light_linking_object", item)
             action.operator(LLP_OT_clear_light_linking.bl_idname, text="Restore").index = index
         elif item.type == "LIGHT":
@@ -165,14 +199,21 @@ class LLT_UL_light(bpy.types.UIList):
                 op.init = True
 
     def filter_items(self, context, data, propname):
-        from ..filter import filter_list
+        from ..filter import filter_list, get_filter_cache_generation
         from ..utils import get_light_link_item_count
 
         helper_funcs = bpy.types.UI_UL_list
-        objects = getattr(data, propname)[:]
         bitflag = self.bitflag_filter_item
 
         flt_flags = filter_list(context, bitflag)
+        key = _ui_list_cache_key(
+            context, "LIGHT", get_filter_cache_generation(), bitflag, self,
+        )
+        cached = _cached_ui_list_result(key)
+        if cached is not None:
+            return cached
+
+        objects = getattr(data, propname)[:]
         flt_flags = _apply_name_filter(
             helper_funcs, objects, flt_flags, self.filter_name, self.use_filter_invert, bitflag,
         )
@@ -188,7 +229,7 @@ class LLT_UL_light(bpy.types.UIList):
         else:
             flt_neworder = []
 
-        return flt_flags, flt_neworder
+        return _store_ui_list_result(key, flt_flags, flt_neworder)
 
 
 class LLT_UL_linked_object(bpy.types.UIList):
@@ -245,11 +286,21 @@ class LLT_UL_linked_object(bpy.types.UIList):
             info.label(text=_format_list_link_count(context, count, "Lights: %d"))
 
     def filter_items(self, context, data, propname):
+        from ..filter import get_filter_cache_generation
+        from ..handlers import ensure_filter_cache_invalidation_handler
         from ..utils import get_object_link_light_count, iter_objects_linked_by_lights
 
         helper_funcs = bpy.types.UI_UL_list
-        objects = getattr(data, propname)[:]
         bitflag = self.bitflag_filter_item
+        ensure_filter_cache_invalidation_handler()
+        key = _ui_list_cache_key(
+            context, "LINKED_OBJECT", get_filter_cache_generation(), bitflag, self,
+        )
+        cached = _cached_ui_list_result(key)
+        if cached is not None:
+            return cached
+
+        objects = getattr(data, propname)[:]
         linked = set(iter_objects_linked_by_lights(context))
 
         flt_flags = [
@@ -275,14 +326,16 @@ class LLT_UL_linked_object(bpy.types.UIList):
         else:
             flt_neworder = []
 
-        return flt_flags, flt_neworder
+        return _store_ui_list_result(key, flt_flags, flt_neworder)
 
 
 def register():
+    _UI_LIST_FILTER_CACHE.clear()
     bpy.utils.register_class(LLT_UL_light)
     bpy.utils.register_class(LLT_UL_linked_object)
 
 
 def unregister():
+    _UI_LIST_FILTER_CACHE.clear()
     bpy.utils.unregister_class(LLT_UL_linked_object)
     bpy.utils.unregister_class(LLT_UL_light)
