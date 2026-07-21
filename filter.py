@@ -20,7 +20,9 @@ def get_filter_cache_generation() -> int:
 def _filter_cache_key(context, bitflag, pref):
     scene = context.scene
     return (
-        id(scene),
+        # as_pointer() is stable per datablock; id() of a bpy wrapper is a
+        # transient CPython address that can collide after reuse.
+        scene.as_pointer(),
         len(scene.objects),
         pref.light_list_filter_type,
         pref.light_link_filter_type,

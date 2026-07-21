@@ -35,20 +35,6 @@ class ObjectProperty(PropertyGroup):
         update=update_linking_mode,
     )
 
-    def get_show(self):
-        obj = self.id_data
-        return not obj.hide_viewport and not obj.hide_get()
-
-    def set_show(self, value):
-        obj = self.id_data
-        obj.hide_viewport = not value
-        if value:
-            obj.hide_set(False)
-        else:
-            obj.hide_set(True)
-
-    show_in_view: bpy.props.BoolProperty(name="Show", get=get_show, set=set_show, )
-
     def get_show_viewport(self):
         obj = self.id_data
         if obj.hide_viewport:
@@ -66,6 +52,14 @@ class ObjectProperty(PropertyGroup):
         except RuntimeError:
             pass
 
+    # ``show_in_view`` (light list) and ``show_viewport`` (linked-object list)
+    # share one guarded implementation: ``hide_get``/``hide_set`` raise
+    # RuntimeError for objects excluded from the current view layer.
+    show_in_view: bpy.props.BoolProperty(
+        name="Show",
+        get=get_show_viewport,
+        set=set_show_viewport,
+    )
     show_viewport: bpy.props.BoolProperty(
         name="Show in Viewport",
         get=get_show_viewport,
@@ -331,7 +325,9 @@ class SceneProperty(PropertyGroup):
         if is_in_view_layer(context, act_obj):
             context.view_layer.objects.active = act_obj
             act_obj.select_set(True)
-            for obj in context.view_layer.objects.selected:
+            # Copy before mutating: deselecting while iterating the live
+            # ``selected`` collection can skip items.
+            for obj in list(context.view_layer.objects.selected):
                 if obj != act_obj:
                     obj.select_set(False)
             view_selected(context)
@@ -352,7 +348,9 @@ class SceneProperty(PropertyGroup):
         if is_in_view_layer(context, act_obj):
             context.view_layer.objects.active = act_obj
             act_obj.select_set(True)
-            for obj in context.view_layer.objects.selected:
+            # Copy before mutating: deselecting while iterating the live
+            # ``selected`` collection can skip items.
+            for obj in list(context.view_layer.objects.selected):
                 if obj != act_obj:
                     obj.select_set(False)
             view_selected(context)
@@ -363,6 +361,24 @@ class SceneProperty(PropertyGroup):
         default=0,
         update=update_active_linked_object_index,
     )
+
+
+_subject_mode_update_suspended = False
+
+
+def set_linking_tool_subject_mode_silent(wm_props, mode: str) -> None:
+    """Assign the tool subject mode without running its update callback.
+
+    Replaces the old ``wm_props["linking_tool_subject_mode"] = ...`` bypass;
+    dict-style IDProperty writes stopped reaching bpy.props-defined values in
+    Blender 5.0, so that bypass silently did nothing there.
+    """
+    global _subject_mode_update_suspended
+    _subject_mode_update_suspended = True
+    try:
+        wm_props.linking_tool_subject_mode = mode
+    finally:
+        _subject_mode_update_suspended = False
 
 
 def poll_linking_tool_light(_self, obj: bpy.types.Object) -> bool:
@@ -425,6 +441,8 @@ class WindowManagerProperty(PropertyGroup):
         options={'SKIP_SAVE'},
     )
     def update_linking_tool_subject_mode(self, context):
+        if _subject_mode_update_suspended:
+            return
         from .utils.overlay import invalidate_overlay_cache, refresh_overlay_cache, tag_view3d_redraw
         if self.linking_tool_subject_mode == 'OBJECT':
             self.linking_tool_light = None
@@ -544,7 +562,10 @@ class WindowManagerProperty(PropertyGroup):
         from .utils import link_item_both_channels
         coll = wm.light_helper_property.light_linking_add_collection
         link_item_both_channels(obj, coll, context)
-        wm.light_helper_property["light_linking_add_collection"] = None
+        # RNA assignment (not a dict-style IDProperty write, which stopped
+        # reaching bpy.props values in 5.0). The re-entered update returns
+        # immediately at the None check above.
+        wm.light_helper_property.light_linking_add_collection = None
         from .utils.overlay import notify_linking_changed
         notify_linking_changed(context)
 
@@ -562,7 +583,7 @@ class WindowManagerProperty(PropertyGroup):
         from .utils import link_item_both_channels
         obj2 = wm.light_helper_property.light_linking_add_object
         link_item_both_channels(obj, obj2, context)
-        wm.light_helper_property["light_linking_add_object"] = None
+        wm.light_helper_property.light_linking_add_object = None
         from .utils.overlay import notify_linking_changed
         notify_linking_changed(context)
 
@@ -584,7 +605,7 @@ class WindowManagerProperty(PropertyGroup):
         from .utils import init_light_linking, link_item_both_channels
         init_light_linking(light, context)
         link_item_both_channels(light, obj, context)
-        wm.light_helper_property["object_linking_add_object"] = None
+        wm.light_helper_property.object_linking_add_object = None
         from .utils.overlay import notify_linking_changed
         notify_linking_changed(context)
 

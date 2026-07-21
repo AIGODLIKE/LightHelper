@@ -386,6 +386,10 @@ def toggle_item_both_channels(light: bpy.types.Object, item,
     return enable
 
 
+def is_eevee_engine(engine: str) -> bool:
+    return engine in {"BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"}
+
+
 def supports_emissive_light_sources(context: bpy.types.Context | None = None) -> bool:
     """Whether material-emission objects can act as Light Linking sources.
 
@@ -422,13 +426,14 @@ def is_emissive_light_source(
     return check_material_including_emission(obj, search_depth, cache=cache)
 
 
-def is_tool_light_source(obj: bpy.types.Object, context: bpy.types.Context | None = None) -> bool:
+def is_tool_light_source(obj: bpy.types.Object, context: bpy.types.Context | None = None, *,
+                         cache: dict | None = None) -> bool:
     obj = resolve_original_id(obj)
     if obj is None:
         return False
     if obj.type == 'LIGHT':
         return True
-    return is_emissive_light_source(obj, context)
+    return is_emissive_light_source(obj, context, cache=cache)
 
 
 def get_active_light_source(context: bpy.types.Context) -> bpy.types.Object | None:
@@ -493,7 +498,9 @@ def cycle_tool_light(context: bpy.types.Context, light: bpy.types.Object | None,
 def select_tool_light(context: bpy.types.Context, light: bpy.types.Object) -> None:
     view_layer = context.view_layer
     if is_in_view_layer(context, light):
-        for obj in view_layer.objects.selected:
+        # Copy before mutating: deselecting while iterating the live
+        # ``selected`` collection can skip items.
+        for obj in list(view_layer.objects.selected):
             obj.select_set(False)
         view_layer.objects.active = light
         light.select_set(True)
@@ -547,30 +554,6 @@ def restore_light_linking(light: bpy.types.Object, context: bpy.types.Context | 
     notify_linking_changed(context)
 
 
-def get_light_effect_obj_state(light: bpy.types.Object, obj: bpy.types.Object) -> dict:
-    state = {
-        CollectionType.RECEIVER: None,
-        CollectionType.BLOCKER: None,
-    }
-    if is_item_in_channel(light, obj, CollectionType.RECEIVER):
-        state[CollectionType.RECEIVER] = True
-    if is_item_in_channel(light, obj, CollectionType.BLOCKER):
-        state[CollectionType.BLOCKER] = True
-    return state
-
-
-def get_light_effect_coll_state(light: bpy.types.Object, coll: bpy.types.Collection) -> dict:
-    state = {
-        CollectionType.RECEIVER: None,
-        CollectionType.BLOCKER: None,
-    }
-    if is_item_in_channel(light, coll, CollectionType.RECEIVER):
-        state[CollectionType.RECEIVER] = True
-    if is_item_in_channel(light, coll, CollectionType.BLOCKER):
-        state[CollectionType.BLOCKER] = True
-    return state
-
-
 def get_all_light_effect_items_state(light: bpy.types.Object) -> dict:
     receiver_coll = get_linking_coll(light, CollectionType.RECEIVER)
     blocker_coll = get_linking_coll(light, CollectionType.BLOCKER)
@@ -608,10 +591,20 @@ def get_all_light_effect_items_state(light: bpy.types.Object) -> dict:
     return items_state
 
 
+# Redraw-hot path: the light UIList reads this per row on every redraw.
+# Invalidated together with the linking UI cache.
+_light_link_count_cache: dict[int, int] = {}
+
+
 def get_light_link_item_count(light: bpy.types.Object) -> int:
     if light is None:
         return 0
-    return len(get_all_light_effect_items_state(light))
+    key = light.as_pointer()
+    cached = _light_link_count_cache.get(key)
+    if cached is None:
+        cached = len(get_all_light_effect_items_state(light))
+        _light_link_count_cache[key] = cached
+    return cached
 
 
 def get_lights_from_effect_obj(obj: bpy.types.Object, context: bpy.types.Context | None = None) -> dict:
@@ -729,7 +722,7 @@ def cycle_tool_object(context: bpy.types.Context, obj: bpy.types.Object | None,
 def select_tool_object(context: bpy.types.Context, obj: bpy.types.Object) -> None:
     view_layer = context.view_layer
     if is_in_view_layer(context, obj):
-        for selected in view_layer.objects.selected:
+        for selected in list(view_layer.objects.selected):
             selected.select_set(False)
         view_layer.objects.active = obj
         obj.select_set(True)
@@ -788,6 +781,7 @@ def invalidate_linking_ui_cache() -> None:
     _cached_linking_lights = ()
     _cached_linked_objects = ()
     _cached_object_light_states = {}
+    _light_link_count_cache.clear()
     _linking_ui_cache_key = None
     _linking_ui_cache_generation += 1
 
@@ -1073,22 +1067,6 @@ def mark_duplicate_handled(obj: bpy.types.Object) -> None:
     obj[LIGHT_HELPER_DUP_HANDLED_KEY] = True
 
 
-def prime_existing_duplicate_objects(scene: bpy.types.Scene,
-                                   context: bpy.types.Context | None = None) -> None:
-    """Mark scene duplicates as handled so later source links do not cascade."""
-    ctx = context if context is not None else bpy.context
-    for obj in scene.objects:
-        if is_duplicate_handled(obj) or obj.type == 'LIGHT':
-            continue
-        source = find_duplicate_source_object(obj)
-        if source is None:
-            continue
-        if (is_object_linked_by_any_light(source, ctx)
-                and not is_object_linked_by_any_light(obj, ctx)):
-            inherit_light_linking_from_object(obj, source, ctx)
-        mark_duplicate_handled(obj)
-
-
 def process_duplicated_object(obj: bpy.types.Object, context: bpy.types.Context | None = None) -> bool:
     obj = resolve_original_id(obj)
     if obj is None or not is_original_id(obj):
@@ -1129,15 +1107,6 @@ def fix_all_shared_light_linking(scene: bpy.types.Scene) -> list[bpy.types.Objec
         if make_light_linking_single_user(obj):
             fixed.append(obj)
     return fixed
-
-
-def scene_has_uninitialized_lights(scene: bpy.types.Scene) -> bool:
-    for obj in scene.objects:
-        if obj.type != 'LIGHT':
-            continue
-        if hasattr(obj, "light_linking") and not is_linking_initialized(obj):
-            return True
-    return False
 
 
 def init_all_light_linking(scene: bpy.types.Scene,

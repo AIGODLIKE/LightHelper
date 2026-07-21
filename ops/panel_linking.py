@@ -11,7 +11,7 @@ from ..utils import (
     mark_managed_linking_collection,
     restore_light_linking,
 )
-from .common import LightHelperOperator, enum_coll_type, get_light_obj, operator_tooltip_description
+from .common import COLL_TYPE_ITEMS, LightHelperOperator, get_light_obj, operator_tooltip_description
 
 
 class LLP_OT_remove_light_linking(LightHelperOperator, bpy.types.Operator):
@@ -21,12 +21,13 @@ class LLP_OT_remove_light_linking(LightHelperOperator, bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     coll_type: bpy.props.EnumProperty(
-        items=enum_coll_type, options={'SKIP_SAVE'}
+        items=COLL_TYPE_ITEMS, options={'HIDDEN', 'SKIP_SAVE'}
     )
 
-    remove_all: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
-    restore_default_when_empty: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
-    tooltip: bpy.props.StringProperty(default="", options={'SKIP_SAVE'})
+    # Internal wiring set from the UI; keep these out of the redo panel.
+    remove_all: bpy.props.BoolProperty(default=False, options={'HIDDEN', 'SKIP_SAVE'})
+    restore_default_when_empty: bpy.props.BoolProperty(default=False, options={'HIDDEN', 'SKIP_SAVE'})
+    tooltip: bpy.props.StringProperty(default="", options={'HIDDEN', 'SKIP_SAVE'})
 
     @classmethod
     def poll(cls, context):
@@ -80,7 +81,7 @@ class LLP_OT_clear_light_linking(LightHelperOperator, bpy.types.Operator):
     bl_label = "Clear"
     bl_description = "Clear light linking collections and restore default lighting behavior"
     bl_options = {'REGISTER', 'UNDO'}
-    index: bpy.props.IntProperty(default=-1, options={'SKIP_SAVE'})
+    index: bpy.props.IntProperty(default=-1, options={'HIDDEN', 'SKIP_SAVE'})
 
     @classmethod
     def poll(cls, context):
@@ -117,12 +118,12 @@ class LLP_OT_add_light_linking(LightHelperOperator, bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     coll_type: bpy.props.EnumProperty(
-        items=enum_coll_type, options={'SKIP_SAVE'}
+        items=COLL_TYPE_ITEMS, options={'HIDDEN', 'SKIP_SAVE'}
     )
 
-    init: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
+    init: bpy.props.BoolProperty(default=False, options={'HIDDEN', 'SKIP_SAVE'})
 
-    index: bpy.props.IntProperty(default=-1, options={'SKIP_SAVE'})
+    index: bpy.props.IntProperty(default=-1, options={'HIDDEN', 'SKIP_SAVE'})
 
     @classmethod
     def poll(cls, context):
@@ -175,10 +176,10 @@ class LLP_OT_toggle_light_linking(LightHelperOperator, bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     coll_type: bpy.props.EnumProperty(
-        items=enum_coll_type, options={'SKIP_SAVE'}
+        items=COLL_TYPE_ITEMS, options={'HIDDEN', 'SKIP_SAVE'}
     )
-    restore_default_when_empty: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
-    tooltip: bpy.props.StringProperty(default="", options={'SKIP_SAVE'})
+    restore_default_when_empty: bpy.props.BoolProperty(default=False, options={'HIDDEN', 'SKIP_SAVE'})
+    tooltip: bpy.props.StringProperty(default="", options={'HIDDEN', 'SKIP_SAVE'})
 
     @classmethod
     def poll(cls, context):

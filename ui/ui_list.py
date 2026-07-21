@@ -1,7 +1,7 @@
 import bpy
 from bpy.app.translations import pgettext_iface as p_
 
-from ..utils.icon import get_item_icon
+from ..utils.icon import get_item_icon, ui_icon
 
 _TCTX = "light_helper_zh_CN"
 _UI_LIST_FILTER_CACHE = {}
@@ -68,8 +68,8 @@ def _sort_by_link_count(helper_funcs, objects, count_fn):
 
 def _draw_search_row(layout, uilist):
     row = layout.row(align=True)
-    row.prop(uilist, "filter_name", text="", icon="VIEWZOOM")
-    row.prop(uilist, "use_filter_invert", text="", icon="ARROW_LEFTRIGHT")
+    row.prop(uilist, "filter_name", text="", icon=ui_icon("VIEWZOOM"))
+    row.prop(uilist, "use_filter_invert", text="", icon=ui_icon("ARROW_LEFTRIGHT"))
 
 
 _LINK_COUNT_NARROW_PX = 300
@@ -135,14 +135,13 @@ class LLT_UL_light(bpy.types.UIList):
 
         layout.prop(self, "filter_hide_not_shown", toggle=True)
 
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        # ``index`` comes from Blender and is the item's position in
+        # ``scene.objects``; the previous per-row name lookup was O(n^2).
         from ..utils import check_link, get_light_link_item_count, is_shown_in_view_layer
         from ..ops import LLP_OT_add_light_linking, LLP_OT_clear_light_linking, LLP_OT_solo_light
 
         props = item.light_helper_property
-        index = context.scene.objects.find(item.name)
-        if index < 0:
-            return
         has_link = check_link(item)
 
         row = layout.row(align=True)
@@ -154,11 +153,11 @@ class LLT_UL_light(bpy.types.UIList):
         left = split.row(align=True)
 
         if self.show_in_view:
-            view_icon = "HIDE_OFF" if props.show_in_view else "HIDE_ON"
+            view_icon = ui_icon("HIDE_OFF" if props.show_in_view else "HIDE_ON")
             left.prop(props, "show_in_view", text="", icon=view_icon, emboss=False)
 
         if self.show_render:
-            render_icon = "RESTRICT_RENDER_OFF" if props.show_render else "RESTRICT_RENDER_ON"
+            render_icon = ui_icon("RESTRICT_RENDER_OFF" if props.show_render else "RESTRICT_RENDER_ON")
             left.prop(props, "show_render", text="", icon=render_icon, emboss=False)
 
         if item.type == "LIGHT":
@@ -166,10 +165,13 @@ class LLT_UL_light(bpy.types.UIList):
             solo_active = solo is not None and solo == item
             solo_row = left.row(align=True)
             solo_row.context_pointer_set("solo_light_object", item)
+            # Flat like the neighbouring visibility icons when inactive;
+            # embossed + depressed only while solo is engaged.
             op = solo_row.operator(
                 LLP_OT_solo_light.bl_idname,
                 text="",
-                icon="SOLO_ON" if solo_active else "SOLO_OFF",
+                icon=ui_icon("SOLO_ON" if solo_active else "SOLO_OFF"),
+                emboss=solo_active,
                 depress=solo_active,
             )
             op.index = index
@@ -274,9 +276,9 @@ class LLT_UL_linked_object(bpy.types.UIList):
         if not is_shown_in_view_layer(context, item):
             row.active = False
 
-        view_icon = "HIDE_OFF" if props.show_viewport else "HIDE_ON"
+        view_icon = ui_icon("HIDE_OFF" if props.show_viewport else "HIDE_ON")
         row.prop(props, "show_viewport", text="", icon=view_icon, emboss=False)
-        render_icon = "RESTRICT_RENDER_OFF" if props.show_render else "RESTRICT_RENDER_ON"
+        render_icon = ui_icon("RESTRICT_RENDER_OFF" if props.show_render else "RESTRICT_RENDER_ON")
         row.prop(props, "show_render", text="", icon=render_icon, emboss=False)
 
         info = row.row(align=True)

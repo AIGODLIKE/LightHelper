@@ -3,6 +3,8 @@ import os
 import bpy
 from bpy.app.translations import pgettext_iface as p_
 
+from ..utils.icon import ui_icon
+
 TOOL_IDNAME = "light_helper.light_linking"
 TOOL_PICK = "object.light_helper_light_linking_pick"
 TOOL_HUD_DRAG = "object.light_helper_light_linking_hud_drag"
@@ -31,8 +33,13 @@ def _deferred_session_sync():
         context = bpy.context
         if context is None:
             return None
+        current = get_active_tool_idname(context)
+        if current is None:
+            # Timer context may lack workspace data. Unknown is not the same
+            # as "tool inactive"; never stop a running session on a guess.
+            return None
         _track_previous_tool(context)
-        if is_light_linking_tool_active(context):
+        if current == TOOL_IDNAME:
             if not is_session_active(context):
                 start_tool_session(context)
         elif is_session_active(context):
@@ -261,8 +268,6 @@ def sync_list_from_selection(context: bpy.types.Context) -> bool:
     index = objects.find(obj.name)
     if index < 0 or objects[index] != obj:
         return False
-    if index < 0:
-        return False
     if scene_props.active_object_index == index:
         return False
 
@@ -459,7 +464,7 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
     def _draw_subject_tip(layout):
         tip = layout.row(align=True)
         tip.alert = True
-        tip.label(text=p_("Ctrl+LClick: Switch Subject Mode (Light/Object)"), icon='INFO')
+        tip.label(text=p_("Ctrl+LClick: Switch Subject Mode (Light/Object)"), icon=ui_icon('INFO'))
 
     @staticmethod
     def _draw_subject_status(row, subject_mode, light, obj, link_count):
@@ -467,11 +472,11 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
 
         if subject_mode == 'OBJECT':
             if obj is not None:
-                row.label(text=obj.name, icon='OBJECT_DATA', translate=False)
+                row.label(text=obj.name, icon=ui_icon('OBJECT_DATA'), translate=False)
                 row.separator(factor=0.8)
                 row.label(text=p_("Linked lights: %d") % link_count)
             else:
-                row.label(text=p_("No object selected"), icon='INFO')
+                row.label(text=p_("No object selected"), icon=ui_icon('INFO'))
         elif light is not None:
             if light.type == 'LIGHT':
                 light_icon = get_light_icon(light)
@@ -483,7 +488,7 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
             row.separator(factor=0.8)
             row.prop(light.light_helper_property, "linking_mode", expand=True, text_ctxt="light_helper_zh_CN")
         else:
-            row.label(text=p_("No light selected"), icon='INFO')
+            row.label(text=p_("No light selected"), icon=ui_icon('INFO'))
 
     @staticmethod
     def draw_settings(context, layout, tool):
@@ -494,7 +499,7 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
         if not VIEW3D_PT_light_helper_light_control.check_support_light_linking(context):
             layout.label(
                 text=p_("This rendering engine does not support light linking"),
-                icon='ERROR',
+                icon=ui_icon('ERROR'),
             )
             return
 
@@ -534,10 +539,10 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
         VIEW3D_WT_light_linking._draw_subject_tip(col)
         if subject_mode == 'OBJECT':
             if obj is not None:
-                col.label(text=obj.name, icon='OBJECT_DATA', translate=False)
+                col.label(text=obj.name, icon=ui_icon('OBJECT_DATA'), translate=False)
                 col.label(text=p_("Linked lights: %d") % link_count)
             elif session_on:
-                col.label(text=p_("No object selected"), icon='INFO')
+                col.label(text=p_("No object selected"), icon=ui_icon('INFO'))
         elif light is not None:
             from ..utils.icon import get_item_icon, get_light_icon
             if light.type == 'LIGHT':
@@ -550,7 +555,7 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
                 light.light_helper_property, "linking_mode", expand=True, text_ctxt="light_helper_zh_CN",
             )
         elif session_on:
-            col.label(text=p_("No light selected"), icon='INFO')
+            col.label(text=p_("No light selected"), icon=ui_icon('INFO'))
 
 
 def register():

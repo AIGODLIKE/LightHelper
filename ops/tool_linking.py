@@ -82,23 +82,25 @@ class LLP_OT_light_linking_pick(_LLP_LightLinkingToolInvoke, LightHelperOperator
 
     @staticmethod
     def _set_light(context, light_obj: bpy.types.Object):
+        from ..property import set_linking_tool_subject_mode_silent
         light_obj = resolve_original_id(light_obj)
         wm_props = context.window_manager.light_helper_property
-        # Assign subject first, then force mode so RNA update cannot wipe it.
+        # Assign subject first, then force mode so the mode update cannot wipe it.
         wm_props.linking_tool_light = light_obj
         wm_props.linking_tool_object = None
-        wm_props["linking_tool_subject_mode"] = 0  # LIGHT
+        set_linking_tool_subject_mode_silent(wm_props, 'LIGHT')
         select_tool_light(context, light_obj)
         LLP_OT_light_linking_pick._finish_pick(context)
 
     @staticmethod
     def _set_object(context, obj: bpy.types.Object):
+        from ..property import set_linking_tool_subject_mode_silent
         obj = resolve_original_id(obj)
         wm_props = context.window_manager.light_helper_property
-        # Assign subject first, then force mode so RNA update cannot wipe it.
+        # Assign subject first, then force mode so the mode update cannot wipe it.
         wm_props.linking_tool_object = obj
         wm_props.linking_tool_light = None
-        wm_props["linking_tool_subject_mode"] = 1  # OBJECT
+        set_linking_tool_subject_mode_silent(wm_props, 'OBJECT')
         select_tool_object(context, obj)
         LLP_OT_light_linking_pick._finish_pick(context)
 
@@ -381,7 +383,7 @@ class LLP_OT_light_linking_cycle_light(_LLP_LightLinkingToolInvoke, LightHelperO
     bl_description = "Switch to previous or next filtered light or object"
     bl_options = {'REGISTER', 'UNDO'}
 
-    direction: bpy.props.IntProperty(default=1, options={'SKIP_SAVE'})
+    direction: bpy.props.IntProperty(default=1, options={'HIDDEN', 'SKIP_SAVE'})
 
     def invoke(self, context, event):
         blocked = self.invoke_tool(context, event, skip_hud=False)

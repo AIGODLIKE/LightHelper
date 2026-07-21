@@ -64,6 +64,7 @@ class LinkDrawTarget:
         "name",
         "center",
         "corners",
+        "linking_mode",
     )
 
     def __init__(self, item, receiver, blocker, is_collection, name, center=None, corners=None):
@@ -74,6 +75,9 @@ class LinkDrawTarget:
         self.name = name
         self.center = center
         self.corners = corners
+        # Resolved once per cache refresh; reading it per draw frame would
+        # re-walk material node trees for emissive-mesh subjects.
+        self.linking_mode = "INCLUDE"
 
 
 class LinkDrawGroup:
@@ -86,7 +90,11 @@ class LinkDrawGroup:
 
 
 class LinkOverlayCache:
-    __slots__ = ("overlay_mode", "subject_mode", "light", "object", "groups", "outlines_hidden", "engine", "invalid")
+    __slots__ = (
+        "overlay_mode", "subject_mode", "light", "object", "groups",
+        "outlines_hidden", "engine", "invalid",
+        "relevant_object_names", "relevant_collection_names",
+    )
 
     def __init__(self):
         self.overlay_mode = OVERLAY_MODE_SELECTED
@@ -97,6 +105,10 @@ class LinkOverlayCache:
         self.outlines_hidden = False
         self.engine = None
         self.invalid = True
+        # Precomputed from ``groups`` so the depsgraph handler does not
+        # rebuild both name sets on every scene update.
+        self.relevant_object_names: frozenset[str] = frozenset()
+        self.relevant_collection_names: frozenset[str] = frozenset()
 
     def invalidate(self):
         self.invalid = True
@@ -301,6 +313,8 @@ def invalidate_overlay_cache():
     _cache.object = None
     _cache.groups = []
     _cache.outlines_hidden = False
+    _cache.relevant_object_names = frozenset()
+    _cache.relevant_collection_names = frozenset()
 
 
 def _scale_color_alpha(color, scale: float):
@@ -326,9 +340,10 @@ def cycle_overlay_mode(current_mode: str) -> str:
     return modes[(modes.index(current_mode) + 1) % len(modes)]
 
 
-def _is_light_overlay_ready(light: bpy.types.Object, context: bpy.types.Context | None = None) -> bool:
+def _is_light_overlay_ready(light: bpy.types.Object, context: bpy.types.Context | None = None,
+                            cache: dict | None = None) -> bool:
     from . import is_linking_initialized, is_tool_light_source
-    return is_tool_light_source(light, context) and is_linking_initialized(light)
+    return is_tool_light_source(light, context, cache=cache) and is_linking_initialized(light)
 
 
 def _subject_cache_key(subject_mode: str, subject: bpy.types.Object | None) -> tuple[str, str | None]:
@@ -391,16 +406,29 @@ def _channel_color(receiver: bool, blocker: bool, both_color, light_color, shado
     return none_color
 
 
-def _resolve_target_linking_mode(group: LinkDrawGroup, target: LinkDrawTarget, subject_mode: str,
-                                 context: bpy.types.Context | None = None) -> str:
+def _assign_target_linking_modes(groups: list[LinkDrawGroup], subject_mode: str,
+                                 context: bpy.types.Context | None = None) -> None:
+    """Resolve every target's Include/Exclude mode once per cache refresh.
+
+    Mode changes always run ``notify_linking_changed`` which refreshes this
+    cache, so per-frame resolution (with its material-tree walks for
+    emissive-mesh subjects) is unnecessary.
+    """
     from . import is_tool_light_source
-    if (subject_mode == 'OBJECT'
-            and isinstance(target.item, bpy.types.Object)
-            and is_tool_light_source(target.item, context)):
-        return get_linking_mode(target.item)
-    if group.subject is not None and is_tool_light_source(group.subject, context):
-        return get_linking_mode(group.subject)
-    return "INCLUDE"
+    emission_cache: dict = {}
+    for group in groups:
+        if group.subject is not None and is_tool_light_source(
+                group.subject, context, cache=emission_cache):
+            subject_fallback = get_linking_mode(group.subject)
+        else:
+            subject_fallback = "INCLUDE"
+        for target in group.targets:
+            if (subject_mode == 'OBJECT'
+                    and isinstance(target.item, bpy.types.Object)
+                    and is_tool_light_source(target.item, context, cache=emission_cache)):
+                target.linking_mode = get_linking_mode(target.item)
+            else:
+                target.linking_mode = subject_fallback
 
 
 def _target_line_colors(linking_mode: str):
@@ -490,8 +518,9 @@ def _build_all_light_groups(context: bpy.types.Context, active_light: bpy.types.
     active_light = resolve_original_id(active_light)
     groups = []
     total_targets = 0
+    emission_cache: dict = {}
     for light in context.scene.objects:
-        if not _is_light_overlay_ready(light, context):
+        if not _is_light_overlay_ready(light, context, emission_cache):
             continue
         if light.hide_viewport or light.hide_get():
             continue
@@ -512,8 +541,9 @@ def _build_all_object_groups(context: bpy.types.Context, active_obj: bpy.types.O
 
     active_obj = resolve_original_id(active_obj)
     object_states = {}
+    emission_cache: dict = {}
     for light in context.scene.objects:
-        if not _is_light_overlay_ready(light, context):
+        if not _is_light_overlay_ready(light, context, emission_cache):
             continue
         if light.hide_viewport or light.hide_get():
             continue
@@ -592,6 +622,8 @@ def refresh_overlay_cache(context: bpy.types.Context):
         _cache.object = None
         _cache.groups = []
         _cache.outlines_hidden = False
+        _cache.relevant_object_names = frozenset()
+        _cache.relevant_collection_names = frozenset()
         _cache.invalid = False
         return
 
@@ -624,8 +656,11 @@ def refresh_overlay_cache(context: bpy.types.Context):
         _cache.light = active_light
         _cache.object = None
 
+    _assign_target_linking_modes(groups, subject_mode, context)
     _cache.groups = groups
     _cache.outlines_hidden = outlines_hidden
+    _cache.relevant_object_names = frozenset(_collect_overlay_object_names())
+    _cache.relevant_collection_names = frozenset(_collect_overlay_collection_names())
     _cache.invalid = False
 
 
@@ -713,10 +748,9 @@ def _draw_overlay_3d():
                 center, _corners = _target_world_bbox(target)
                 if center is None:
                     continue
-                linking_mode = _resolve_target_linking_mode(group, target, subject_mode, context)
                 color = _channel_color(
                     target.receiver, target.blocker,
-                    *_target_line_colors(linking_mode),
+                    *_target_line_colors(target.linking_mode),
                 )
                 color = _scale_color_alpha(color, alpha_scale)
                 _draw_lines_batch(context, [subject_pos, center], color, width=2.0)
@@ -726,10 +760,9 @@ def _draw_overlay_3d():
                     _center, corners = _target_world_bbox(target)
                     if corners is None:
                         continue
-                    linking_mode = _resolve_target_linking_mode(group, target, subject_mode, context)
                     color = _channel_color(
                         target.receiver, target.blocker,
-                        *_target_outline_colors(linking_mode),
+                        *_target_outline_colors(target.linking_mode),
                     )
                     color = _scale_color_alpha(color, alpha_scale)
                     edge_coords = []
@@ -836,8 +869,10 @@ def _depsgraph_update_post(_scene, depsgraph: bpy.types.Depsgraph):
         if wm_props.linking_tool_overlay_mode == OVERLAY_MODE_OFF:
             return
 
-        relevant_names = _collect_overlay_object_names()
-        collection_names = _collect_overlay_collection_names()
+        # Precomputed at cache refresh; rebuilding per depsgraph tick scales
+        # with the number of overlay targets.
+        relevant_names = _cache.relevant_object_names
+        collection_names = _cache.relevant_collection_names
         needs_cache_refresh = False
         needs_redraw = False
 

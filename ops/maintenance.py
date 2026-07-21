@@ -58,9 +58,11 @@ class LLP_OT_instances_data(LightHelperOperator, bpy.types.Operator):
         return False
 
     def execute(self, context):
-        from ..utils import make_light_linking_single_user
+        from ..utils import is_tool_light_source, make_light_linking_single_user
         light_obj = get_light_obj(context)
-        if light_obj is None or light_obj.type != 'LIGHT' or not hasattr(light_obj, "light_linking"):
+        # Match poll: emissive-mesh light sources are valid subjects too.
+        if (light_obj is None or not is_tool_light_source(light_obj, context)
+                or not hasattr(light_obj, "light_linking")):
             self.report({'ERROR'}, p_("No light selected"))
             return {"CANCELLED"}
         if not make_light_linking_single_user(light_obj):

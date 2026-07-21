@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from uuid import uuid4
 
 import bmesh
 import bpy
+
+from . import is_eevee_engine
 
 
 WORLD_DOME_SCENE_UUID_KEY = "light_helper_world_dome_uuid"
@@ -804,10 +807,6 @@ def ensure_world_dome_ownership(scene: bpy.types.Scene) -> bpy.types.Object | No
     return dome
 
 
-def is_world_environment_converted(scene: bpy.types.Scene) -> bool:
-    return get_world_dome(scene) is not None
-
-
 def _node_with_role(material: bpy.types.Material, role: str):
     if material is None or material.node_tree is None:
         return None
@@ -819,6 +818,34 @@ def _node_with_role(material: bpy.types.Material, role: str):
 
 def _set_node_role(node, role: str) -> None:
     node[WORLD_DOME_NODE_ROLE_KEY] = role
+
+
+def _mix_color_sockets(node):
+    """Return ``(factor, a, b, result)`` color sockets of a multiply-mix node.
+
+    New materials use ``ShaderNodeMix``; materials converted by older versions
+    still contain legacy ``ShaderNodeMixRGB`` nodes, so both layouts are
+    supported when updating existing domes.
+    """
+    if node.bl_idname == "ShaderNodeMix":
+        inputs = {socket.identifier: socket for socket in node.inputs}
+        outputs = {socket.identifier: socket for socket in node.outputs}
+        return (
+            inputs.get("Factor_Float"),
+            inputs.get("A_Color"),
+            inputs.get("B_Color"),
+            outputs.get("Result_Color"),
+        )
+    return node.inputs[0], node.inputs[1], node.inputs[2], node.outputs[0]
+
+
+def _new_color_multiply_node(nodes, name: str):
+    """Create a color multiply mix node (legacy MixRGB was superseded in 3.4)."""
+    node = nodes.new("ShaderNodeMix")
+    node.name = name
+    node.data_type = "RGBA"
+    node.blend_type = "MULTIPLY"
+    return node
 
 
 def _copy_color_ramp(source, target) -> None:
@@ -965,11 +992,10 @@ def _populate_dome_material(
     saturation.location = (90, 320)
     _set_node_role(saturation, NODE_ROLE_SATURATION)
 
-    tint = nodes.new("ShaderNodeMixRGB")
-    tint.name = "World Environment Tint"
-    tint.blend_type = "MULTIPLY"
-    tint.inputs[0].default_value = 0.0
-    tint.inputs[2].default_value = (1.0, 1.0, 1.0, 1.0)
+    tint = _new_color_multiply_node(nodes, "World Environment Tint")
+    tint_factor, tint_a, tint_b, tint_result = _mix_color_sockets(tint)
+    tint_factor.default_value = 0.0
+    tint_b.default_value = (1.0, 1.0, 1.0, 1.0)
     tint.location = (310, 320)
     _set_node_role(tint, NODE_ROLE_TINT)
 
@@ -1026,19 +1052,18 @@ def _populate_dome_material(
     allowed.location = (330, -370)
     links.new(combine_all.outputs[0], allowed.inputs[1])
 
-    gate = nodes.new("ShaderNodeMixRGB")
-    gate.name = "World Environment Bounce Gate"
-    gate.blend_type = "MULTIPLY"
-    gate.inputs[0].default_value = 1.0
+    gate = _new_color_multiply_node(nodes, "World Environment Bounce Gate")
+    gate_factor, gate_a, gate_b, gate_result = _mix_color_sockets(gate)
+    gate_factor.default_value = 1.0
     gate.location = (520, 170)
     _set_node_role(gate, NODE_ROLE_BOUNCE_GATE)
 
     links.new(source_output, gamma.inputs["Color"])
     links.new(gamma.outputs["Color"], saturation.inputs["Color"])
-    links.new(saturation.outputs["Color"], tint.inputs[1])
-    links.new(tint.outputs[0], gate.inputs[1])
-    links.new(allowed.outputs[0], gate.inputs[2])
-    links.new(gate.outputs[0], emission.inputs["Color"])
+    links.new(saturation.outputs["Color"], tint_a)
+    links.new(tint_result, gate_a)
+    links.new(allowed.outputs[0], gate_b)
+    links.new(gate_result, emission.inputs["Color"])
     links.new(emission.outputs["Emission"], output.inputs["Surface"])
     return material
 
@@ -1098,32 +1123,54 @@ def _find_or_create_dome_collection(scene: bpy.types.Scene, owner_uuid: str):
     return collection
 
 
+_dome_property_sync_suspended = False
+
+
+@contextmanager
+def _suspended_dome_property_sync():
+    """Batch scene-property writes without one full dome sync per assignment.
+
+    Every ``world_dome_*`` property runs ``update_world_dome_from_properties``
+    on assignment; callers apply a single explicit sync after the batch.
+    """
+    global _dome_property_sync_suspended
+    previous = _dome_property_sync_suspended
+    _dome_property_sync_suspended = True
+    try:
+        yield
+    finally:
+        _dome_property_sync_suspended = previous
+
+
 def _set_scene_properties_from_info(scene: bpy.types.Scene, info: WorldEnvironmentInfo) -> None:
     props = scene.light_helper_property
-    props.world_dome_color = info.color
-    props.world_dome_strength = info.strength
-    props.world_dome_rotation = info.rotation
-    props.world_dome_mapping_location = info.location
-    props.world_dome_mapping_scale = info.scale
-    props.world_dome_radius = DEFAULT_RADIUS
-    props.world_dome_tint = info.tint
-    props.world_dome_tint_factor = info.tint_factor
-    props.world_dome_gamma = info.gamma
-    props.world_dome_saturation = info.saturation
-    props.world_dome_max_bounces = DEFAULT_MAX_TOTAL
-    props.world_dome_max_diffuse_bounces = DEFAULT_MAX_DIFFUSE
-    props.world_dome_max_glossy_bounces = DEFAULT_MAX_GLOSSY
-    props.world_dome_max_transmission_bounces = DEFAULT_MAX_TRANSMISSION
-    props.world_dome_visible_camera = True
-    props.world_dome_visible_diffuse = True
-    props.world_dome_visible_glossy = True
-    props.world_dome_visible_transmission = True
-    props.world_dome_visible_volume_scatter = True
-    props.world_dome_show_viewport = True
-    props.world_dome_lock_selection = True
+    with _suspended_dome_property_sync():
+        props.world_dome_color = info.color
+        props.world_dome_strength = info.strength
+        props.world_dome_rotation = info.rotation
+        props.world_dome_mapping_location = info.location
+        props.world_dome_mapping_scale = info.scale
+        props.world_dome_radius = DEFAULT_RADIUS
+        props.world_dome_tint = info.tint
+        props.world_dome_tint_factor = info.tint_factor
+        props.world_dome_gamma = info.gamma
+        props.world_dome_saturation = info.saturation
+        props.world_dome_max_bounces = DEFAULT_MAX_TOTAL
+        props.world_dome_max_diffuse_bounces = DEFAULT_MAX_DIFFUSE
+        props.world_dome_max_glossy_bounces = DEFAULT_MAX_GLOSSY
+        props.world_dome_max_transmission_bounces = DEFAULT_MAX_TRANSMISSION
+        props.world_dome_visible_camera = True
+        props.world_dome_visible_diffuse = True
+        props.world_dome_visible_glossy = True
+        props.world_dome_visible_transmission = True
+        props.world_dome_visible_volume_scatter = True
+        props.world_dome_show_viewport = True
+        props.world_dome_lock_selection = True
 
 
 def update_world_dome_from_properties(scene: bpy.types.Scene) -> None:
+    if _dome_property_sync_suspended:
+        return
     dome = ensure_world_dome_ownership(scene)
     props = getattr(scene, "light_helper_property", None)
     if dome is None or props is None:
@@ -1157,8 +1204,11 @@ def update_world_dome_from_properties(scene: bpy.types.Scene) -> None:
     tint = _node_with_role(material, NODE_ROLE_TINT)
     if tint is not None:
         color = tuple(props.world_dome_tint)
-        tint.inputs[0].default_value = max(0.0, min(1.0, float(props.world_dome_tint_factor)))
-        tint.inputs[2].default_value = (*color[:3], 1.0)
+        tint_factor, _tint_a, tint_b, _tint_result = _mix_color_sockets(tint)
+        if tint_factor is not None:
+            tint_factor.default_value = max(0.0, min(1.0, float(props.world_dome_tint_factor)))
+        if tint_b is not None:
+            tint_b.default_value = (*color[:3], 1.0)
     gamma = _node_with_role(material, NODE_ROLE_GAMMA)
     if gamma is not None:
         gamma.inputs["Gamma"].default_value = max(0.001, float(props.world_dome_gamma))
@@ -1560,30 +1610,6 @@ def ensure_sun_exclusions(
     return count
 
 
-def count_synced_suns(scene: bpy.types.Scene, dome: bpy.types.Object | None = None) -> tuple[int, int]:
-    dome = dome or get_world_dome(scene)
-    total = 0
-    synced = 0
-    if dome is None:
-        return synced, total
-    for obj in scene.objects:
-        if obj.type != "LIGHT" or obj.data is None or obj.data.type != "SUN":
-            continue
-        total += 1
-        collection = obj.light_linking.receiver_collection if hasattr(obj, "light_linking") else None
-        if collection is None:
-            continue
-        for index, child in enumerate(collection.children):
-            if not _is_managed(child, dome.get(WORLD_DOME_OWNER_KEY), ROLE_SUN_PROXY):
-                continue
-            if dome.name not in child.objects:
-                continue
-            if collection.collection_children[index].light_linking.link_state == "EXCLUDE":
-                synced += 1
-                break
-    return synced, total
-
-
 def convert_world_environment(scene: bpy.types.Scene) -> tuple[bpy.types.Object | None, str]:
     if scene is None or scene.render.engine != 'CYCLES':
         return None, "UNSUPPORTED_ENGINE"
@@ -1629,17 +1655,18 @@ def convert_world_environment(scene: bpy.types.Scene) -> tuple[bpy.types.Object 
 
         _set_scene_properties_from_info(scene, info)
         world_visibility = getattr(original_world, "cycles_visibility", None)
-        if world_visibility is not None:
-            props.world_dome_visible_camera = bool(
-                getattr(world_visibility, "camera", True)
-                and not scene.render.film_transparent
-            )
-            props.world_dome_visible_diffuse = bool(getattr(world_visibility, "diffuse", True))
-            props.world_dome_visible_glossy = bool(getattr(world_visibility, "glossy", True))
-            props.world_dome_visible_transmission = bool(getattr(world_visibility, "transmission", True))
-            props.world_dome_visible_volume_scatter = bool(getattr(world_visibility, "scatter", True))
-        elif scene.render.film_transparent:
-            props.world_dome_visible_camera = False
+        with _suspended_dome_property_sync():
+            if world_visibility is not None:
+                props.world_dome_visible_camera = bool(
+                    getattr(world_visibility, "camera", True)
+                    and not scene.render.film_transparent
+                )
+                props.world_dome_visible_diffuse = bool(getattr(world_visibility, "diffuse", True))
+                props.world_dome_visible_glossy = bool(getattr(world_visibility, "glossy", True))
+                props.world_dome_visible_transmission = bool(getattr(world_visibility, "transmission", True))
+                props.world_dome_visible_volume_scatter = bool(getattr(world_visibility, "scatter", True))
+            elif scene.render.film_transparent:
+                props.world_dome_visible_camera = False
 
         fallback_world = _create_fallback_world(owner_uuid, original_world)
         props.world_environment_original_world = original_world
@@ -1797,10 +1824,6 @@ def remove_duplicate_managed_domes(scene: bpy.types.Scene) -> int:
             bpy.data.materials.remove(material)
         removed += 1
     return removed
-
-
-def is_eevee_engine(engine: str) -> bool:
-    return engine in {"BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"}
 
 
 _syncing_suns = False

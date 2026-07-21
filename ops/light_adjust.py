@@ -75,7 +75,7 @@ class LLP_OT_solo_light(LightHelperOperator, bpy.types.Operator):
     bl_description = "Show only this light; press again to restore"
     bl_options = {'REGISTER', 'UNDO'}
 
-    index: bpy.props.IntProperty(default=-1, options={'SKIP_SAVE'})
+    index: bpy.props.IntProperty(default=-1, options={'HIDDEN', 'SKIP_SAVE'})
 
     @classmethod
     def poll(cls, context):

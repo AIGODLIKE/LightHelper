@@ -33,7 +33,11 @@ class TranslationHelper():
             pass
 
     def unregister(self):
-        bpy.app.translations.unregister(self.name)
+        try:
+            bpy.app.translations.unregister(self.name)
+        except ValueError:
+            # Mirror register(): tolerate a registration that never happened.
+            pass
 
 
 def register():

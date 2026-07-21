@@ -7,12 +7,13 @@ from ..utils import (
     get_item_visibility_restrictions,
     get_lights_from_effect_obj,
     get_pref,
+    is_eevee_engine,
     is_linking_initialized,
     iter_sorted_linking_items,
     iter_sorted_linking_lights,
     refresh_drop_poll_context,
 )
-from ..utils.icon import get_item_icon, get_light_icon
+from ..utils.icon import get_item_icon, get_light_icon, ui_icon
 
 
 def get_panel_light_obj(context) -> bpy.types.Object | None:
@@ -47,18 +48,11 @@ def get_builtin_panel(panel_name: str):
     return getattr(bpy.types, panel_name, None)
 
 
-def _is_eevee_engine(engine: str) -> bool:
-    return engine in {'BLENDER_EEVEE', 'BLENDER_EEVEE_NEXT'}
-
-
-def _panel_engine_override(engine: str) -> str:
-    # Built-in EEVEE light panels declare COMPAT_ENGINES = {'BLENDER_EEVEE'}.
-    if engine == 'BLENDER_EEVEE_NEXT':
-        return 'BLENDER_EEVEE'
-    return engine
-
-
 def _light_data_context(context, light_obj: bpy.types.Object, engine: str | None = None):
+    # Pass the engine id through unchanged. Each Blender version's built-in
+    # EEVEE light panels declare that version's real engine id in
+    # COMPAT_ENGINES ('BLENDER_EEVEE_NEXT' in 4.2-4.5, 'BLENDER_EEVEE' in
+    # 5.0+), so translating between the two breaks the polls on 4.2-4.5.
     if engine is None:
         engine = context.scene.render.engine
     return context.temp_override(
@@ -68,7 +62,7 @@ def _light_data_context(context, light_obj: bpy.types.Object, engine: str | None
         selected_editable_objects=[light_obj],
         light=light_obj.data,
         id=light_obj.data,
-        engine=_panel_engine_override(engine),
+        engine=engine,
     )
 
 
@@ -178,7 +172,7 @@ def draw_toggle_btn(layout,
 
     sub = row.row(align=True)
     op = sub.operator(
-        LLP_OT_toggle_light_linking.bl_idname, text='', icon='OUTLINER_OB_LIGHT',
+        LLP_OT_toggle_light_linking.bl_idname, text='', icon=ui_icon('OUTLINER_OB_LIGHT'),
         depress=receiver_on,
     )
     op.coll_type = CollectionType.RECEIVER.value
@@ -187,7 +181,7 @@ def draw_toggle_btn(layout,
 
     sub = row.row(align=True)
     op = sub.operator(
-        LLP_OT_toggle_light_linking.bl_idname, text='', icon='SHADING_SOLID',
+        LLP_OT_toggle_light_linking.bl_idname, text='', icon=ui_icon('SHADING_SOLID'),
         depress=blocker_on,
     )
     op.coll_type = CollectionType.BLOCKER.value
@@ -207,7 +201,7 @@ def draw_remove_button(layout,
         row.context_pointer_set("remove_light_linking_object", item)
     else:
         row.context_pointer_set("remove_light_linking_collection", item)
-    op = row.operator(LLP_OT_remove_light_linking.bl_idname, text='', icon="X", translate=False)
+    op = row.operator(LLP_OT_remove_light_linking.bl_idname, text='', icon=ui_icon("X"), translate=False)
     op.remove_all = True
     op.restore_default_when_empty = restore_default_when_empty
     op.tooltip = tooltip
@@ -217,14 +211,14 @@ def draw_add_box(col, context, light_obj):
     from ..ops import LLP_OT_link_selected_objs
     box = col.box()
     row = box.row()
-    row.label(text='', icon='ADD')
+    row.label(text='', icon=ui_icon('ADD'))
     row.prop(context.window_manager.light_helper_property, 'light_linking_add_collection', text='',
-             icon='OUTLINER_COLLECTION')
+             icon=ui_icon('OUTLINER_COLLECTION'))
     row.prop(context.window_manager.light_helper_property, 'light_linking_add_object', text='',
-             icon='OBJECT_DATA')
+             icon=ui_icon('OBJECT_DATA'))
     row = box.row()
     row.context_pointer_set("link_light_obj", light_obj)
-    row.operator(LLP_OT_link_selected_objs.bl_idname, icon='ADD')
+    row.operator(LLP_OT_link_selected_objs.bl_idname, icon=ui_icon('ADD'))
 
 
 class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
@@ -252,12 +246,12 @@ class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
         buttons.operator(
             LLP_OT_init_all_light_linking.bl_idname,
             text="",
-            icon='OUTLINER_OB_LIGHT',
+            icon=ui_icon('OUTLINER_OB_LIGHT'),
         )
         buttons.operator(
             LLP_OT_instances_data_all.bl_idname,
             text="",
-            icon='RESTRICT_INSTANCED_ON',
+            icon=ui_icon('RESTRICT_INSTANCED_ON'),
         )
 
         view_row = layout.row(align=True)
@@ -296,12 +290,12 @@ class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
             warning = layout.box()
             warning.alert = True
             row = warning.row(align=True)
-            row.label(text=p_("Pinned light source is unavailable in the current renderer"), icon='INFO')
-            row.prop(scene_props, 'light_linking_pin', text="", icon='PINNED')
+            row.label(text=p_("Pinned light source is unavailable in the current renderer"), icon=ui_icon('INFO'))
+            row.prop(scene_props, 'light_linking_pin', text="", icon=ui_icon('PINNED'))
 
         light_obj = get_panel_light_obj(context)
         if not light_obj:
-            layout.label(text=p_("No light selected"), icon='INFO')
+            layout.label(text=p_("No light selected"), icon=ui_icon('INFO'))
             return
 
         not_init = not is_linking_initialized(light_obj)
@@ -314,11 +308,11 @@ class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
             icon = get_item_icon(light_obj).get('icon', 'OBJECT_DATA')
         row.label(text=f"{light_obj.name}", icon=icon, translate=False)
         row.separator()
-        row.prop(context.scene.light_helper_property, 'light_linking_pin', text='', icon='PINNED')
+        row.prop(context.scene.light_helper_property, 'light_linking_pin', text='', icon=ui_icon('PINNED'))
         if LLP_OT_instances_data.poll(context):
-            row.operator(LLP_OT_instances_data.bl_idname, text="", icon='RESTRICT_INSTANCED_ON')
+            row.operator(LLP_OT_instances_data.bl_idname, text="", icon=ui_icon('RESTRICT_INSTANCED_ON'))
         if not not_init:
-            row.operator(LLP_OT_clear_light_linking.bl_idname, text="", icon="PANEL_CLOSE")
+            row.operator(LLP_OT_clear_light_linking.bl_idname, text="", icon=ui_icon("PANEL_CLOSE"))
 
         if not_init:
             with context.temp_override(add_light_linking_light_obj=light_obj):
@@ -326,15 +320,16 @@ class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
                 col.label(
                     text=p_(
                         "Init light linking collections. In Exclude mode, listed objects are excluded from this light."),
-                    icon='INFO',
+                    icon=ui_icon('INFO'),
                 )
-                op = col.operator(LLP_OT_add_light_linking.bl_idname, text='Init', icon='ADD')
+                op = col.operator(LLP_OT_add_light_linking.bl_idname, text='Init', icon=ui_icon('ADD'))
                 op.init = True
                 if LLP_OT_add_light_linking.poll(context) is False:
                     cc = col.column()
                     cc.alert = True
                     cc.label(text=p_("Please select a light or an object that can be illuminated"))
-                    cc.label(text=p_("Current type: ") + context.object.type)
+                    if context.object is not None:
+                        cc.label(text=p_("Current type: ") + context.object.type)
             return
 
         col.separator()
@@ -385,17 +380,19 @@ class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
         if context.scene.render.engine == 'CYCLES':
             col.prop(pref, "light_list_filter_type", expand=True, text="", icon_only=True)
         col.separator()
-        col.operator(LLP_OT_switch_filter_show.bl_idname, text="", icon=icon)
-        col.operator(LLP_OT_invert_filter_show.bl_idname, text="", icon='ARROW_LEFTRIGHT')
-        col.operator(LLP_OT_clear_selected_light_linking.bl_idname, text="", icon='TRASH')
+        col.operator(LLP_OT_switch_filter_show.bl_idname, text="", icon=ui_icon(icon))
+        col.operator(LLP_OT_invert_filter_show.bl_idname, text="", icon=ui_icon('ARROW_LEFTRIGHT'))
+        col.operator(LLP_OT_clear_selected_light_linking.bl_idname, text="", icon=ui_icon('TRASH'))
         col.separator()
-        col.prop(pref, "auto_fix_shared_linking", text="", icon='AUTO', toggle=True)
+        col.prop(pref, "auto_fix_shared_linking", text="", icon=ui_icon('AUTO'), toggle=True)
         row.template_list(
             LLT_UL_light.__name__, "",
             context.scene, "objects",
             context.scene.light_helper_property, "active_object_index",
             rows=7,
         )
+
+
 class VIEW3D_PT_light_helper_object_control(bpy.types.Panel):
     bl_label = ""
     bl_idname = "VIEW3D_PT_light_helper_object_control"
@@ -419,7 +416,7 @@ class VIEW3D_PT_light_helper_object_control(bpy.types.Panel):
             scene_props,
             "show_object_linking_panel",
             text="",
-            icon='HIDE_OFF' if scene_props.show_object_linking_panel else 'HIDE_ON',
+            icon=ui_icon('HIDE_OFF' if scene_props.show_object_linking_panel else 'HIDE_ON'),
             emboss=False,
         )
         row.separator()
@@ -439,7 +436,7 @@ class VIEW3D_PT_light_helper_object_control(bpy.types.Panel):
         col = layout.column(align=True)
         col.label(text=p_("Linked Objects"))
         if not linked:
-            col.label(text=p_("No linked objects"), icon='INFO')
+            col.label(text=p_("No linked objects"), icon=ui_icon('INFO'))
             return
         col.template_list(
             LLT_UL_linked_object.__name__,
@@ -462,15 +459,15 @@ class VIEW3D_PT_light_helper_object_control(bpy.types.Panel):
         row = col.row(align=True)
         row.label(text=f"{item.name}", icon=get_light_icon(item), translate=False)
         row.separator()
-        row.prop(context.scene.light_helper_property, 'object_linking_pin', text='', icon='PINNED')
+        row.prop(context.scene.light_helper_property, 'object_linking_pin', text='', icon=ui_icon('PINNED'))
 
         col.separator()
 
         obj_state_dict = get_lights_from_effect_obj(item, context)
         if len(obj_state_dict) == 0:
-            col.label(text=p_("No linking lights are affecting this object"), icon='LIGHT')
+            col.label(text=p_("No linking lights are affecting this object"), icon=ui_icon('LIGHT'))
             box = col.box()
-            box.prop(context.window_manager.light_helper_property, 'object_linking_add_object', text='', icon='ADD')
+            box.prop(context.window_manager.light_helper_property, 'object_linking_add_object', text='', icon=ui_icon('ADD'))
             return
 
         for (light_obj, state_info) in iter_sorted_linking_lights(obj_state_dict):
@@ -495,7 +492,7 @@ class VIEW3D_PT_light_helper_object_control(bpy.types.Panel):
             )
 
         box = col.box()
-        box.prop(context.window_manager.light_helper_property, 'object_linking_add_object', text='', icon='ADD')
+        box.prop(context.window_manager.light_helper_property, 'object_linking_add_object', text='', icon=ui_icon('ADD'))
 
 
 class VIEW3D_PT_light_helper_world_environment(bpy.types.Panel):
@@ -536,48 +533,50 @@ class VIEW3D_PT_light_helper_world_environment(bpy.types.Panel):
             if world is None:
                 box = layout.box()
                 box.alert = True
-                box.label(text=p_("The current scene has no World"), icon='ERROR')
+                box.label(text=p_("The current scene has no World"), icon=ui_icon('ERROR'))
             else:
                 source = layout.box()
-                source.label(text=p_("Source World: %s") % world.name, icon='WORLD_DATA', translate=False)
+                source.label(text=p_("Source World: %s") % world.name, icon=ui_icon('WORLD_DATA'), translate=False)
                 source.label(
                     text=p_("The HDRI or solid-color source is detected when conversion starts"),
-                    icon='INFO',
+                    icon=ui_icon('INFO'),
                 )
             convert = layout.row()
             convert.enabled = world is not None
-            convert.operator(LLP_OT_convert_world_environment.bl_idname, icon='WORLD')
+            convert.operator(LLP_OT_convert_world_environment.bl_idname, icon=ui_icon('WORLD'))
             return
 
         header = layout.box()
         row = header.row(align=True)
-        row.label(text=dome.name, icon='SPHERE', translate=False)
-        row.operator(LLP_OT_convert_world_environment.bl_idname, text="", icon='FILE_REFRESH')
-        row.operator(LLP_OT_select_world_environment_dome.bl_idname, text="", icon='RESTRICT_SELECT_OFF')
-        row.prop(props, "world_dome_show_viewport", text="", icon='HIDE_OFF' if props.world_dome_show_viewport else 'HIDE_ON')
-        row.prop(props, "world_dome_lock_selection", text="", icon='LOCKED' if props.world_dome_lock_selection else 'UNLOCKED')
+        row.label(text=dome.name, icon=ui_icon('SPHERE'), translate=False)
+        row.operator(LLP_OT_convert_world_environment.bl_idname, text="", icon=ui_icon('FILE_REFRESH'))
+        row.operator(LLP_OT_select_world_environment_dome.bl_idname, text="", icon=ui_icon('RESTRICT_SELECT_OFF'))
+        row.prop(props, "world_dome_show_viewport", text="",
+                 icon=ui_icon('HIDE_OFF' if props.world_dome_show_viewport else 'HIDE_ON'))
+        row.prop(props, "world_dome_lock_selection", text="",
+                 icon=ui_icon('LOCKED' if props.world_dome_lock_selection else 'UNLOCKED'))
         image_name = dome.get(WORLD_DOME_SOURCE_IMAGE_KEY, "")
         source_type = dome.get(
             WORLD_DOME_SOURCE_TYPE_KEY,
             WORLD_SOURCE_HDRI if image_name else WORLD_SOURCE_COLOR,
         )
         if image_name:
-            header.label(text=p_("HDRI: %s") % image_name, icon='IMAGE_DATA', translate=False)
+            header.label(text=p_("HDRI: %s") % image_name, icon=ui_icon('IMAGE_DATA'), translate=False)
         else:
-            header.label(text=p_("Source: Solid Color"), icon='COLOR')
+            header.label(text=p_("Source: Solid Color"), icon=ui_icon('COLOR'))
 
         depths = layout.box()
-        depths.label(text=p_("Ray Depth Limits (Cycles)"), icon='NODE_MATERIAL')
+        depths.label(text=p_("Ray Depth Limits (Cycles)"), icon=ui_icon('NODE_MATERIAL'))
         row = depths.row(align=True)
         row.prop(props, "world_dome_max_bounces")
         row.prop(props, "world_dome_max_diffuse_bounces")
         row = depths.row(align=True)
         row.prop(props, "world_dome_max_glossy_bounces")
         row.prop(props, "world_dome_max_transmission_bounces")
-        depths.label(text=p_("0 keeps direct rays and blocks indirect rays of that type"), icon='INFO')
+        depths.label(text=p_("0 keeps direct rays and blocks indirect rays of that type"), icon=ui_icon('INFO'))
 
         visibility = layout.box()
-        visibility.label(text=p_("Ray Visibility"), icon='HIDE_OFF')
+        visibility.label(text=p_("Ray Visibility"), icon=ui_icon('HIDE_OFF'))
         row = visibility.row(align=True)
         row.prop(props, "world_dome_visible_camera", toggle=True)
         row.prop(props, "world_dome_visible_diffuse", toggle=True)
@@ -587,7 +586,7 @@ class VIEW3D_PT_light_helper_world_environment(bpy.types.Panel):
         row.prop(props, "world_dome_visible_volume_scatter", toggle=True)
 
         color = layout.box()
-        color.label(text=p_("Environment"), icon='WORLD_DATA')
+        color.label(text=p_("Environment"), icon=ui_icon('WORLD_DATA'))
         if source_type == WORLD_SOURCE_COLOR:
             color.prop(props, "world_dome_color")
         color.prop(props, "world_dome_strength")
@@ -604,7 +603,7 @@ class VIEW3D_PT_light_helper_world_environment(bpy.types.Panel):
         geometry = layout.box()
         geometry.label(
             text=p_("Dome and Mapping") if source_type == WORLD_SOURCE_HDRI else p_("Dome"),
-            icon='MESH_UVSPHERE',
+            icon=ui_icon('MESH_UVSPHERE'),
         )
         geometry.prop(props, "world_dome_radius")
         if source_type == WORLD_SOURCE_HDRI:
@@ -612,13 +611,13 @@ class VIEW3D_PT_light_helper_world_environment(bpy.types.Panel):
             geometry.prop(props, "world_dome_mapping_scale")
 
         suns = layout.box()
-        suns.label(text=p_("Sun exclusions are synchronized automatically"), icon='LIGHT_SUN')
-        suns.label(text=p_("Sun exclusions are internal and do not replace user-authored links"), icon='INFO')
-        suns.operator(LLP_OT_sync_world_sun_exclusions.bl_idname, icon='FILE_REFRESH')
+        suns.label(text=p_("Sun exclusions are synchronized automatically"), icon=ui_icon('LIGHT_SUN'))
+        suns.label(text=p_("Sun exclusions are internal and do not replace user-authored links"), icon=ui_icon('INFO'))
+        suns.operator(LLP_OT_sync_world_sun_exclusions.bl_idname, icon=ui_icon('FILE_REFRESH'))
 
         restore = layout.row()
         restore.alert = True
-        restore.operator(LLP_OT_restore_world_environment.bl_idname, icon='LOOP_BACK')
+        restore.operator(LLP_OT_restore_world_environment.bl_idname, icon=ui_icon('LOOP_BACK'))
 
 
 class VIEW3D_PT_light_helper_light_properties(bpy.types.Panel):
@@ -699,7 +698,7 @@ class VIEW3D_PT_light_helper_eevee_light(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        if not _is_eevee_engine(context.scene.render.engine):
+        if not is_eevee_engine(context.scene.render.engine):
             return False
         return builtin_panel_poll('DATA_PT_EEVEE_light', context, get_panel_blender_light_obj(context))
 
@@ -721,7 +720,7 @@ class VIEW3D_PT_light_helper_eevee_light_shadow(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        if not _is_eevee_engine(context.scene.render.engine):
+        if not is_eevee_engine(context.scene.render.engine):
             return False
         return builtin_panel_poll('DATA_PT_EEVEE_light_shadow', context, get_panel_blender_light_obj(context))
 
@@ -749,7 +748,7 @@ class VIEW3D_PT_light_helper_eevee_light_influence(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        if not _is_eevee_engine(context.scene.render.engine):
+        if not is_eevee_engine(context.scene.render.engine):
             return False
         return builtin_panel_poll('DATA_PT_EEVEE_light_influence', context, get_panel_blender_light_obj(context))
 

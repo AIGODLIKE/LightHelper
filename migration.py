@@ -1,17 +1,7 @@
 import bpy
 
-LIGHT_HELPER_SAFE_KEY = "light_helper_safe"
 LIGHT_HELPER_MANAGED_KEY = "light_helper_managed"
 LIGHT_HELPER_MIGRATED_KEY = "light_helper_migrated_v047"
-
-
-def _is_legacy_safe_object(obj: bpy.types.Object) -> bool:
-    return bool(obj.get(LIGHT_HELPER_SAFE_KEY))
-
-
-def _remove_legacy_safe_objects() -> int:
-    # Safe placeholders are intentional again; do not strip them on cleanup.
-    return 0
 
 
 def _infer_linking_mode_from_collections(light: bpy.types.Object) -> str | None:
@@ -101,13 +91,13 @@ def migrate_scene(scene: bpy.types.Scene) -> bool:
 
 
 def run_legacy_cleanup() -> tuple[int, int]:
-    """Remove legacy leftovers and migrate unmigrated scenes.
+    """Migrate unmigrated scenes.
 
-    Returns (removed_safe_object_count, migrated_scene_count).
+    Returns (removed_object_count, migrated_scene_count). Safe placeholder
+    objects are intentional data, so the removed count is always 0.
     """
-    removed = _remove_legacy_safe_objects()
     migrated = 0
     for scene in bpy.data.scenes:
         if migrate_scene(scene):
             migrated += 1
-    return removed, migrated
+    return 0, migrated

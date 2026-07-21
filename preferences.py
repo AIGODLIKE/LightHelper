@@ -2,7 +2,7 @@ import bpy
 from bpy.props import StringProperty, EnumProperty, IntProperty, FloatProperty
 from bpy.types import AddonPreferences
 
-is_50 = bpy.app.version >= (5, 0, 0)
+from .utils.icon import ui_icon
 
 
 def update_filter_settings(_self, context):
@@ -41,25 +41,17 @@ class LLT_AddonPreferences(AddonPreferences):
     )
 
     def get_link(self):
+        # These keys are not bpy.props-defined, so dict-style access stores
+        # them as user custom properties on every supported Blender version.
+        # (bl_system_properties_get is documented as DEBUG ONLY in 5.x.)
         key = f"{self.light_list_filter_type}_link"
-        if is_50:
-            properties = self.bl_system_properties_get()
-            if key in properties:
-                return properties[key]
-            else:
-                return 0
-        else:
-            if key in self:
-                return self[key]
-            else:
-                return 0
+        if key in self:
+            return self[key]
+        return 0
 
     def set_link(self, value):
         key = f"{self.light_list_filter_type}_link"
-        if is_50:
-            self.bl_system_properties_get()[key] = value
-        else:
-            self[key] = value
+        self[key] = value
 
     light_link_filter_type: EnumProperty(
         name="Link Filter Type",
@@ -155,15 +147,15 @@ class LLT_AddonPreferences(AddonPreferences):
         row = column.row(align=True)
         row.prop(self, "linking_tool_hud_x")
         row.prop(self, "linking_tool_hud_y")
-        column.operator(LLP_OT_reset_linking_hud.bl_idname, icon='LOOP_BACK')
+        column.operator(LLP_OT_reset_linking_hud.bl_idname, icon=ui_icon('LOOP_BACK'))
         column.separator()
-        cleanup_row = column.row(align=True)
-        cleanup_row.enabled = LLP_OT_cleanup_legacy_data.poll(context)
-        cleanup_row.operator(LLP_OT_cleanup_legacy_data.bl_idname, icon='BRUSH_DATA')
+        # The button greys itself out through the operator poll; the previous
+        # manual poll() call ran the whole-scene legacy scan twice per redraw.
+        column.operator(LLP_OT_cleanup_legacy_data.bl_idname, icon=ui_icon('BRUSH_DATA'))
         column.separator()
         column.label(
             text=p_("Use Exclude mode to omit listed objects from a light, or Include mode to affect only listed objects."),
-            icon='INFO',
+            icon=ui_icon('INFO'),
         )
         column.label(
             text=p_("Restore clears light linking collections and resets default lighting behavior."),

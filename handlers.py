@@ -158,12 +158,6 @@ def sync_world_environment_sun_handler(enabled: bool | None = None) -> None:
         bpy.app.handlers.depsgraph_update_post.remove(world_environment_sun_sync_handler)
 
 
-def ensure_world_environment_sun_handler(scene: bpy.types.Scene) -> None:
-    """Enable automatic Sun exclusion after the feature is actively used."""
-    if _scene_needs_world_environment_sun_sync(scene):
-        sync_world_environment_sun_handler(True)
-
-
 @bpy.app.handlers.persistent
 def light_helper_load_post_handler(_filepath) -> None:
     """Refresh transient caches and handlers after Blender replaces file data."""

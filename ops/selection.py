@@ -16,7 +16,7 @@ class LLP_OT_select_item(LightHelperOperator, bpy.types.Operator):
     bl_description = "Select the object in the viewport or the collection in the outliner"
     bl_options = {'REGISTER', 'UNDO'}
 
-    tooltip: bpy.props.StringProperty(default="", options={'SKIP_SAVE'})
+    tooltip: bpy.props.StringProperty(default="", options={'HIDDEN', 'SKIP_SAVE'})
 
     @classmethod
     def poll(cls, context):
@@ -44,12 +44,10 @@ class LLP_OT_select_item(LightHelperOperator, bpy.types.Operator):
                 return {"CANCELLED"}
             self.select_obj_in_view3d(context, obj)
         elif coll:
-            area_outliner = get_area(context, 'OUTLINER')
-            if not area_outliner:
+            if get_area(context, 'OUTLINER') is None:
                 return {"CANCELLED"}
-
-            with context.temp_override(area=area_outliner, id=coll, region=area_outliner.regions[0]):
-                self.select_coll_in_outliner(context, coll)
+            # Setting the active layer collection needs no area override.
+            self.select_coll_in_outliner(context, coll)
         view_selected(context)
         return {"FINISHED"}
 
@@ -57,14 +55,16 @@ class LLP_OT_select_item(LightHelperOperator, bpy.types.Operator):
         if not is_in_view_layer(context, obj):
             return
         view_layer = context.view_layer
-        for selected_obj in view_layer.objects.selected:
+        # Copy before mutating: deselecting while iterating the live
+        # ``selected`` collection can skip items.
+        for selected_obj in list(view_layer.objects.selected):
             selected_obj.select_set(False)
         view_layer.objects.active = obj
         obj.select_set(True)
 
     def select_coll_in_outliner(self, context, coll: bpy.types.Collection):
         view_layer = context.view_layer
-        for selected_obj in view_layer.objects.selected:
+        for selected_obj in list(view_layer.objects.selected):
             selected_obj.select_set(False)
         lc = get_layer_collection_by_coll(context, coll)
         if not lc:

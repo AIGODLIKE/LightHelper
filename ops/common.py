@@ -10,11 +10,12 @@ class LightHelperOperator:
     bl_translation_context = TCTX
 
 
-def enum_coll_type(self, context):
-    items = []
-    for i in CollectionType:
-        items.append((i.value, p_(i.value.title()), ''))
-    return items
+# Static items: dynamic enum callbacks must keep references to the returned
+# strings alive, which the previous per-call implementation did not guarantee.
+COLL_TYPE_ITEMS = tuple(
+    (coll_type.value, coll_type.value.title(), "")
+    for coll_type in CollectionType
+)
 
 
 def get_light_obj(context):
