@@ -3,12 +3,13 @@ from bpy.app.translations import pgettext_iface as p_
 
 from ..utils import (
     CollectionType,
+    are_light_linking_collections_editable,
     init_light_linking,
     is_item_in_channel,
+    is_light_linking_source_editable,
     is_linking_initialized,
     link_item_both_channels,
     link_item_to_channel,
-    mark_managed_linking_collection,
     restore_light_linking,
 )
 from .common import COLL_TYPE_ITEMS, LightHelperOperator, get_light_obj, operator_tooltip_description
@@ -40,6 +41,9 @@ class LLP_OT_remove_light_linking(LightHelperOperator, bpy.types.Operator):
         if obj is None and coll is None:
             cls.poll_message_set(p_("No object or collection to remove"))
             return False
+        if not are_light_linking_collections_editable(light):
+            cls.poll_message_set(p_("Light linking data is read-only"))
+            return False
         return True
 
     @classmethod
@@ -55,23 +59,31 @@ class LLP_OT_remove_light_linking(LightHelperOperator, bpy.types.Operator):
         if item is None or light is None:
             self.report({'ERROR'}, p_("No object selected"))
             return {"CANCELLED"}
+        if not are_light_linking_collections_editable(light):
+            self.report({'WARNING'}, p_("Light linking data is read-only"))
+            return {"CANCELLED"}
 
         if self.remove_all:
-            link_item_to_channel(
+            receiver_changed = link_item_to_channel(
                 light, item, CollectionType.RECEIVER, False, context,
                 restore_default_when_empty=self.restore_default_when_empty,
             )
-            link_item_to_channel(
+            blocker_changed = link_item_to_channel(
                 light, item, CollectionType.BLOCKER, False, context,
                 restore_default_when_empty=self.restore_default_when_empty,
             )
+            changed = receiver_changed or blocker_changed
         else:
             coll_type = (CollectionType.RECEIVER if self.coll_type == CollectionType.RECEIVER.value
                          else CollectionType.BLOCKER)
-            link_item_to_channel(
+            changed = link_item_to_channel(
                 light, item, coll_type, False, context,
                 restore_default_when_empty=self.restore_default_when_empty,
             )
+
+        if not changed:
+            self.report({'WARNING'}, p_("Light linking could not be changed"))
+            return {"CANCELLED"}
 
         return {"FINISHED"}
 
@@ -86,11 +98,12 @@ class LLP_OT_clear_light_linking(LightHelperOperator, bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         obj = getattr(context, "clear_light_linking_object", None)
-        if obj is not None:
-            return True
-        light = get_light_obj(context)
+        light = obj if obj is not None else get_light_obj(context)
         if light is None:
             cls.poll_message_set(p_("No light selected"))
+            return False
+        if not is_light_linking_source_editable(light):
+            cls.poll_message_set(p_("Light linking data is read-only"))
             return False
         if not is_linking_initialized(light):
             cls.poll_message_set(p_("Light linking is not initialized"))
@@ -103,7 +116,12 @@ class LLP_OT_clear_light_linking(LightHelperOperator, bpy.types.Operator):
         if light is None:
             self.report({'ERROR'}, p_("No light selected"))
             return {"CANCELLED"}
-        restore_light_linking(light, context)
+        if not is_light_linking_source_editable(light):
+            self.report({'WARNING'}, p_("Light linking data is read-only"))
+            return {"CANCELLED"}
+        if not restore_light_linking(light, context):
+            self.report({'WARNING'}, p_("Light linking could not be changed"))
+            return {"CANCELLED"}
         self.report({'INFO'}, light.name + " " + p_("Restored"))
 
         if self.index != -1:
@@ -135,6 +153,9 @@ class LLP_OT_add_light_linking(LightHelperOperator, bpy.types.Operator):
         if not is_tool_light_source(light, context):
             cls.poll_message_set(p_("Selected object cannot use light linking"))
             return False
+        if not are_light_linking_collections_editable(light):
+            cls.poll_message_set(p_("Light linking data is read-only"))
+            return False
         return True
 
     def execute(self, context):
@@ -143,26 +164,21 @@ class LLP_OT_add_light_linking(LightHelperOperator, bpy.types.Operator):
         if not light:
             self.report({'ERROR'}, p_("No light selected"))
             return {"CANCELLED"}
+        if not are_light_linking_collections_editable(light):
+            self.report({'WARNING'}, p_("Light linking data is read-only"))
+            return {"CANCELLED"}
         if self.init:
-            init_light_linking(light, context)
+            changed = init_light_linking(light, context)
         else:
             if not obj or not light:
                 return {"CANCELLED"}
             coll_type = (CollectionType.RECEIVER if self.coll_type == CollectionType.RECEIVER.value
                          else CollectionType.BLOCKER)
-            if not is_linking_initialized(light):
-                init_light_linking(light, context)
-            coll = light.light_linking.receiver_collection if coll_type == CollectionType.RECEIVER else light.light_linking.blocker_collection
-            if coll is None:
-                coll_name = ("Light Linking for " if coll_type == CollectionType.RECEIVER
-                             else "Shadow Linking for ") + light.name
-                coll = bpy.data.collections.new(coll_name)
-                mark_managed_linking_collection(coll)
-                if coll_type == CollectionType.RECEIVER:
-                    light.light_linking.receiver_collection = coll
-                else:
-                    light.light_linking.blocker_collection = coll
-            link_item_to_channel(light, obj, coll_type, True, context)
+            changed = link_item_to_channel(light, obj, coll_type, True, context)
+
+        if not changed:
+            self.report({'WARNING'}, p_("Light linking could not be changed"))
+            return {"CANCELLED"}
 
         if self.index != -1:
             context.scene.light_helper_property.active_object_index = self.index
@@ -192,6 +208,9 @@ class LLP_OT_toggle_light_linking(LightHelperOperator, bpy.types.Operator):
         if obj is None and coll is None:
             cls.poll_message_set(p_("No object or collection to toggle"))
             return False
+        if not are_light_linking_collections_editable(light):
+            cls.poll_message_set(p_("Light linking data is read-only"))
+            return False
         return True
 
     @classmethod
@@ -208,15 +227,20 @@ class LLP_OT_toggle_light_linking(LightHelperOperator, bpy.types.Operator):
         coll = getattr(context, "toggle_light_linking_collection", None)
         if (not obj and not coll) or not light:
             return {"CANCELLED"}
+        if not are_light_linking_collections_editable(light):
+            self.report({'WARNING'}, p_("Light linking data is read-only"))
+            return {"CANCELLED"}
 
         item = obj if obj else coll
         coll_type = (CollectionType.RECEIVER if self.coll_type == CollectionType.RECEIVER.value
                      else CollectionType.BLOCKER)
         in_channel = is_item_in_channel(light, item, coll_type)
-        link_item_to_channel(
+        if not link_item_to_channel(
             light, item, coll_type, not in_channel, context,
             restore_default_when_empty=self.restore_default_when_empty,
-        )
+        ):
+            self.report({'WARNING'}, p_("Light linking could not be changed"))
+            return {"CANCELLED"}
         return {"FINISHED"}
 
 
@@ -228,8 +252,12 @@ class LLP_OT_link_selected_objs(LightHelperOperator, bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        if getattr(context, "link_light_obj", None) is None:
+        light = getattr(context, "link_light_obj", None)
+        if light is None:
             cls.poll_message_set(p_("Light linking is not initialized"))
+            return False
+        if not are_light_linking_collections_editable(light):
+            cls.poll_message_set(p_("Light linking data is read-only"))
             return False
         return True
 
@@ -240,10 +268,17 @@ class LLP_OT_link_selected_objs(LightHelperOperator, bpy.types.Operator):
         if not light:
             self.report({'ERROR'}, p_("No light selected"))
             return {"CANCELLED"}
+        if not are_light_linking_collections_editable(light):
+            self.report({'WARNING'}, p_("Light linking data is read-only"))
+            return {"CANCELLED"}
+        changed = False
         for obj in context.selected_objects:
             if obj == light or not is_linkable_object(obj):
                 continue
-            link_item_both_channels(light, obj, context)
+            changed = link_item_both_channels(light, obj, context) or changed
+        if not changed:
+            self.report({'WARNING'}, p_("Light linking could not be changed"))
+            return {"CANCELLED"}
         return {"FINISHED"}
 
 
@@ -255,9 +290,11 @@ class LLP_OT_clear_selected_light_linking(LightHelperOperator, bpy.types.Operato
 
     @classmethod
     def _iter_targets(cls, context):
-        from ..utils import is_linking_initialized, is_tool_light_source
+        from ..utils import is_light_linking_source_editable, is_linking_initialized, is_tool_light_source
         for obj in context.selected_objects:
-            if is_tool_light_source(obj, context) and is_linking_initialized(obj):
+            if (is_tool_light_source(obj, context)
+                    and is_light_linking_source_editable(obj)
+                    and is_linking_initialized(obj)):
                 yield obj
 
     @classmethod
@@ -273,12 +310,17 @@ class LLP_OT_clear_selected_light_linking(LightHelperOperator, bpy.types.Operato
         if not lights:
             self.report({'WARNING'}, p_("No selected lights with light linking"))
             return {"CANCELLED"}
-        for light in lights:
-            restore_light_linking(light, context)
+        cleared = [
+            light for light in lights
+            if restore_light_linking(light, context)
+        ]
+        if not cleared:
+            self.report({'WARNING'}, p_("Light linking could not be changed"))
+            return {"CANCELLED"}
         self.report(
             {'INFO'},
             format_lights_report(
-                lights,
+                cleared,
                 p_("Cleared light linking for %d light(s): %s"),
                 p_("Cleared light linking for %d light(s): %s, and %d more"),
             ),

@@ -7,7 +7,7 @@ from uuid import uuid4
 import bmesh
 import bpy
 
-from . import is_eevee_engine
+from . import is_eevee_engine, is_light_linking_source_editable
 
 
 WORLD_DOME_SCENE_UUID_KEY = "light_helper_world_dome_uuid"
@@ -1291,7 +1291,9 @@ def _remove_proxy(
     managed_proxy = _is_managed(proxy, owner_uuid, ROLE_SUN_PROXY)
     if not managed_proxy and not trusted_record:
         return
-    if dome is not None and proxy.objects.get(dome.name) == dome:
+    if (dome is not None
+            and proxy.is_editable
+            and proxy.objects.get(dome.name) == dome):
         try:
             proxy.objects.unlink(dome)
         except RuntimeError:
@@ -1306,16 +1308,18 @@ def _remove_proxy(
     if not removable:
         return
     if receiver is not None and proxy.name in receiver.children:
+        if not receiver.is_editable:
+            return
         try:
             receiver.children.unlink(proxy)
         except RuntimeError:
             return
-    if proxy.users == 0:
+    if proxy.is_editable and proxy.users == 0:
         bpy.data.collections.remove(proxy)
 
 
 def _clear_management_marker(collection) -> None:
-    if collection is None:
+    if collection is None or not collection.is_editable:
         return
     for key in (WORLD_DOME_OWNER_KEY, WORLD_DOME_ROLE_KEY):
         try:
@@ -1328,8 +1332,10 @@ def _restore_sun_record(
         scene: bpy.types.Scene,
         record,
         dome: bpy.types.Object,
-) -> None:
+) -> bool:
     light_obj = record.light
+    if not is_light_linking_source_editable(light_obj):
+        return False
     owner_uuid = dome.get(WORLD_DOME_OWNER_KEY)
     managed = record.managed_receiver
     original = record.original_receiver
@@ -1341,15 +1347,20 @@ def _restore_sun_record(
         trusted_record=True,
         dome=dome,
     )
-    if light_obj is None or not hasattr(light_obj, "light_linking"):
-        return
-
+    if (managed is not None and proxy is not None
+            and any(child == proxy for child in managed.children)):
+        # Keep the record when the managed receiver is still holding the
+        # proxy. This can happen when a damaged record points at a linked
+        # collection; deleting the record here would leave an active
+        # exclusion with no way to restore it later.
+        return False
     current = light_obj.light_linking.receiver_collection
     if current != managed:
-        if managed is not None and managed.users == 0 and _is_managed(
-                managed, owner_uuid, ROLE_SUN_RECEIVER_COPY):
+        if (managed is not None and managed.is_editable
+                and managed.users == 0 and _is_managed(
+                managed, owner_uuid, ROLE_SUN_RECEIVER_COPY)):
             bpy.data.collections.remove(managed)
-        return
+        return True
 
     if managed is not None and (record.receiver_created or managed != original):
         expected_role = ROLE_SUN_RECEIVER if record.receiver_created else ROLE_SUN_RECEIVER_COPY
@@ -1359,21 +1370,24 @@ def _restore_sun_record(
                 or managed_role not in {None, expected_role}):
             # The collection has been explicitly claimed for other data. The
             # owner-proven proxy is removed, but the current receiver survives.
-            return
-        _mark_managed(managed, owner_uuid, expected_role)
+            return True
+        if managed.is_editable:
+            _mark_managed(managed, owner_uuid, expected_role)
 
     if record.receiver_created:
         if managed is not None and not _collection_has_real_items(managed):
             light_obj.light_linking.receiver_collection = None
-            if managed.users == 0 and _is_managed(managed, owner_uuid, ROLE_SUN_RECEIVER):
+            if (managed.is_editable and managed.users == 0
+                    and _is_managed(managed, owner_uuid, ROLE_SUN_RECEIVER)):
                 bpy.data.collections.remove(managed)
         elif managed is not None and _collection_has_user_items(managed):
             _clear_management_marker(managed)
-        return
+        return True
 
     if managed is not None and managed != original and _collections_equivalent(managed, original):
         light_obj.light_linking.receiver_collection = original
-        if managed.users == 0 and _is_managed(managed, owner_uuid, ROLE_SUN_RECEIVER_COPY):
+        if (managed.is_editable and managed.users == 0
+                and _is_managed(managed, owner_uuid, ROLE_SUN_RECEIVER_COPY)):
             bpy.data.collections.remove(managed)
     elif managed is not None and managed != original:
         # Preserve edits made while converted. It is now ordinary user data.
@@ -1383,6 +1397,7 @@ def _restore_sun_record(
             and managed.get(WORLD_DOME_ROLE_KEY) == ROLE_SUN_RECEIVER
             and not _collection_has_real_items(managed)):
         light_obj.light_linking.receiver_collection = None
+    return True
 
 
 def remove_sun_exclusions(
@@ -1405,13 +1420,17 @@ def remove_sun_exclusions(
         light_obj = record.light
         if allowed is not None and light_obj not in allowed:
             continue
+        if not is_light_linking_source_editable(light_obj):
+            continue
         managed = record.managed_receiver
         proxy = record.proxy_collection
-        _restore_sun_record(scene, record, dome)
+        if not _restore_sun_record(scene, record, dome):
+            continue
         records.remove(index)
-        if proxy is not None and proxy.users == 0 and _is_managed(proxy, owner_uuid, ROLE_SUN_PROXY):
+        if (proxy is not None and proxy.is_editable and proxy.users == 0
+                and _is_managed(proxy, owner_uuid, ROLE_SUN_PROXY)):
             bpy.data.collections.remove(proxy)
-        if (managed is not None and managed.users == 0
+        if (managed is not None and managed.is_editable and managed.users == 0
                 and managed.get(WORLD_DOME_ROLE_KEY) in {ROLE_SUN_RECEIVER, ROLE_SUN_RECEIVER_COPY}):
             bpy.data.collections.remove(managed)
 
@@ -1421,6 +1440,8 @@ def remove_sun_exclusions(
         if allowed is not None and light_obj not in allowed:
             continue
         if not hasattr(light_obj, "light_linking"):
+            continue
+        if not is_light_linking_source_editable(light_obj):
             continue
         # Recovery path for files saved while the extension was disabled.
         receiver = light_obj.light_linking.receiver_collection
@@ -1435,7 +1456,7 @@ def remove_sun_exclusions(
         if (not _collection_has_real_items(receiver)
                 and receiver.get(WORLD_DOME_ROLE_KEY) == ROLE_SUN_RECEIVER):
             light_obj.light_linking.receiver_collection = None
-            if receiver.users == 0:
+            if receiver.is_editable and receiver.users == 0:
                 bpy.data.collections.remove(receiver)
 
 
@@ -1466,6 +1487,8 @@ def ensure_sun_exclusions(
             continue
         if not hasattr(light_obj, "light_linking"):
             continue
+        if not is_light_linking_source_editable(light_obj):
+            continue
         records = scene.light_helper_property.world_environment_sun_records
         record_indices = [
             index for index, item in enumerate(records)
@@ -1491,6 +1514,7 @@ def ensure_sun_exclusions(
                     and collection_role in {None, ROLE_SUN_RECEIVER_COPY}
                 )
             if (collection is not None
+                    and collection.is_editable
                     and record.managed_receiver == collection
                     and receiver_can_repair):
                 if record.receiver_created:
@@ -1499,7 +1523,8 @@ def ensure_sun_exclusions(
                     _mark_managed(collection, owner_uuid, ROLE_SUN_RECEIVER_COPY)
 
                 proxy = record.proxy_collection
-                if not _is_managed(proxy, owner_uuid, ROLE_SUN_PROXY):
+                if (not _is_managed(proxy, owner_uuid, ROLE_SUN_PROXY)
+                        or not proxy.is_editable):
                     _remove_proxy(
                         collection,
                         proxy,
@@ -1538,17 +1563,21 @@ def ensure_sun_exclusions(
             record = records[index]
             managed = record.managed_receiver
             proxy = record.proxy_collection
-            _restore_sun_record(scene, record, dome)
+            if not _restore_sun_record(scene, record, dome):
+                break
             records.remove(index)
-            if proxy is not None and proxy.users == 0 and _is_managed(
-                    proxy, owner_uuid, ROLE_SUN_PROXY):
+            if (proxy is not None and proxy.is_editable and proxy.users == 0 and _is_managed(
+                    proxy, owner_uuid, ROLE_SUN_PROXY)):
                 bpy.data.collections.remove(proxy)
-            if (managed is not None and managed.users == 0
+            if (managed is not None and managed.is_editable and managed.users == 0
                     and _is_managed(managed, owner_uuid)
                     and managed.get(WORLD_DOME_ROLE_KEY) in {
                         ROLE_SUN_RECEIVER, ROLE_SUN_RECEIVER_COPY,
                     }):
                 bpy.data.collections.remove(managed)
+
+        if any(record.light == light_obj for record in records):
+            continue
 
         collection = light_obj.light_linking.receiver_collection
         if collection is None and fallback_original is not None:
@@ -1599,12 +1628,14 @@ def ensure_sun_exclusions(
                         managed.children.unlink(proxy)
                     except RuntimeError:
                         pass
-                if proxy.users == 0 and _is_managed(proxy, owner_uuid, ROLE_SUN_PROXY):
+                if (proxy.is_editable and proxy.users == 0
+                        and _is_managed(proxy, owner_uuid, ROLE_SUN_PROXY)):
                     bpy.data.collections.remove(proxy)
             if managed is not None and managed != original and light_obj.light_linking.receiver_collection == managed:
                 light_obj.light_linking.receiver_collection = original
-            if managed is not None and managed != original and managed.users == 0 and _is_managed(
-                    managed, owner_uuid):
+            if (managed is not None and managed.is_editable
+                    and managed != original and managed.users == 0 and _is_managed(
+                    managed, owner_uuid)):
                 bpy.data.collections.remove(managed)
             continue
     return count

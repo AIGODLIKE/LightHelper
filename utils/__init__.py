@@ -6,6 +6,7 @@ import bpy
 from .. import __package__ as base_package
 
 LIGHT_HELPER_MANAGED_KEY = "light_helper_managed"
+LIGHT_HELPER_MANAGED_OWNER_KEY = "light_helper_managed_owner"
 LIGHT_HELPER_SAFE_KEY = "light_helper_safe"
 LIGHT_HELPER_SAFE_OWNER_KEY = "light_helper_safe_owner"
 LIGHT_HELPER_OWNER_UUID_KEY = "light_helper_owner_uuid"
@@ -28,8 +29,20 @@ class CollectionType(Enum):
     BLOCKER = 'blocker'
 
 
-def mark_managed_linking_collection(coll: bpy.types.Collection) -> None:
-    coll[LIGHT_HELPER_MANAGED_KEY] = True
+def mark_managed_linking_collection(
+        coll: bpy.types.Collection,
+        light: bpy.types.Object | None = None) -> None:
+    try:
+        coll[LIGHT_HELPER_MANAGED_KEY] = True
+    except (ReferenceError, RuntimeError, TypeError):
+        return
+    if light is not None:
+        owner_uuid = _light_owner_uuid(light, create=True)
+        if owner_uuid is not None:
+            try:
+                coll[LIGHT_HELPER_MANAGED_OWNER_KEY] = owner_uuid
+            except (ReferenceError, RuntimeError, TypeError):
+                pass
 
 
 def is_managed_linking_collection(coll: bpy.types.Collection) -> bool:
@@ -43,13 +56,19 @@ def is_safe_helper_object(obj: bpy.types.Object | None) -> bool:
 
 
 def _light_owner_uuid(light: bpy.types.Object, create: bool = False) -> str | None:
-    owner_uuid = light.get(LIGHT_HELPER_OWNER_UUID_KEY)
+    try:
+        owner_uuid = light.get(LIGHT_HELPER_OWNER_UUID_KEY)
+    except (ReferenceError, RuntimeError, TypeError):
+        return None
     if isinstance(owner_uuid, str) and owner_uuid:
         return owner_uuid
     if not create:
         return None
     owner_uuid = uuid4().hex
-    light[LIGHT_HELPER_OWNER_UUID_KEY] = owner_uuid
+    try:
+        light[LIGHT_HELPER_OWNER_UUID_KEY] = owner_uuid
+    except (ReferenceError, RuntimeError, TypeError):
+        return None
     return owner_uuid
 
 
@@ -64,11 +83,12 @@ def get_safe_obj(light: bpy.types.Object) -> bpy.types.Object | None:
     return None
 
 
-def remove_safe_helper_for_light(light: bpy.types.Object) -> None:
-    safe = get_safe_obj(light)
-    owner_uuid = _light_owner_uuid(light)
-    if (safe is None or owner_uuid is None
-            or safe.get(LIGHT_HELPER_SAFE_OWNER_KEY) != owner_uuid):
+def _remove_orphaned_safe_object(safe: bpy.types.Object | None) -> None:
+    if safe is None or not is_safe_helper_object(safe):
+        return
+    if not safe.is_editable:
+        return
+    if safe.users_collection or safe.users > 0:
         return
     mesh = safe.data if safe.type == 'MESH' else None
     bpy.data.objects.remove(safe, do_unlink=True)
@@ -76,11 +96,129 @@ def remove_safe_helper_for_light(light: bpy.types.Object) -> None:
         bpy.data.meshes.remove(mesh)
 
 
-def sync_safe_helpers_for_light(light: bpy.types.Object) -> None:
-    """Keep LLP_SAFE_* only when a linking collection has no other items (Blender empty-coll quirk)."""
-    if not hasattr(light, "light_linking"):
+def _linking_collection_used_by_other_light(
+        coll: bpy.types.Collection,
+        light: bpy.types.Object) -> bool:
+    for other in bpy.data.objects:
+        if other == light or not hasattr(other, "light_linking"):
+            continue
+        linking = other.light_linking
+        if linking.receiver_collection == coll or linking.blocker_collection == coll:
+            return True
+    return False
+
+
+def _rebind_managed_collection_owner(
+        light: bpy.types.Object,
+        previous_owner_uuid: str,
+        owner_uuid: str) -> None:
+    if not is_light_linking_source_editable(light):
         return
     linking = light.light_linking
+    collections = []
+    for coll in (linking.receiver_collection, linking.blocker_collection):
+        if coll is None or coll in collections:
+            continue
+        collections.append(coll)
+    for coll in collections:
+        if (_linking_collection_used_by_other_light(coll, light)
+                or coll.get(LIGHT_HELPER_MANAGED_OWNER_KEY) != previous_owner_uuid):
+            continue
+        try:
+            coll[LIGHT_HELPER_MANAGED_OWNER_KEY] = owner_uuid
+        except (TypeError, RuntimeError):
+            pass
+
+
+def _ensure_unique_light_owner_uuid(light: bpy.types.Object) -> str | None:
+    if not is_light_linking_source_editable(light):
+        return None
+    owner_uuid = _light_owner_uuid(light, create=True)
+    if owner_uuid is None:
+        return None
+    duplicate_owner = any(
+        other != light and other.get(LIGHT_HELPER_OWNER_UUID_KEY) == owner_uuid
+        for other in bpy.data.objects
+    )
+    if not duplicate_owner:
+        return owner_uuid
+
+    # A still-shared linking collection intentionally has one helper state.
+    # make_light_linking_single_user() assigns the new owner after copying it.
+    if hasattr(light, "light_linking"):
+        linking = light.light_linking
+        if any(
+                coll is not None and _linking_collection_used_by_other_light(coll, light)
+                for coll in (linking.receiver_collection, linking.blocker_collection)):
+            return owner_uuid
+
+    new_owner_uuid = uuid4().hex
+    try:
+        light[LIGHT_HELPER_OWNER_UUID_KEY] = new_owner_uuid
+    except (TypeError, RuntimeError):
+        return owner_uuid
+    _rebind_managed_collection_owner(light, owner_uuid, new_owner_uuid)
+    return new_owner_uuid
+
+
+def remove_safe_helper_for_light(light: bpy.types.Object) -> None:
+    if not is_light_linking_source_editable(light):
+        return
+    owner_uuid = _light_owner_uuid(light)
+    if owner_uuid is None or not hasattr(light, "light_linking"):
+        return
+
+    candidates = []
+    safe = get_safe_obj(light)
+    if safe is not None:
+        candidates.append(safe)
+
+    linking = light.light_linking
+    collections = []
+    for coll in (linking.receiver_collection, linking.blocker_collection):
+        if coll is None or coll in collections:
+            continue
+        collections.append(coll)
+
+    for coll in collections:
+        if not coll.is_editable:
+            continue
+        owned_safes = [
+            obj for obj in list(coll.objects)
+            if (is_safe_helper_object(obj)
+                and obj.get(LIGHT_HELPER_SAFE_OWNER_KEY) == owner_uuid)
+        ]
+        for owned_safe in owned_safes:
+            if owned_safe not in candidates:
+                candidates.append(owned_safe)
+        # Clearing one duplicate must not mutate a collection still used by
+        # another light. Its helper remains valid for that other owner.
+        if _linking_collection_used_by_other_light(coll, light):
+            continue
+        for owned_safe in owned_safes:
+            try:
+                coll.objects.unlink(owned_safe)
+            except RuntimeError:
+                pass
+
+    for candidate in candidates:
+        _remove_orphaned_safe_object(candidate)
+
+
+def sync_safe_helpers_for_light(light: bpy.types.Object) -> bool:
+    """Keep LLP_SAFE_* only when a linking collection has no other items (Blender empty-coll quirk)."""
+    if not are_light_linking_collections_editable(light):
+        return False
+    previous_helpers = []
+    linking = light.light_linking
+    for coll in (linking.receiver_collection, linking.blocker_collection):
+        if coll is None:
+            continue
+        for obj in coll.objects:
+            if is_safe_helper_object(obj) and obj not in previous_helpers:
+                previous_helpers.append(obj)
+    if _ensure_unique_light_owner_uuid(light) is None:
+        return False
     mode = get_linking_mode(light)
     used = False
     for coll in (linking.receiver_collection, linking.blocker_collection):
@@ -110,8 +248,11 @@ def sync_safe_helpers_for_light(light: bpy.types.Object) -> None:
             coll.objects.link(safe)
         _set_item_link_state(coll, safe, mode)
         used = True
+    for previous_helper in previous_helpers:
+        _remove_orphaned_safe_object(previous_helper)
     if not used:
         remove_safe_helper_for_light(light)
+    return True
 
 
 def get_pref(context=None):
@@ -138,6 +279,36 @@ def is_original_id(id_block) -> bool:
     if isinstance(id_block, bpy.types.ID):
         return not getattr(id_block, "is_evaluated", False)
     return True
+
+
+def is_light_linking_source_editable(light: bpy.types.Object | None) -> bool:
+    """Match Blender's writable light-linking source rules."""
+    light = resolve_original_id(light)
+    try:
+        if (not isinstance(light, bpy.types.Object)
+                or not is_original_id(light)
+                or not hasattr(light, "light_linking")
+                or not light.is_editable):
+            return False
+        override = light.override_library
+        return override is None or not override.is_system_override
+    except (AttributeError, ReferenceError, RuntimeError, TypeError):
+        return False
+
+
+def are_light_linking_collections_editable(light: bpy.types.Object | None) -> bool:
+    """Check the source and both currently assigned channel collections."""
+    light = resolve_original_id(light)
+    if not is_light_linking_source_editable(light):
+        return False
+    try:
+        linking = light.light_linking
+        return all(
+            coll is None or coll.is_editable
+            for coll in (linking.receiver_collection, linking.blocker_collection)
+        )
+    except (AttributeError, ReferenceError, RuntimeError, TypeError):
+        return False
 
 
 def is_linking_initialized(light: bpy.types.Object) -> bool:
@@ -169,17 +340,23 @@ def enum_coll_children_from_coll(coll: bpy.types.Collection) -> dict:
     return {child: coll.collection_children[i] for i, child in enumerate(coll.children)}
 
 
-def _set_item_link_state(coll: bpy.types.Collection, item, mode: str) -> None:
+def _set_item_link_state(coll: bpy.types.Collection, item, mode: str) -> bool:
+    entry = None
     if isinstance(item, bpy.types.Object):
         coll_objs = enum_coll_objs_from_coll(coll)
-        coll_obj = coll_objs.get(item)
-        if coll_obj:
-            coll_obj.light_linking.link_state = mode
+        entry = coll_objs.get(item)
     elif isinstance(item, bpy.types.Collection):
         coll_children = enum_coll_children_from_coll(coll)
-        coll_child = coll_children.get(item)
-        if coll_child:
-            coll_child.light_linking.link_state = mode
+        entry = coll_children.get(item)
+    if entry is None:
+        return False
+    try:
+        if entry.light_linking.link_state == mode:
+            return False
+        entry.light_linking.link_state = mode
+        return True
+    except (AttributeError, ReferenceError, RuntimeError, TypeError):
+        return False
 
 
 def is_internal_world_dome_link(
@@ -208,46 +385,82 @@ def is_internal_world_dome_link(
         return False
 
 
-def apply_linking_mode_to_light(light: bpy.types.Object, mode: str | None = None) -> None:
+def apply_linking_mode_to_light(light: bpy.types.Object, mode: str | None = None) -> bool:
+    light = resolve_original_id(light)
+    if not are_light_linking_collections_editable(light):
+        return False
     if mode is None:
         mode = get_linking_mode(light)
+    changed = False
     for coll_type in (CollectionType.RECEIVER, CollectionType.BLOCKER):
         coll = get_linking_coll(light, coll_type)
         if coll is None:
             continue
-        for index, coll_obj in enumerate(coll.collection_objects):
+        for index, _coll_obj in enumerate(coll.collection_objects):
             item = coll.objects[index]
             if is_internal_world_dome_link(light, item, coll_type):
-                coll_obj.light_linking.link_state = StateValue.EXCLUDE.value
+                changed = _set_item_link_state(
+                    coll, item, StateValue.EXCLUDE.value,
+                ) or changed
                 continue
-            coll_obj.light_linking.link_state = mode
-        for index, coll_child in enumerate(coll.collection_children):
+            changed = _set_item_link_state(coll, item, mode) or changed
+        for index, _coll_child in enumerate(coll.collection_children):
             item = coll.children[index]
             if is_internal_world_dome_link(light, item, coll_type):
-                coll_child.light_linking.link_state = StateValue.EXCLUDE.value
+                changed = _set_item_link_state(
+                    coll, item, StateValue.EXCLUDE.value,
+                ) or changed
                 continue
-            coll_child.light_linking.link_state = mode
+            changed = _set_item_link_state(coll, item, mode) or changed
+    return changed
 
 
-def init_light_linking(light: bpy.types.Object, context: bpy.types.Context | None = None) -> None:
+def init_light_linking(light: bpy.types.Object, context: bpy.types.Context | None = None) -> bool:
     # Prefer RNA over ops: light_linking_*_collection_new.poll rejects hidden objects.
+    light = resolve_original_id(light)
+    if not are_light_linking_collections_editable(light):
+        return False
+    if _ensure_unique_light_owner_uuid(light) is None:
+        return False
+
     linking = light.light_linking
-    for coll_type in (CollectionType.RECEIVER, CollectionType.BLOCKER):
-        coll = get_linking_coll(light, coll_type)
-        if coll is None:
+    created = []
+    try:
+        for coll_type in (CollectionType.RECEIVER, CollectionType.BLOCKER):
+            coll = get_linking_coll(light, coll_type)
+            if coll is not None:
+                continue
             coll = bpy.data.collections.new(_managed_linking_coll_name(light, coll_type))
+            created.append((coll_type, coll))
+            mark_managed_linking_collection(coll, light)
             if coll_type == CollectionType.RECEIVER:
                 linking.receiver_collection = coll
             else:
                 linking.blocker_collection = coll
-        mark_managed_linking_collection(coll)
-    sync_safe_helpers_for_light(light)
+        if not sync_safe_helpers_for_light(light):
+            raise RuntimeError("Light linking collections are not editable")
+    except (AttributeError, ReferenceError, RuntimeError, TypeError):
+        remove_safe_helper_for_light(light)
+        for coll_type, coll in reversed(created):
+            try:
+                if get_linking_coll(light, coll_type) == coll:
+                    if coll_type == CollectionType.RECEIVER:
+                        linking.receiver_collection = None
+                    else:
+                        linking.blocker_collection = None
+                if coll.is_editable and coll.users == 0:
+                    bpy.data.collections.remove(coll)
+            except (ReferenceError, RuntimeError, TypeError):
+                pass
+        return False
+    return is_linking_initialized(light)
 
 
 def ensure_linking_coll(coll_type: CollectionType, light: bpy.types.Object,
-                        context: bpy.types.Context | None = None) -> bpy.types.Collection:
+                        context: bpy.types.Context | None = None) -> bpy.types.Collection | None:
     if not is_linking_initialized(light):
-        init_light_linking(light, context)
+        if not init_light_linking(light, context):
+            return None
     return get_linking_coll(light, coll_type)
 
 
@@ -319,70 +532,104 @@ def has_real_linking_items(light: bpy.types.Object) -> bool:
 def link_item_to_channel(light: bpy.types.Object, item,
                          coll_type: CollectionType, enabled: bool,
                          context: bpy.types.Context | None = None, *,
-                         restore_default_when_empty: bool = False) -> None:
+                         restore_default_when_empty: bool = False) -> bool:
     light = resolve_original_id(light)
     item = resolve_original_id(item)
-    if not is_original_id(light) or not is_original_id(item):
-        return
+    if (not are_light_linking_collections_editable(light)
+            or not is_original_id(item)):
+        return False
     coll = get_linking_coll(light, coll_type)
     if coll is None:
         if not enabled:
-            return
+            return False
         try:
             coll = ensure_linking_coll(coll_type, light, context)
-        except RuntimeError:
-            return
+        except (AttributeError, ReferenceError, RuntimeError, TypeError):
+            return False
+    if coll is None or not coll.is_editable:
+        return False
     mode = get_linking_mode(light)
+    changed = False
     try:
         if isinstance(item, bpy.types.Object):
             if enabled:
                 if not collection_has_object(coll, item):
                     coll.objects.link(item)
-                _set_item_link_state(coll, item, mode)
+                    changed = True
+                changed = _set_item_link_state(coll, item, mode) or changed
             elif collection_has_object(coll, item):
                 coll.objects.unlink(item)
+                changed = True
         elif isinstance(item, bpy.types.Collection):
             if enabled:
                 if not collection_has_child(coll, item):
                     coll.children.link(item)
-                _set_item_link_state(coll, item, mode)
+                    changed = True
+                changed = _set_item_link_state(coll, item, mode) or changed
             elif collection_has_child(coll, item):
                 coll.children.unlink(item)
-    except RuntimeError:
-        return
+                changed = True
+        else:
+            return False
+    except (AttributeError, ReferenceError, RuntimeError, TypeError):
+        return False
+
+    if not changed:
+        return False
 
     if restore_default_when_empty and not enabled and not has_real_linking_items(light):
-        restore_light_linking(light, context)
-        return
+        if restore_light_linking(light, context):
+            return True
 
-    sync_safe_helpers_for_light(light)
+    if not sync_safe_helpers_for_light(light):
+        return False
     from .overlay import notify_linking_changed
     notify_linking_changed(context)
+    return True
 
 
 def link_item_both_channels(light: bpy.types.Object, item,
-                            context: bpy.types.Context | None = None) -> None:
-    link_item_to_channel(light, item, CollectionType.RECEIVER, True, context)
-    link_item_to_channel(light, item, CollectionType.BLOCKER, True, context)
+                            context: bpy.types.Context | None = None) -> bool:
+    if not are_light_linking_collections_editable(light):
+        return False
+    receiver_changed = link_item_to_channel(
+        light, item, CollectionType.RECEIVER, True, context,
+    )
+    blocker_changed = link_item_to_channel(
+        light, item, CollectionType.BLOCKER, True, context,
+    )
+    return bool(
+        (receiver_changed or blocker_changed)
+        and is_item_in_channel(light, item, CollectionType.RECEIVER)
+        and is_item_in_channel(light, item, CollectionType.BLOCKER)
+    )
 
 
 def toggle_item_both_channels(light: bpy.types.Object, item,
                               context: bpy.types.Context | None = None, *,
-                              restore_default_when_empty: bool = False) -> bool:
-    """Toggle receiver and blocker channels together. Returns True if channels are enabled."""
+                              restore_default_when_empty: bool = False) -> bool | None:
+    """Toggle both channels, returning their new state or None when the mutation failed."""
+    if not are_light_linking_collections_editable(light):
+        return None
     if not is_linking_initialized(light):
-        init_light_linking(light, context)
+        if not init_light_linking(light, context):
+            return None
     receiver = is_item_in_channel(light, item, CollectionType.RECEIVER)
     blocker = is_item_in_channel(light, item, CollectionType.BLOCKER)
     enable = not (receiver and blocker)
-    link_item_to_channel(
+    receiver_changed = link_item_to_channel(
         light, item, CollectionType.RECEIVER, enable, context,
         restore_default_when_empty=restore_default_when_empty,
     )
-    link_item_to_channel(
+    blocker_changed = link_item_to_channel(
         light, item, CollectionType.BLOCKER, enable, context,
         restore_default_when_empty=restore_default_when_empty,
     )
+    receiver_now = is_item_in_channel(light, item, CollectionType.RECEIVER)
+    blocker_now = is_item_in_channel(light, item, CollectionType.BLOCKER)
+    if (receiver_now != enable or blocker_now != enable
+            or not (receiver_changed or blocker_changed)):
+        return None
     return enable
 
 
@@ -511,8 +758,17 @@ def select_tool_light(context: bpy.types.Context, light: bpy.types.Object) -> No
         view_selected(context)
 
 
-def remove_orphaned_managed_collection(coll: bpy.types.Collection | None) -> None:
-    if coll is None or not is_managed_linking_collection(coll):
+def remove_orphaned_managed_collection(
+        coll: bpy.types.Collection | None,
+        light: bpy.types.Object) -> None:
+    owner_uuid = _light_owner_uuid(light)
+    if (coll is None or not coll.is_editable
+            or not is_managed_linking_collection(coll)
+            or owner_uuid is None
+            or coll.get(LIGHT_HELPER_MANAGED_OWNER_KEY) != owner_uuid):
+        return
+    # Keep a managed collection if the user has linked or instanced it elsewhere.
+    if coll.users > 0:
         return
     for obj in bpy.data.objects:
         if not hasattr(obj, "light_linking"):
@@ -523,7 +779,16 @@ def remove_orphaned_managed_collection(coll: bpy.types.Collection | None) -> Non
     bpy.data.collections.remove(coll)
 
 
-def restore_light_linking(light: bpy.types.Object, context: bpy.types.Context | None = None) -> None:
+def restore_light_linking(light: bpy.types.Object, context: bpy.types.Context | None = None) -> bool:
+    light = resolve_original_id(light)
+    if not is_light_linking_source_editable(light):
+        return False
+    linking = light.light_linking
+    receiver = linking.receiver_collection
+    blocker = linking.blocker_collection
+    if receiver is None and blocker is None:
+        return False
+
     active_world_domes = []
     if light.type == 'LIGHT' and light.data is not None and light.data.type == 'SUN':
         from .world_environment import get_world_dome, remove_sun_exclusions
@@ -536,14 +801,16 @@ def restore_light_linking(light: bpy.types.Object, context: bpy.types.Context | 
             remove_sun_exclusions(scene, dome, [light])
             if scene.render.engine == 'CYCLES':
                 active_world_domes.append((scene, dome))
-    linking = light.light_linking
-    receiver = linking.receiver_collection
-    blocker = linking.blocker_collection
-    linking.receiver_collection = None
-    linking.blocker_collection = None
     remove_safe_helper_for_light(light)
-    remove_orphaned_managed_collection(receiver)
-    remove_orphaned_managed_collection(blocker)
+    try:
+        linking.receiver_collection = None
+        linking.blocker_collection = None
+    except (AttributeError, ReferenceError, RuntimeError, TypeError):
+        return False
+    same_collection = receiver is not None and receiver == blocker
+    remove_orphaned_managed_collection(receiver, light)
+    if not same_collection:
+        remove_orphaned_managed_collection(blocker, light)
     # A converted world dome must remain excluded from Sun lights even when the
     # user restores all ordinary links for that Sun.
     if active_world_domes:
@@ -552,6 +819,7 @@ def restore_light_linking(light: bpy.types.Object, context: bpy.types.Context | 
             ensure_sun_exclusions(scene, dome, [light])
     from .overlay import notify_linking_changed
     notify_linking_changed(context)
+    return True
 
 
 def get_all_light_effect_items_state(light: bpy.types.Object) -> dict:
@@ -688,7 +956,7 @@ def _collect_objects_linked_by_lights(
                 if is_linkable_object(item):
                     linked.add(resolve_original_id(item) or item)
             elif isinstance(item, bpy.types.Collection):
-                for child in item.objects:
+                for child in item.all_objects:
                     if is_linkable_object(child):
                         linked.add(resolve_original_id(child) or child)
     return tuple(sorted(linked, key=lambda o: o.name.casefold()))
@@ -858,48 +1126,114 @@ def check_material_including_emission(
         check_depth=5,
         cache: dict | None = None,
 ) -> bool:
+    cache_key = (obj.as_pointer(), check_depth)
     if cache is not None:
-        cache_key = (obj.name_full, check_depth)
         if cache_key in cache:
             return cache[cache_key]
 
-    def node_tree_search(node: bpy.types.Node, depth=0):
-        if depth > check_depth:
-            return None
-        for input_point in node.inputs:
-            for link in input_point.links:
+    def socket_value_is_positive(socket, *, color: bool = False) -> bool:
+        if socket is None:
+            return False
+
+        def value_is_positive(value) -> bool:
+            if color and not isinstance(value, (int, float)):
+                return any(float(component) > 0.0 for component in value[:3])
+            return float(value) > 0.0
+
+        if socket.is_linked:
+            for link in socket.links:
                 from_node = link.from_node
-                if from_node.type in {"ADD_SHADER", "MIX_SHADER"}:
-                    find = node_tree_search(from_node, depth + 1)
-                    if find:
-                        return find
-                elif from_node.type == "EMISSION":
+                if from_node.type not in {"VALUE", "RGB"}:
+                    # Dynamic inputs cannot be evaluated safely here, but they
+                    # can produce a non-zero value at render time.
                     return True
-                elif from_node.type == "BSDF_PRINCIPLED":
-                    for i in from_node.inputs:
-                        if i.identifier == "Emission Strength" and i.default_value > 0:
-                            return True
-                elif from_node.type == "GROUP":
-                    group_out_node = find_material_output_node(from_node.node_tree.nodes)
-                    if group_out_node:
-                        find = node_tree_search(group_out_node) is not None
-                        if find:
-                            return find
-                else:
-                    find = node_tree_search(link.from_node, depth + 1)
-                    if find:
-                        return find
+                value = link.from_socket.default_value
+                if value_is_positive(value):
+                    return True
+            return False
+
+        return value_is_positive(socket.default_value)
+
+    def input_by_identifier(node: bpy.types.Node, *identifiers: str):
+        return next(
+            (socket for socket in node.inputs if socket.identifier in identifiers),
+            None,
+        )
+
+    def emission_node_is_active(node: bpy.types.Node) -> bool:
+        if node.type == "EMISSION":
+            color = input_by_identifier(node, "Color")
+            strength = input_by_identifier(node, "Strength")
+        else:
+            color = input_by_identifier(node, "Emission Color", "Emission")
+            strength = input_by_identifier(node, "Emission Strength")
+        return (
+            socket_value_is_positive(color, color=True)
+            and socket_value_is_positive(strength)
+        )
+
+    def socket_has_emission(socket, depth: int, visiting: set[tuple[int, str]]) -> bool:
+        return any(
+            node_has_emission(link.from_node, link.from_socket, depth, visiting)
+            for link in socket.links
+        )
+
+    def node_has_emission(
+            node: bpy.types.Node,
+            output_socket,
+            depth: int,
+            visiting: set[tuple[int, str]],
+    ) -> bool:
+        if depth > check_depth:
+            return False
+
+        output_identifier = getattr(output_socket, "identifier", "")
+        visit_key = (node.as_pointer(), output_identifier)
+        if visit_key in visiting:
+            return False
+        visiting.add(visit_key)
+        try:
+            if node.type in {"EMISSION", "BSDF_PRINCIPLED"}:
+                return emission_node_is_active(node)
+
+            if node.type == "GROUP":
+                node_tree = node.node_tree
+                if node_tree is None:
+                    return False
+                group_output = find_material_output_node(node_tree.nodes)
+                if group_output is None:
+                    return False
+                group_socket = next(
+                    (
+                        socket for socket in group_output.inputs
+                        if socket.identifier == output_identifier
+                    ),
+                    None,
+                )
+                return bool(
+                    group_socket
+                    and socket_has_emission(group_socket, depth + 1, visiting)
+                )
+
+            return any(
+                socket_has_emission(input_socket, depth + 1, visiting)
+                for input_socket in node.inputs
+                if input_socket.is_linked
+            )
+        finally:
+            visiting.remove(visit_key)
 
     result = False
     for material in obj.material_slots:
         mat = material.material
         if mat and mat.use_nodes:
             out_node = find_material_output_node(mat.node_tree.nodes)
-            if out_node and node_tree_search(out_node):
+            surface = input_by_identifier(out_node, "Surface") if out_node else None
+            if surface and socket_has_emission(surface, 0, set()):
                 result = True
                 break
     if cache is not None:
-        cache[(obj.name_full, check_depth)] = result
+        cache[cache_key] = result
     return result
 
 
@@ -965,11 +1299,15 @@ def has_shared_linking_collections(light: bpy.types.Object) -> bool:
     linking = light.light_linking
     receiver = linking.receiver_collection
     blocker = linking.blocker_collection
-    return (receiver is not None and receiver.users > 1) or (blocker is not None and blocker.users > 1)
+    return any(
+        coll is not None and _linking_collection_used_by_other_light(coll, light)
+        for coll in (receiver, blocker)
+    )
 
 
 def split_shared_linking_collection(light: bpy.types.Object, coll_type: CollectionType) -> bool:
-    if not hasattr(light, "light_linking"):
+    light = resolve_original_id(light)
+    if not is_light_linking_source_editable(light):
         return False
     linking = light.light_linking
     coll = get_linking_coll(light, coll_type)
@@ -982,34 +1320,66 @@ def split_shared_linking_collection(light: bpy.types.Object, coll_type: Collecti
         linking.receiver_collection = new_coll
     else:
         linking.blocker_collection = new_coll
-    apply_linking_mode_to_light(light)
     return True
 
 
 def make_light_linking_single_user(light: bpy.types.Object) -> bool:
-    if not hasattr(light, "light_linking"):
+    light = resolve_original_id(light)
+    if not is_light_linking_source_editable(light):
         return False
+    if not has_shared_linking_collections(light):
+        return False
+
+    old_helpers = []
+    linking = light.light_linking
+    for coll in (linking.receiver_collection, linking.blocker_collection):
+        if coll is None:
+            continue
+        for obj in coll.objects:
+            if is_safe_helper_object(obj) and obj not in old_helpers:
+                old_helpers.append(obj)
+
     changed = False
+    split_collections = []
     if split_shared_linking_collection(light, CollectionType.RECEIVER):
         changed = True
+        split_collections.append(light.light_linking.receiver_collection)
     if split_shared_linking_collection(light, CollectionType.BLOCKER):
         changed = True
+        split_collections.append(light.light_linking.blocker_collection)
+    if changed:
+        # Object.copy() duplicates IDProperties, so a copied light inherits the
+        # source owner UUID. Give the separated light its own helper identity.
+        previous_owner_uuid = _light_owner_uuid(light)
+        light[LIGHT_HELPER_OWNER_UUID_KEY] = uuid4().hex
+        owner_uuid = _light_owner_uuid(light)
+        for coll in split_collections:
+            if coll is not None:
+                mark_managed_linking_collection(coll, light)
+        if previous_owner_uuid is not None and owner_uuid is not None:
+            _rebind_managed_collection_owner(light, previous_owner_uuid, owner_uuid)
+        sync_safe_helpers_for_light(light)
+        for old_helper in old_helpers:
+            _remove_orphaned_safe_object(old_helper)
     return changed
 
 
 def find_duplicate_source_object(obj: bpy.types.Object) -> bpy.types.Object | None:
     """Resolve a duplicate source only from explicit tracking or shared light-linking data."""
-    source = obj.get(LIGHT_HELPER_DUP_SOURCE_KEY)
+    try:
+        source = obj.get(LIGHT_HELPER_DUP_SOURCE_KEY)
+    except (AttributeError, ReferenceError, RuntimeError, TypeError, ValueError):
+        source = None
     if isinstance(source, bpy.types.Object) and source != obj:
         return source
 
-    if obj.type == 'LIGHT' and hasattr(obj, "light_linking"):
+    if hasattr(obj, "light_linking"):
         linking = obj.light_linking
         for coll in (linking.receiver_collection, linking.blocker_collection):
-            if coll is None or coll.users <= 1:
+            if coll is None:
                 continue
             for other in bpy.data.objects:
-                if other == obj or other.type != 'LIGHT' or not hasattr(other, "light_linking"):
+                if other == obj or not hasattr(other, "light_linking"):
                     continue
                 other_linking = other.light_linking
                 if (other_linking.receiver_collection == coll
@@ -1019,10 +1389,30 @@ def find_duplicate_source_object(obj: bpy.types.Object) -> bpy.types.Object | No
     return None
 
 
-def track_duplicate_source(source: bpy.types.Object, duplicate: bpy.types.Object) -> None:
-    if source is None or duplicate is None or source == duplicate:
-        return
-    duplicate[LIGHT_HELPER_DUP_SOURCE_KEY] = source
+def _can_write_object_idproperties(obj: bpy.types.Object | None) -> bool:
+    obj = resolve_original_id(obj)
+    try:
+        if (not isinstance(obj, bpy.types.Object)
+                or not is_original_id(obj)
+                or not obj.is_editable):
+            return False
+        override = getattr(obj, "override_library", None)
+        return override is None or not bool(
+            getattr(override, "is_system_override", False)
+        )
+    except (AttributeError, ReferenceError, RuntimeError, TypeError, ValueError):
+        return False
+
+
+def track_duplicate_source(source: bpy.types.Object, duplicate: bpy.types.Object) -> bool:
+    if (source is None or duplicate is None or source == duplicate
+            or not _can_write_object_idproperties(duplicate)):
+        return False
+    try:
+        duplicate[LIGHT_HELPER_DUP_SOURCE_KEY] = source
+    except (AttributeError, ReferenceError, RuntimeError, TypeError, ValueError):
+        return False
+    return True
 
 
 def inherit_light_linking_from_object(
@@ -1034,6 +1424,8 @@ def inherit_light_linking_from_object(
     if target is None or source is None or target == source:
         return False
     if not is_original_id(target) or not is_original_id(source):
+        return False
+    if not _can_write_object_idproperties(target):
         return False
     changed = False
     ctx = context if context is not None else bpy.context
@@ -1054,42 +1446,59 @@ def inherit_light_linking_from_object(
             continue
         for coll_type in (CollectionType.RECEIVER, CollectionType.BLOCKER):
             if is_item_in_channel(light_obj, source, coll_type):
-                link_item_to_channel(light_obj, target, coll_type, True, context)
-                changed = True
+                changed = link_item_to_channel(
+                    light_obj, target, coll_type, True, context,
+                ) or changed
     return changed
 
 
 def is_duplicate_handled(obj: bpy.types.Object) -> bool:
-    return bool(obj.get(LIGHT_HELPER_DUP_HANDLED_KEY))
+    try:
+        return bool(obj is not None and obj.get(LIGHT_HELPER_DUP_HANDLED_KEY))
+    except (AttributeError, ReferenceError, RuntimeError, TypeError, ValueError):
+        return False
 
 
-def mark_duplicate_handled(obj: bpy.types.Object) -> None:
-    obj[LIGHT_HELPER_DUP_HANDLED_KEY] = True
+def mark_duplicate_handled(obj: bpy.types.Object) -> bool:
+    if not _can_write_object_idproperties(obj):
+        return False
+    try:
+        obj[LIGHT_HELPER_DUP_HANDLED_KEY] = True
+    except (AttributeError, ReferenceError, RuntimeError, TypeError, ValueError):
+        return False
+    return True
 
 
 def process_duplicated_object(obj: bpy.types.Object, context: bpy.types.Context | None = None) -> bool:
     obj = resolve_original_id(obj)
-    if obj is None or not is_original_id(obj):
+    if not _can_write_object_idproperties(obj):
         return False
-    if is_duplicate_handled(obj):
+    shared_linking = has_shared_linking_collections(obj)
+    if is_duplicate_handled(obj) and not shared_linking:
         return False
     changed = False
     source = find_duplicate_source_object(obj)
-    if source is not None:
+    if source is not None and not shared_linking:
         track_duplicate_source(source, obj)
 
-    if obj.type == 'LIGHT':
-        if has_shared_linking_collections(obj):
-            changed = make_light_linking_single_user(obj) or changed
-        if (source is not None and source.type == 'LIGHT'
-                and hasattr(obj, "light_helper_property")
+    if shared_linking:
+        changed = make_light_linking_single_user(obj) or changed
+        if (source is not None and hasattr(obj, "light_helper_property")
                 and hasattr(source, "light_helper_property")):
-            obj.light_helper_property.linking_mode = source.light_helper_property.linking_mode
-            changed = True
-    elif source is not None:
+            source_mode = source.light_helper_property.linking_mode
+            if obj.light_helper_property.linking_mode != source_mode:
+                obj.light_helper_property.linking_mode = source_mode
+                changed = True
+
+    if source is not None and obj.type != 'LIGHT':
         source_has_links = is_object_linked_by_any_light(source, context)
         if source_has_links:
-            changed = inherit_light_linking_from_object(obj, source, context) or changed
+            inherited = inherit_light_linking_from_object(obj, source, context)
+            changed = inherited or changed
+            # Keep the marker clear when inheritance failed, so a later update
+            # can retry after a read-only collection becomes editable.
+            if not inherited:
+                return changed
         # Mark explicitly tracked duplicates after their first processing pass.
         mark_duplicate_handled(obj)
         return changed
@@ -1102,7 +1511,7 @@ def process_duplicated_object(obj: bpy.types.Object, context: bpy.types.Context 
 def fix_all_shared_light_linking(scene: bpy.types.Scene) -> list[bpy.types.Object]:
     fixed = []
     for obj in scene.objects:
-        if obj.type != 'LIGHT':
+        if not hasattr(obj, "light_linking"):
             continue
         if make_light_linking_single_user(obj):
             fixed.append(obj)
@@ -1119,6 +1528,6 @@ def init_all_light_linking(scene: bpy.types.Scene,
             continue
         if is_linking_initialized(obj):
             continue
-        init_light_linking(obj, context)
-        initialized.append(obj)
+        if init_light_linking(obj, context):
+            initialized.append(obj)
     return initialized

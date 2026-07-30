@@ -4,12 +4,12 @@ import bpy
 
 from .utils import (
     ILLUMINATED_OBJECT_TYPE_LIST,
-    has_shared_linking_collections,
-    make_light_linking_single_user,
     process_duplicated_object,
 )
 
 _processing = False
+_auto_fix_known_object_pointers: set[int] = set()
+_auto_fix_suspended = False
 _FILTER_CACHE_HANDLER_IDLE_SECONDS = 1.0
 _filter_cache_last_used = 0.0
 
@@ -42,36 +42,102 @@ def _collect_candidate_objects(depsgraph: bpy.types.Depsgraph) -> list[bpy.types
     return candidates
 
 
+def _snapshot_auto_fix_objects() -> None:
+    global _auto_fix_known_object_pointers
+    try:
+        _auto_fix_known_object_pointers = {
+            obj.as_pointer() for obj in bpy.data.objects
+        }
+    except AttributeError:
+        _auto_fix_known_object_pointers = set()
+
+
+def _finish_auto_fix_transition() -> None:
+    global _auto_fix_suspended
+    _auto_fix_suspended = False
+    _snapshot_auto_fix_objects()
+
+
+@bpy.app.handlers.persistent
+def auto_fix_transition_pre_handler(*_args):
+    global _auto_fix_suspended
+    _auto_fix_suspended = True
+
+
+@bpy.app.handlers.persistent
+def auto_fix_transition_post_handler(*_args):
+    _finish_auto_fix_transition()
+
+
 @bpy.app.handlers.persistent
 def depsgraph_update_post_handler(_scene, depsgraph: bpy.types.Depsgraph):
-    global _processing
-    if _processing or not _auto_fix_enabled():
+    global _processing, _auto_fix_known_object_pointers
+    if _processing or _auto_fix_suspended or not _auto_fix_enabled():
         return
 
     candidates = _collect_candidate_objects(depsgraph)
-    if not candidates:
+    current_pointers = {
+        obj.as_pointer() for obj in bpy.data.objects
+    }
+    new_candidates = [
+        obj for obj in candidates
+        if obj.as_pointer() not in _auto_fix_known_object_pointers
+    ]
+    # Record the current Main before processing. A mutation can trigger a
+    # nested depsgraph update, which must not make the same object a candidate.
+    _auto_fix_known_object_pointers = current_pointers
+    if not new_candidates:
         return
 
     _processing = True
     try:
         context = bpy.context
-        for obj in candidates:
-            if obj.type == 'LIGHT' and has_shared_linking_collections(obj):
-                make_light_linking_single_user(obj)
-                continue
+        for obj in new_candidates:
             process_duplicated_object(obj, context)
     finally:
         _processing = False
 
 
 def sync_auto_fix_depsgraph_handler(enabled: bool | None = None) -> None:
+    global _auto_fix_suspended
     if enabled is None:
         enabled = _auto_fix_enabled()
     if enabled:
+        _auto_fix_suspended = False
+        _snapshot_auto_fix_objects()
         if depsgraph_update_post_handler not in bpy.app.handlers.depsgraph_update_post:
             bpy.app.handlers.depsgraph_update_post.append(depsgraph_update_post_handler)
-    elif depsgraph_update_post_handler in bpy.app.handlers.depsgraph_update_post:
-        bpy.app.handlers.depsgraph_update_post.remove(depsgraph_update_post_handler)
+        for handler_list in (
+                bpy.app.handlers.load_pre,
+                bpy.app.handlers.undo_pre,
+                bpy.app.handlers.redo_pre,
+        ):
+            if auto_fix_transition_pre_handler not in handler_list:
+                handler_list.append(auto_fix_transition_pre_handler)
+        for handler_list in (
+                bpy.app.handlers.undo_post,
+                bpy.app.handlers.redo_post,
+        ):
+            if auto_fix_transition_post_handler not in handler_list:
+                handler_list.append(auto_fix_transition_post_handler)
+    else:
+        if depsgraph_update_post_handler in bpy.app.handlers.depsgraph_update_post:
+            bpy.app.handlers.depsgraph_update_post.remove(depsgraph_update_post_handler)
+        for handler_list in (
+                bpy.app.handlers.load_pre,
+                bpy.app.handlers.undo_pre,
+                bpy.app.handlers.redo_pre,
+        ):
+            if auto_fix_transition_pre_handler in handler_list:
+                handler_list.remove(auto_fix_transition_pre_handler)
+        for handler_list in (
+                bpy.app.handlers.undo_post,
+                bpy.app.handlers.redo_post,
+        ):
+            if auto_fix_transition_post_handler in handler_list:
+                handler_list.remove(auto_fix_transition_post_handler)
+        _auto_fix_suspended = False
+        _snapshot_auto_fix_objects()
 
 
 @bpy.app.handlers.persistent
@@ -167,6 +233,7 @@ def light_helper_load_post_handler(_filepath) -> None:
     clear_world_environment_sync_state()
     invalidate_filter_cache()
     invalidate_linking_ui_cache()
+    _finish_auto_fix_transition()
     sync_world_environment_sun_handler()
 
 
@@ -182,7 +249,7 @@ def register():
 
 
 def unregister():
-    global _filter_cache_last_used
+    global _filter_cache_last_used, _auto_fix_suspended
     from .filter import invalidate_filter_cache
     from .utils import invalidate_linking_ui_cache
     from .utils.world_environment import clear_world_environment_sync_state
@@ -196,3 +263,4 @@ def unregister():
     invalidate_filter_cache()
     invalidate_linking_ui_cache()
     clear_world_environment_sync_state()
+    _auto_fix_suspended = False

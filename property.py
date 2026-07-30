@@ -3,7 +3,9 @@ from bpy.types import PropertyGroup
 
 
 def update_linking_mode(self, context):
-    from .utils import apply_linking_mode_to_light
+    from .utils import apply_linking_mode_to_light, are_light_linking_collections_editable
+    if not are_light_linking_collections_editable(self.id_data):
+        return
     apply_linking_mode_to_light(self.id_data, self.linking_mode)
     from .utils.overlay import notify_linking_changed
     notify_linking_changed(context)
@@ -553,9 +555,9 @@ class WindowManagerProperty(PropertyGroup):
         if wm.light_helper_property.light_linking_add_collection is None:
             return
 
-        from .utils import get_active_light_source
+        from .utils import are_light_linking_collections_editable, get_active_light_source
         obj = get_active_light_source(context)
-        if obj is None:
+        if obj is None or not are_light_linking_collections_editable(obj):
             wm.light_helper_property.light_linking_add_collection = None
             return
 
@@ -574,9 +576,9 @@ class WindowManagerProperty(PropertyGroup):
         if wm.light_helper_property.light_linking_add_object is None:
             return
 
-        from .utils import get_active_light_source
+        from .utils import are_light_linking_collections_editable, get_active_light_source
         obj = get_active_light_source(context)
-        if obj is None:
+        if obj is None or not are_light_linking_collections_editable(obj):
             wm.light_helper_property.light_linking_add_object = None
             return
 
@@ -602,38 +604,48 @@ class WindowManagerProperty(PropertyGroup):
 
         light = wm.light_helper_property.object_linking_add_object
 
-        from .utils import init_light_linking, link_item_both_channels
-        init_light_linking(light, context)
-        link_item_both_channels(light, obj, context)
+        from .utils import are_light_linking_collections_editable, link_item_both_channels
+        if are_light_linking_collections_editable(light):
+            link_item_both_channels(light, obj, context)
         wm.light_helper_property.object_linking_add_object = None
         from .utils.overlay import notify_linking_changed
         notify_linking_changed(context)
 
     def poll_object_linking_add_collection(self, coll: bpy.types.Collection):
-        from .utils import get_all_light_effect_items_state, get_view_layer_collections_cache, is_managed_linking_collection
+        from .utils import (
+            are_light_linking_collections_editable,
+            get_all_light_effect_items_state,
+            get_view_layer_collections_cache,
+            is_managed_linking_collection,
+        )
         light_obj = self.drop_light_obj
-        if light_obj is None:
+        if light_obj is None or not are_light_linking_collections_editable(light_obj):
             return False
         light_ok = coll not in get_all_light_effect_items_state(light_obj)
         coll_ok = coll in get_view_layer_collections_cache()
         return not is_managed_linking_collection(coll) and light_ok and coll_ok
 
     def poll_light_linking_add_object(self, obj: bpy.types.Object):
-        from .utils import get_all_light_effect_items_state
+        from .utils import are_light_linking_collections_editable, get_all_light_effect_items_state
         light_obj = self.drop_light_obj
-        if light_obj is None:
+        if light_obj is None or not are_light_linking_collections_editable(light_obj):
             return False
         light_ok = obj not in get_all_light_effect_items_state(light_obj)
         return check_light_object(obj) and obj.type != "LIGHT" and light_ok
 
     def poll_object_linking_add_object(self, obj: bpy.types.Object):
-        from .utils import get_lights_from_effect_obj
+        from .utils import are_light_linking_collections_editable, get_lights_from_effect_obj
         item = self.drop_object_obj
         if item is None:
             return False
         # Prefer cached linking lights from refresh_drop_poll_context; no bpy.context in poll.
         light_ok = obj not in get_lights_from_effect_obj(item)
-        return check_light_object(obj) and obj.type == 'LIGHT' and light_ok
+        return (
+            check_light_object(obj)
+            and obj.type == 'LIGHT'
+            and are_light_linking_collections_editable(obj)
+            and light_ok
+        )
 
     light_linking_add_collection: bpy.props.PointerProperty(name='Drag and Drop to Add',
                                                             type=bpy.types.Collection,

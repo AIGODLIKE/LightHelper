@@ -426,6 +426,7 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
     bl_description = (
         "Interactive light linking tool. "
         "LClick: select/toggle link or switch object subject. "
+        "Shift+LClick: link an emissive object without switching subject. "
         "Ctrl+LClick: switch subject mode. "
         "Esc: exit tool"
     )
@@ -436,6 +437,8 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
         (TOOL_HUD_DRAG, {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
         (TOOL_PICK, {"type": 'LEFTMOUSE', "value": 'CLICK', "ctrl": True},
          {"properties": [("switch_subject_mode", True)]}),
+        (TOOL_PICK, {"type": 'LEFTMOUSE', "value": 'CLICK', "shift": True},
+         {"properties": [("link_emissive_target", True)]}),
         (TOOL_PICK, {"type": 'LEFTMOUSE', "value": 'CLICK'}, None),
         ("object.light_helper_light_linking_toggle_light", {"type": 'SPACE', "value": 'PRESS'}, None),
         ("object.light_helper_light_linking_toggle_light", {"type": 'L', "value": 'PRESS'}, None),
@@ -461,10 +464,12 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
         row.prop(wm_props, "linking_tool_subject_mode", expand=True, icon_only=True, text_ctxt="light_helper_zh_CN")
 
     @staticmethod
-    def _draw_subject_tip(layout):
-        tip = layout.row(align=True)
-        tip.alert = True
-        tip.label(text=p_("Ctrl+LClick: Switch Subject Mode (Light/Object)"), icon=ui_icon('INFO'))
+    def _draw_subject_tip(layout, subject_mode):
+        mode_tip = layout.row(align=True)
+        mode_tip.alert = True
+        mode_tip.label(text=p_("Ctrl+LClick: Switch Subject Mode (Light/Object)"), icon=ui_icon('INFO'))
+        if subject_mode == 'LIGHT':
+            layout.label(text=p_("Shift+LClick Emissive: Toggle Link Without Switching Subject"))
 
     @staticmethod
     def _draw_subject_status(row, subject_mode, light, obj, link_count):
@@ -478,6 +483,7 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
             else:
                 row.label(text=p_("No object selected"), icon=ui_icon('INFO'))
         elif light is not None:
+            from ..utils import are_light_linking_collections_editable
             if light.type == 'LIGHT':
                 light_icon = get_light_icon(light)
             else:
@@ -486,7 +492,14 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
             row.separator(factor=0.8)
             row.label(text=p_("Linked items: %d") % link_count)
             row.separator(factor=0.8)
-            row.prop(light.light_helper_property, "linking_mode", expand=True, text_ctxt="light_helper_zh_CN")
+            mode = row.row(align=True)
+            mode.enabled = are_light_linking_collections_editable(light)
+            mode.prop(
+                light.light_helper_property,
+                "linking_mode",
+                expand=True,
+                text_ctxt="light_helper_zh_CN",
+            )
         else:
             row.label(text=p_("No light selected"), icon=ui_icon('INFO'))
 
@@ -536,7 +549,7 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
         VIEW3D_WT_light_linking._draw_mode_controls(row, wm_props)
 
         col.separator()
-        VIEW3D_WT_light_linking._draw_subject_tip(col)
+        VIEW3D_WT_light_linking._draw_subject_tip(col, subject_mode)
         if subject_mode == 'OBJECT':
             if obj is not None:
                 col.label(text=obj.name, icon=ui_icon('OBJECT_DATA'), translate=False)
@@ -544,6 +557,7 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
             elif session_on:
                 col.label(text=p_("No object selected"), icon=ui_icon('INFO'))
         elif light is not None:
+            from ..utils import are_light_linking_collections_editable
             from ..utils.icon import get_item_icon, get_light_icon
             if light.type == 'LIGHT':
                 light_icon = get_light_icon(light)
@@ -551,7 +565,9 @@ class VIEW3D_WT_light_linking(bpy.types.WorkSpaceTool):
                 light_icon = get_item_icon(light).get('icon', 'OBJECT_DATA')
             col.label(text=light.name, icon=light_icon, translate=False)
             col.label(text=p_("Linked items: %d") % link_count)
-            col.row(align=True).prop(
+            mode = col.row(align=True)
+            mode.enabled = are_light_linking_collections_editable(light)
+            mode.prop(
                 light.light_helper_property, "linking_mode", expand=True, text_ctxt="light_helper_zh_CN",
             )
         elif session_on:

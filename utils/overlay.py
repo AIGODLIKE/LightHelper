@@ -31,19 +31,21 @@ _bbox_edges = (
     (0, 4), (1, 5), (2, 6), (3, 7),
 )
 
-COLOR_LINE_SHADOW = (0.3, 0.6, 1.0, 0.8)
 COLOR_LINE_NONE = (0.6, 0.6, 0.6, 0.5)
-COLOR_OUTLINE_SHADOW = (0.3, 0.55, 1.0, 0.25)
 
 COLOR_INCLUDE_LINE_BOTH = (0.2, 0.9, 0.3, 0.85)
 COLOR_INCLUDE_LINE_LIGHT = (0.35, 0.95, 0.4, 0.8)
+COLOR_INCLUDE_LINE_SHADOW = (0.3, 0.6, 1.0, 0.8)
 COLOR_INCLUDE_OUTLINE_BOTH = (0.2, 0.9, 0.3, 0.25)
 COLOR_INCLUDE_OUTLINE_LIGHT = (0.35, 0.95, 0.4, 0.25)
+COLOR_INCLUDE_OUTLINE_SHADOW = (0.3, 0.55, 1.0, 0.25)
 
 COLOR_EXCLUDE_LINE_BOTH = (0.95, 0.22, 0.18, 0.85)
 COLOR_EXCLUDE_LINE_LIGHT = (1.0, 0.35, 0.25, 0.8)
+COLOR_EXCLUDE_LINE_SHADOW = (1.0, 0.25, 0.72, 0.85)
 COLOR_EXCLUDE_OUTLINE_BOTH = (0.95, 0.22, 0.18, 0.25)
 COLOR_EXCLUDE_OUTLINE_LIGHT = (1.0, 0.3, 0.2, 0.25)
+COLOR_EXCLUDE_OUTLINE_SHADOW = (1.0, 0.25, 0.72, 0.25)
 
 COLOR_SUBJECT_OUTLINE = (0.95, 0.95, 0.95, 0.25)
 
@@ -93,7 +95,8 @@ class LinkOverlayCache:
     __slots__ = (
         "overlay_mode", "subject_mode", "light", "object", "groups",
         "outlines_hidden", "engine", "invalid",
-        "relevant_object_names", "relevant_collection_names",
+        "relevant_object_pointers", "relevant_collection_pointers",
+        "relevant_linking_light_pointers",
     )
 
     def __init__(self):
@@ -106,9 +109,10 @@ class LinkOverlayCache:
         self.engine = None
         self.invalid = True
         # Precomputed from ``groups`` so the depsgraph handler does not
-        # rebuild both name sets on every scene update.
-        self.relevant_object_names: frozenset[str] = frozenset()
-        self.relevant_collection_names: frozenset[str] = frozenset()
+        # rebuild the dependency sets on every scene update.
+        self.relevant_object_pointers: frozenset[int] = frozenset()
+        self.relevant_collection_pointers: frozenset[int] = frozenset()
+        self.relevant_linking_light_pointers: frozenset[int] = frozenset()
 
     def invalidate(self):
         self.invalid = True
@@ -208,6 +212,7 @@ def _hud_shortcut_lines(subject_mode: str) -> list[str]:
         lines.extend([
             p_("LClick Light: Switch Light Subject"),
             p_("LClick Object: Toggle Object Link"),
+            p_("Shift+LClick Emissive: Toggle Link Without Switching Subject"),
         ])
     lines.extend([
         f"L / {p_('Spacebar')}: {p_('Toggle Light')}",
@@ -313,8 +318,9 @@ def invalidate_overlay_cache():
     _cache.object = None
     _cache.groups = []
     _cache.outlines_hidden = False
-    _cache.relevant_object_names = frozenset()
-    _cache.relevant_collection_names = frozenset()
+    _cache.relevant_object_pointers = frozenset()
+    _cache.relevant_collection_pointers = frozenset()
+    _cache.relevant_linking_light_pointers = frozenset()
 
 
 def _scale_color_alpha(color, scale: float):
@@ -363,8 +369,13 @@ def _world_bbox_from_object(obj: bpy.types.Object) -> tuple[Vector, list[Vector]
 
 def _world_bbox_from_collection(coll: bpy.types.Collection) -> tuple[Vector | None, list[Vector] | None]:
     corners_all = []
-    for obj in coll.objects:
-        if obj.hide_viewport or obj.hide_get():
+    for obj in coll.all_objects:
+        if obj.hide_viewport:
+            continue
+        try:
+            if obj.hide_get():
+                continue
+        except RuntimeError:
             continue
         if obj.type not in {"MESH", "CURVE", "SURFACE", "META", "FONT", "GPENCIL", "GREASEPENCIL"}:
             continue
@@ -436,13 +447,13 @@ def _target_line_colors(linking_mode: str):
         return (
             COLOR_EXCLUDE_LINE_BOTH,
             COLOR_EXCLUDE_LINE_LIGHT,
-            COLOR_LINE_SHADOW,
+            COLOR_EXCLUDE_LINE_SHADOW,
             COLOR_LINE_NONE,
         )
     return (
         COLOR_INCLUDE_LINE_BOTH,
         COLOR_INCLUDE_LINE_LIGHT,
-        COLOR_LINE_SHADOW,
+        COLOR_INCLUDE_LINE_SHADOW,
         COLOR_LINE_NONE,
     )
 
@@ -452,13 +463,13 @@ def _target_outline_colors(linking_mode: str):
         return (
             COLOR_EXCLUDE_OUTLINE_BOTH,
             COLOR_EXCLUDE_OUTLINE_LIGHT,
-            COLOR_OUTLINE_SHADOW,
+            COLOR_EXCLUDE_OUTLINE_SHADOW,
             COLOR_LINE_NONE,
         )
     return (
         COLOR_INCLUDE_OUTLINE_BOTH,
         COLOR_INCLUDE_OUTLINE_LIGHT,
-        COLOR_OUTLINE_SHADOW,
+        COLOR_INCLUDE_OUTLINE_SHADOW,
         COLOR_LINE_NONE,
     )
 
@@ -622,8 +633,9 @@ def refresh_overlay_cache(context: bpy.types.Context):
         _cache.object = None
         _cache.groups = []
         _cache.outlines_hidden = False
-        _cache.relevant_object_names = frozenset()
-        _cache.relevant_collection_names = frozenset()
+        _cache.relevant_object_pointers = frozenset()
+        _cache.relevant_collection_pointers = frozenset()
+        _cache.relevant_linking_light_pointers = frozenset()
         _cache.invalid = False
         return
 
@@ -659,8 +671,14 @@ def refresh_overlay_cache(context: bpy.types.Context):
     _assign_target_linking_modes(groups, subject_mode, context)
     _cache.groups = groups
     _cache.outlines_hidden = outlines_hidden
-    _cache.relevant_object_names = frozenset(_collect_overlay_object_names())
-    _cache.relevant_collection_names = frozenset(_collect_overlay_collection_names())
+    _cache.relevant_object_pointers = frozenset(_collect_overlay_object_pointers())
+    _cache.relevant_collection_pointers = frozenset(
+        _collect_overlay_collection_pointers(context, subject_mode)
+    )
+    _cache.relevant_linking_light_pointers = frozenset(
+        _collect_overlay_linking_light_pointers(context)
+        if subject_mode == 'OBJECT' else ()
+    )
     _cache.invalid = False
 
 
@@ -715,11 +733,24 @@ def cache_needs_refresh(context: bpy.types.Context) -> bool:
     return current_key != cached_key
 
 
+def _viewport_link_overlay_visible(context: bpy.types.Context) -> bool:
+    space = getattr(context, "space_data", None)
+    overlay = getattr(space, "overlay", None)
+    return bool(
+        space is not None
+        and getattr(space, "show_gizmo", False)
+        and overlay is not None
+        and getattr(overlay, "show_overlays", False)
+    )
+
+
 def _draw_overlay_3d():
     try:
         context = bpy.context
         wm_props = context.window_manager.light_helper_property
         if not wm_props.linking_tool_active or wm_props.linking_tool_overlay_mode == OVERLAY_MODE_OFF:
+            return
+        if not _viewport_link_overlay_visible(context):
             return
 
         if cache_needs_refresh(context):
@@ -785,6 +816,8 @@ def _draw_overlay_hud():
     wm_props = context.window_manager.light_helper_property
     if not wm_props.linking_tool_active or not wm_props.linking_tool_show_hud:
         return
+    if not _viewport_link_overlay_visible(context):
+        return
 
     region = context.region
     if region is None:
@@ -828,33 +861,74 @@ def _draw_overlay_hud_safe():
         invalidate_overlay_cache()
 
 
-def _collect_overlay_object_names() -> set[str]:
-    names = set()
+def _collect_overlay_object_pointers() -> set[int]:
+    pointers = set()
     for group in _cache.groups:
         if group.subject is not None:
-            names.add(group.subject.name)
+            pointers.add(group.subject.as_pointer())
         for target in group.targets:
             if target.is_collection:
-                for obj in target.item.objects:
-                    names.add(obj.name)
+                for obj in target.item.all_objects:
+                    pointers.add(obj.as_pointer())
             elif isinstance(target.item, bpy.types.Object):
-                names.add(target.item.name)
-    return names
+                pointers.add(target.item.as_pointer())
+    return pointers
 
 
-def _collect_overlay_collection_names() -> set[str]:
-    names = set()
+def _add_collection_tree_pointers(
+        pointers: set[int],
+        collection: bpy.types.Collection | None,
+) -> None:
+    if collection is None:
+        return
+    pointer = collection.as_pointer()
+    if pointer in pointers:
+        return
+    pointers.add(pointer)
+    for child in collection.children:
+        _add_collection_tree_pointers(pointers, child)
+
+
+def _add_object_linking_collection_pointers(
+        pointers: set[int],
+        obj: bpy.types.Object | None,
+) -> None:
+    if obj is None or not hasattr(obj, "light_linking"):
+        return
+    linking = obj.light_linking
+    _add_collection_tree_pointers(pointers, linking.receiver_collection)
+    _add_collection_tree_pointers(pointers, linking.blocker_collection)
+
+
+def _collect_overlay_collection_pointers(
+        context: bpy.types.Context,
+        subject_mode: str,
+) -> set[int]:
+    pointers = set()
     for group in _cache.groups:
-        if group.subject is not None and hasattr(group.subject, "light_linking"):
-            linking = group.subject.light_linking
-            if linking.receiver_collection is not None:
-                names.add(linking.receiver_collection.name)
-            if linking.blocker_collection is not None:
-                names.add(linking.blocker_collection.name)
+        _add_object_linking_collection_pointers(pointers, group.subject)
         for target in group.targets:
             if target.is_collection:
-                names.add(target.item.name)
-    return names
+                _add_collection_tree_pointers(pointers, target.item)
+            elif subject_mode == 'OBJECT' and isinstance(target.item, bpy.types.Object):
+                _add_object_linking_collection_pointers(pointers, target.item)
+    if subject_mode == 'OBJECT':
+        # A currently unlinked light can become a target through Blender's
+        # native Light Linking UI, so watch every scene light-link collection.
+        for obj in context.scene.objects:
+            _add_object_linking_collection_pointers(pointers, obj)
+    return pointers
+
+
+def _collect_overlay_linking_light_pointers(context: bpy.types.Context) -> set[int]:
+    from . import is_tool_light_source
+
+    emission_cache = {}
+    return {
+        obj.as_pointer()
+        for obj in context.scene.objects
+        if is_tool_light_source(obj, context, cache=emission_cache)
+    }
 
 
 @bpy.app.handlers.persistent
@@ -871,10 +945,11 @@ def _depsgraph_update_post(_scene, depsgraph: bpy.types.Depsgraph):
 
         # Precomputed at cache refresh; rebuilding per depsgraph tick scales
         # with the number of overlay targets.
-        relevant_names = _cache.relevant_object_names
-        collection_names = _cache.relevant_collection_names
+        relevant_pointers = _cache.relevant_object_pointers
+        collection_pointers = _cache.relevant_collection_pointers
+        linking_light_pointers = _cache.relevant_linking_light_pointers
         needs_cache_refresh = False
-        needs_redraw = False
+        linking_data_changed = False
 
         for update in depsgraph.updates:
             id_ref = update.id
@@ -883,8 +958,9 @@ def _depsgraph_update_post(_scene, depsgraph: bpy.types.Depsgraph):
                     id_ref = id_ref.original
                     if id_ref is None:
                         continue
-                if id_ref.name in collection_names:
+                if id_ref.as_pointer() in collection_pointers:
                     needs_cache_refresh = True
+                    linking_data_changed = True
                     break
                 continue
 
@@ -894,17 +970,25 @@ def _depsgraph_update_post(_scene, depsgraph: bpy.types.Depsgraph):
                 id_ref = id_ref.original
                 if id_ref is None:
                     continue
-            if id_ref.name not in relevant_names:
-                continue
-            if update.is_updated_transform or update.is_updated_geometry:
+            id_pointer = id_ref.as_pointer()
+            if id_pointer in linking_light_pointers:
+                needs_cache_refresh = True
+                if not update.is_updated_transform or update.is_updated_shading:
+                    linking_data_changed = True
+                break
+            if (id_pointer in relevant_pointers
+                    and (update.is_updated_transform or update.is_updated_geometry)):
                 needs_cache_refresh = True
                 break
 
         if needs_cache_refresh:
+            if linking_data_changed:
+                from ..filter import invalidate_filter_cache
+                from . import invalidate_linking_ui_cache
+                invalidate_filter_cache()
+                invalidate_linking_ui_cache()
             invalidate_overlay_cache()
             refresh_overlay_cache(context)
-            tag_view3d_redraw(context)
-        elif needs_redraw:
             tag_view3d_redraw(context)
     except (AttributeError, ReferenceError, RuntimeError, TypeError):
         invalidate_overlay_cache()

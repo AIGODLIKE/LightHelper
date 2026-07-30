@@ -65,6 +65,7 @@ def migrate_scene(scene: bpy.types.Scene) -> bool:
     from .utils import (
         CollectionType,
         apply_linking_mode_to_light,
+        are_light_linking_collections_editable,
         get_linking_coll,
         is_linking_initialized,
     )
@@ -80,6 +81,8 @@ def migrate_scene(scene: bpy.types.Scene) -> bool:
             for coll_type in (CollectionType.RECEIVER, CollectionType.BLOCKER)
         )
         if not managed:
+            continue
+        if not are_light_linking_collections_editable(obj):
             continue
         mode = _infer_linking_mode_from_collections(obj)
         if mode is not None:

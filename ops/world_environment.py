@@ -135,8 +135,8 @@ class LLP_OT_sync_world_sun_exclusions(LightHelperOperator, bpy.types.Operator):
 class LLP_OT_select_world_environment_dome(LightHelperOperator, bpy.types.Operator):
     bl_idname = "world.light_helper_select_environment_dome"
     bl_label = "Select Environment Dome"
-    bl_description = "Select the managed environment dome in the current view layer"
-    bl_options = {'REGISTER'}
+    bl_description = "Unlock and select the managed environment dome in the current view layer"
+    bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(cls, context):
@@ -152,6 +152,9 @@ class LLP_OT_select_world_environment_dome(LightHelperOperator, bpy.types.Operat
         dome = get_world_dome(context.scene)
         if dome is None or dome.name not in context.view_layer.objects:
             return {'CANCELLED'}
+        props = context.scene.light_helper_property
+        if props.world_dome_lock_selection:
+            props.world_dome_lock_selection = False
         for obj in context.selected_objects:
             obj.select_set(False)
         dome.select_set(True)

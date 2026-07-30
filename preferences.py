@@ -40,18 +40,17 @@ class LLT_AddonPreferences(AddonPreferences):
         ]
     )
 
+    all_link_filter_value: IntProperty(default=0, min=0, max=2, options={'HIDDEN'})
+    light_link_filter_value: IntProperty(default=0, min=0, max=2, options={'HIDDEN'})
+    emission_link_filter_value: IntProperty(default=0, min=0, max=2, options={'HIDDEN'})
+
     def get_link(self):
-        # These keys are not bpy.props-defined, so dict-style access stores
-        # them as user custom properties on every supported Blender version.
-        # (bl_system_properties_get is documented as DEBUG ONLY in 5.x.)
-        key = f"{self.light_list_filter_type}_link"
-        if key in self:
-            return self[key]
-        return 0
+        key = f"{self.light_list_filter_type.lower()}_link_filter_value"
+        return getattr(self, key)
 
     def set_link(self, value):
-        key = f"{self.light_list_filter_type}_link"
-        self[key] = value
+        key = f"{self.light_list_filter_type.lower()}_link_filter_value"
+        setattr(self, key, value)
 
     light_link_filter_type: EnumProperty(
         name="Link Filter Type",

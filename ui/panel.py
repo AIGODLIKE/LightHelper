@@ -3,11 +3,13 @@ from bpy.app.translations import pgettext_iface as p_
 
 from ..utils import (
     CollectionType,
+    are_light_linking_collections_editable,
     get_all_light_effect_items_state,
     get_item_visibility_restrictions,
     get_lights_from_effect_obj,
     get_pref,
     is_eevee_engine,
+    is_light_linking_source_editable,
     is_linking_initialized,
     iter_sorted_linking_items,
     iter_sorted_linking_lights,
@@ -286,7 +288,7 @@ class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
         scene_props = context.scene.light_helper_property
         pinned = scene_props.light_linking_pin_object
         invalid_pin = scene_props.light_linking_pin and not is_tool_light_source(pinned, context)
-        if invalid_pin and context.scene.render.engine == 'CYCLES':
+        if invalid_pin:
             warning = layout.box()
             warning.alert = True
             row = warning.row(align=True)
@@ -299,6 +301,8 @@ class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
             return
 
         not_init = not is_linking_initialized(light_obj)
+        source_editable = is_light_linking_source_editable(light_obj)
+        collections_editable = are_light_linking_collections_editable(light_obj)
 
         col = layout.column()
         row = col.row(align=True)
@@ -313,6 +317,11 @@ class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
             row.operator(LLP_OT_instances_data.bl_idname, text="", icon=ui_icon('RESTRICT_INSTANCED_ON'))
         if not not_init:
             row.operator(LLP_OT_clear_light_linking.bl_idname, text="", icon=ui_icon("PANEL_CLOSE"))
+
+        if not source_editable or not collections_editable:
+            warning = col.row()
+            warning.alert = True
+            warning.label(text=p_("Light linking data is read-only"), icon=ui_icon('INFO'))
 
         if not_init:
             with context.temp_override(add_light_linking_light_obj=light_obj):
@@ -333,8 +342,14 @@ class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
             return
 
         col.separator()
-        col.row(align=True).prop(light_obj.light_helper_property, 'linking_mode', expand=True,
-                                 text_ctxt="light_helper_zh_CN")
+        mode_row = col.row(align=True)
+        mode_row.enabled = collections_editable
+        mode_row.prop(
+            light_obj.light_helper_property,
+            'linking_mode',
+            expand=True,
+            text_ctxt="light_helper_zh_CN",
+        )
 
         obj_state_dict = get_all_light_effect_items_state(light_obj)
 
@@ -479,7 +494,14 @@ class VIEW3D_PT_light_helper_object_control(bpy.types.Panel):
                 row.active = False
             sub = row.row(align=True)
             sub.label(text='', icon=get_light_icon(light_obj))
-            sub.prop(light_obj.light_helper_property, 'linking_mode', text='', text_ctxt="light_helper_zh_CN")
+            mode = sub.row(align=True)
+            mode.enabled = are_light_linking_collections_editable(light_obj)
+            mode.prop(
+                light_obj.light_helper_property,
+                'linking_mode',
+                text='',
+                text_ctxt="light_helper_zh_CN",
+            )
             draw_select_btn(row, light_obj, tooltip)
             draw_toggle_btn(
                 row, light_obj, item, tooltip,

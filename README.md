@@ -112,6 +112,7 @@ Hold `Ctrl` and left-click to switch the subject mode from the item under the cu
 | Input | Action |
 | --- | --- |
 | Left-click | Select a new subject or toggle both link channels for the item under the cursor. |
+| `Shift` + left-click | Toggle an emissive object's link without switching the current light subject. |
 | `Ctrl` + left-click | Switch between Light and Object subject modes from the item under the cursor. |
 | `L` or `Space` | Toggle the illumination channel for the item under the cursor. In Object mode, place the cursor over a light. |
 | `S` | Toggle the shadow channel for the item under the cursor. In Object mode, place the cursor over a light. |
@@ -131,8 +132,9 @@ The default **Selected** overlay shows links for the current subject only. **All
 
 - Green indicates Include illumination links.
 - Red indicates Exclude illumination links.
-- Blue indicates shadow-only links.
-- Gray indicates an item with neither active channel.
+- Blue indicates Include shadow-only links.
+- Magenta indicates Exclude shadow-only links.
+- When both channels are off, no link line is drawn.
 
 For dense scenes, LightHelper limits object outlines while continuing to draw link lines. Change **Linking Tool Max Outlines** in the preferences if needed.
 

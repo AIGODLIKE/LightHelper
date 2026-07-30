@@ -20,6 +20,8 @@ paths_exclude_pattern = [
     "/.ruff_cache/",
     "/.pytest_cache/",
     "/dist/",
+    "/AGENTS.md",
+    "/PROJECT_CONTEXT.md",
     "/*.zip",
     "/.gitignore",
     "/README.md",

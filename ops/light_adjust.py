@@ -118,7 +118,7 @@ class LLP_OT_solo_light(LightHelperOperator, bpy.types.Operator):
                 context.scene.light_helper_property.active_object_index = self.index
             return {'FINISHED'}
 
-        if current is not None:
+        if current is not None or len(wm_props.solo_visibility) > 0:
             self._restore_solo(context)
 
         wm_props.solo_visibility.clear()

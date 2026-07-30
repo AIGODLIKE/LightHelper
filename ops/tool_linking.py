@@ -4,10 +4,10 @@ from bpy.app.translations import pgettext_iface as p_
 from ..utils import (
     CollectionType,
     apply_linking_mode_to_light,
+    are_light_linking_collections_editable,
     cycle_tool_light,
     cycle_tool_object,
     get_linking_mode,
-    init_light_linking,
     is_item_in_channel,
     is_linkable_object,
     is_tool_light_source,
@@ -58,6 +58,12 @@ class LLP_OT_light_linking_pick(_LLP_LightLinkingToolInvoke, LightHelperOperator
 
     switch_subject_mode: bpy.props.BoolProperty(
         name="Switch Subject Mode",
+        default=False,
+        options={'SKIP_SAVE', 'HIDDEN'},
+    )
+    link_emissive_target: bpy.props.BoolProperty(
+        name="Link Emissive Target",
+        description="Treat an emissive object as a link target instead of switching the light subject",
         default=False,
         options={'SKIP_SAVE', 'HIDDEN'},
     )
@@ -135,19 +141,27 @@ class LLP_OT_light_linking_pick(_LLP_LightLinkingToolInvoke, LightHelperOperator
     @staticmethod
     def _toggle_link(operator, context, light, item, toggle_both: bool, coll_type,
                      restore_default_when_empty: bool = False):
+        if not are_light_linking_collections_editable(light):
+            operator.report({'WARNING'}, p_("Light linking data is read-only"))
+            return {'CANCELLED'}
         if toggle_both:
             enabled = toggle_item_both_channels(
                 light, item, context,
                 restore_default_when_empty=restore_default_when_empty,
             )
+            if enabled is None:
+                operator.report({'WARNING'}, p_("Light linking could not be changed"))
+                return {'CANCELLED'}
             action = p_("linked") if enabled else p_("unlinked")
             operator.report({'INFO'}, f"{item.name} {action}")
         elif coll_type is not None:
             in_channel = is_item_in_channel(light, item, coll_type)
-            link_item_to_channel(
+            if not link_item_to_channel(
                 light, item, coll_type, not in_channel, context,
                 restore_default_when_empty=restore_default_when_empty,
-            )
+            ):
+                operator.report({'WARNING'}, p_("Light linking could not be changed"))
+                return {'CANCELLED'}
             channel = p_("light") if coll_type == CollectionType.RECEIVER else p_("shadow")
             state = p_("on") if not in_channel else p_("off")
             operator.report({'INFO'}, f"{item.name} {channel} {state}")
@@ -155,7 +169,8 @@ class LLP_OT_light_linking_pick(_LLP_LightLinkingToolInvoke, LightHelperOperator
         return {'FINISHED'}
 
     @staticmethod
-    def perform_pick(operator, context, event, toggle_both: bool, coll_type=None):
+    def perform_pick(operator, context, event, toggle_both: bool, coll_type=None, *,
+                     link_emissive_target: bool = False):
         wm_props = context.window_manager.light_helper_property
         object_mode = wm_props.linking_tool_subject_mode == 'OBJECT'
         subject = resolve_original_id(
@@ -187,7 +202,6 @@ class LLP_OT_light_linking_pick(_LLP_LightLinkingToolInvoke, LightHelperOperator
                 if subject == obj:
                     operator.report({'WARNING'}, p_("Cannot link a light source to itself"))
                     return {'CANCELLED'}
-                init_light_linking(obj, context)
                 return LLP_OT_light_linking_pick._toggle_link(
                     operator, context, obj, subject, toggle_both, coll_type,
                     restore_default_when_empty=True,
@@ -200,7 +214,9 @@ class LLP_OT_light_linking_pick(_LLP_LightLinkingToolInvoke, LightHelperOperator
             return {'CANCELLED'}
 
         # Light mode
-        if is_tool_light_source(obj, context) and subject != obj:
+        if (is_tool_light_source(obj, context)
+                and subject != obj
+                and not link_emissive_target):
             LLP_OT_light_linking_pick._set_light(context, obj)
             operator.report({'INFO'}, p_("Selected light: %s") % obj.name)
             return {'FINISHED'}
@@ -223,7 +239,13 @@ class LLP_OT_light_linking_pick(_LLP_LightLinkingToolInvoke, LightHelperOperator
             return blocked
         if self.switch_subject_mode or event.ctrl:
             return self.perform_ctrl_pick(self, context, event)
-        return self.perform_pick(self, context, event, toggle_both=True)
+        return self.perform_pick(
+            self,
+            context,
+            event,
+            toggle_both=True,
+            link_emissive_target=self.link_emissive_target or event.shift,
+        )
 
 
 class LLP_OT_light_linking_hud_drag(_LLP_LightLinkingToolPoll, LightHelperOperator, bpy.types.Operator):
@@ -331,6 +353,9 @@ class LLP_OT_light_linking_toggle_mode(_LLP_LightLinkingToolInvoke, LightHelperO
 
         if not hasattr(light, "light_helper_property"):
             self.report({'WARNING'}, p_("No light selected"))
+            return {'CANCELLED'}
+        if not are_light_linking_collections_editable(light):
+            self.report({'WARNING'}, p_("Light linking data is read-only"))
             return {'CANCELLED'}
 
         mode = get_linking_mode(light)
