@@ -105,23 +105,34 @@ class LLP_OT_lighting_desk(LightHelperOperator, bpy.types.Operator):
             if event.type == 'ESC' and event.value == 'PRESS':
                 return self._finish()
 
-            same_area = context.window is session.window and context.area is session.area
-            if not same_area:
+            from ..ui.desk import owner_key
+
+            same_area = owner_key(context.window, context.area) == session.key
+            if not same_area or not session.owns_region(context.region):
                 return {'PASS_THROUGH'}
+            inside_desk = session.event_is_inside(context.region, event)
             if event.type in {'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE'}:
+                if not inside_desk:
+                    session.clear_pointer_state()
+                    return {'PASS_THROUGH'}
                 session.handle_motion(event)
                 return {'RUNNING_MODAL'}
             if event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'} and event.value == 'PRESS':
+                if not inside_desk:
+                    return {'PASS_THROUGH'}
                 session.handle_wheel(context, event)
                 return {'RUNNING_MODAL'}
             if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+                if not inside_desk:
+                    session.clear_pointer_state(clear_search=True)
+                    return {'PASS_THROUGH'}
                 result = session.handle_click(context, event)
                 if result == "CLOSE":
                     return self._finish()
                 return {'RUNNING_MODAL'}
             if session.handle_text(event):
                 return {'RUNNING_MODAL'}
-            return {'RUNNING_MODAL'}
+            return {'RUNNING_MODAL'} if inside_desk else {'PASS_THROUGH'}
         except BaseException:
             self._finish(cancelled=True)
             raise

@@ -19,7 +19,7 @@ LightHelper is a Blender extension that turns Light Linking and Shadow Linking i
 - Separate shared linking data manually, or opt in to automatic duplicate handling.
 - Restore Blender's default full-lighting behavior with one action.
 - Convert a nested or packed World HDRI—or a solid World Background—into one linkable environment dome and restore the original World safely.
-- Open a full-area GPU **Lighting Desk** with virtualized Link, Mix, Looks, and Studio workspaces.
+- Open a bottom-docked GPU **Lighting Desk** with virtualized Link, Mix, Looks, and Studio workspaces while the scene remains visible and interactive above it.
 - Use per-item **Off / Include / Exclude** states in Advanced mode while retaining the original Simple workflow.
 - Place or adjust Point, Area, Spot, and Sun lights with **Reflect, Direct, and Orbit** interactions.
 - Capture portable `.lhprofile` Lighting Profiles and build a non-destructive Cycles Light Group compositor mixer.
@@ -44,7 +44,7 @@ LightHelper is a Blender extension that turns Light Linking and Shadow Linking i
 
 ## Complete lighting workflow
 
-- **Lighting Desk:** open it from the LH sidebar. Link virtualizes both axes of the light/target matrix; each cell has illumination and shadow states. Ctrl/Shift select ranges, then use the toolbar to apply a state to the selected cells. Mix provides Minimal, Normal, and Advanced columns, synchronized multi-selection, EV wheel edits, Kelvin presets, mute/solo/render controls, and safe common/full copy-paste.
+- **Lighting Desk:** open it from the LH sidebar. It docks to the bottom by default, passes input above the Desk back to the 3D View, and can be explicitly expanded when more matrix space is needed. Link virtualizes both axes of the light/target matrix; each cell has illumination and shadow states. Ctrl/Shift select ranges, then use the toolbar to apply a state to the selected cells. Mix provides Minimal, Normal, and Advanced columns, synchronized multi-selection, EV wheel edits, Kelvin presets, mute/solo/render controls, and safe common/full copy-paste.
 - **Simple and Advanced linking:** Simple keeps the familiar one-mode workflow. Advanced exposes each native entry as Off, Include, or Exclude. Returning to Simple requires choosing Include or Exclude explicitly; managed World Dome exclusions are not rewritten.
 - **Placement Tool:** choose Light Placement in the left toolbar. Reflect follows the specular reflection direction, Direct places on the surface normal, and Orbit keeps distance around the hit point or selection center. Wheel adjusts EV; Shift+wheel size; Alt+wheel distance; Ctrl+wheel Spot spread; Z+wheel roll. Esc restores an adjusted light or removes the light created by the current gesture.
 - **Looks:** False Color is temporary and restores the exact previous View Transform. Profiles capture matching native lights, links, World, managed Studio objects, Kelvin metadata, Light Groups, and managed mixer state. “Create Missing” only creates native lights and managed Studio shapes.

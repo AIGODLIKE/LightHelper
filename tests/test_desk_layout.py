@@ -29,6 +29,24 @@ class VisibleMatrixTests(unittest.TestCase):
         self.assertEqual((visible.start, visible.stop, visible.count), (0, 0, 0))
 
 
+class DockedDeskTests(unittest.TestCase):
+    def test_default_desk_preserves_scene_space(self):
+        bounds = desk_layout.compute_desk_bounds(1600, 900)
+        self.assertEqual((bounds.x, bounds.y, bounds.width), (0.0, 0.0, 1600.0))
+        self.assertLessEqual(bounds.height, 560.0)
+        self.assertGreaterEqual(900.0 - bounds.top, 260.0)
+        self.assertTrue(bounds.contains(100, 100))
+        self.assertFalse(bounds.contains(100, 800))
+
+    def test_expanded_desk_uses_the_complete_region(self):
+        bounds = desk_layout.compute_desk_bounds(1600, 900, expanded=True)
+        self.assertEqual((bounds.width, bounds.height), (1600.0, 900.0))
+
+    def test_small_regions_are_clamped_without_negative_geometry(self):
+        bounds = desk_layout.compute_desk_bounds(300, 180)
+        self.assertEqual((bounds.width, bounds.height), (300.0, 180.0))
+
+
 class SelectionTests(unittest.TestCase):
     def test_ctrl_toggle_and_shift_replace(self):
         selection = desk_layout.RangeSelection()

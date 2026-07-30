@@ -17,6 +17,7 @@ from ..utils.desk_layout import (
     LinkTargetSnapshot,
     MatrixSelection,
     Rect,
+    compute_desk_bounds,
     filter_indices,
     hit_test,
     next_layout_token,
@@ -301,11 +302,13 @@ class DeskSession:
         self.region = context.region
         self.scene = context.scene
         self.window_key = _pointer(self.window)
+        self.screen_key = _pointer(self.screen)
         self.area_key = _pointer(self.area)
         self.region_key = _pointer(self.region)
         self.key = (self.window_key, self.area_key)
         self.cleaned = False
         self.close_requested = False
+        self.expanded = False
         wm_props = context.window_manager.light_helper_property
         self.tab = getattr(wm_props, "lighting_desk_tab", "LINK")
         try:
@@ -392,16 +395,58 @@ class DeskSession:
         if self.cleaned:
             return False
         try:
-            if self.window.screen is not self.screen:
+            live_screen = self.window.screen
+            if _pointer(live_screen) != self.screen_key:
                 return False
-            if self.area not in self.screen.areas:
+            live_area = next(
+                (
+                    area
+                    for area in live_screen.areas
+                    if _pointer(area) == self.area_key
+                ),
+                None,
+            )
+            if live_area is None:
                 return False
-            return any(_pointer(region) == self.region_key for region in self.area.regions)
+            return any(
+                _pointer(region) == self.region_key
+                for region in live_area.regions
+            )
         except (AttributeError, ReferenceError, TypeError):
             return False
 
     def _add_hit(self, hits, rect, action, *payload) -> None:
         hits.append(HitRegion(self.layout_token, rect, action, tuple(payload)))
+
+    def desk_bounds(self, region=None) -> Rect:
+        region = region or self.region
+        try:
+            width = float(region.width)
+            height = float(region.height)
+        except (AttributeError, ReferenceError, TypeError, ValueError):
+            return Rect(0.0, 0.0, 0.0, 0.0)
+        return compute_desk_bounds(width, height, expanded=self.expanded)
+
+    def owns_region(self, region) -> bool:
+        return _pointer(region) == self.region_key
+
+    def event_is_inside(self, region, event) -> bool:
+        try:
+            return self.desk_bounds(region).contains(
+                float(event.mouse_region_x),
+                float(event.mouse_region_y),
+            )
+        except (AttributeError, TypeError, ValueError):
+            return False
+
+    def clear_pointer_state(self, *, clear_search=False) -> None:
+        changed = self.hover is not None
+        self.hover = None
+        if clear_search and self.search_focus:
+            self.search_focus = ""
+            changed = True
+        if changed:
+            tag_owner_window(self.area)
 
     @staticmethod
     def _label(texts, text, rect, *, size=12, color=_TEXT, inset=6.0) -> None:
@@ -411,15 +456,19 @@ class DeskSession:
         header = Rect(0, height - 44, width, 44)
         rectangles.append((header, (0.055, 0.065, 0.085, 1.0)))
         self._label(texts, "LIGHTING DESK", Rect(10, header.y + 6, 180, 32), size=17)
-        false_rect = Rect(max(210, width - 320), header.y + 8, 112, 28)
+        false_rect = Rect(max(210, width - 382), header.y + 8, 104, 28)
         rectangles.append((false_rect, _ACCENT if self.snapshot.false_color_enabled else _SURFACE_ALT))
         self._label(texts, "False Color", false_rect, size=12)
         self._add_hit(hits, false_rect, "FALSE_COLOR")
-        help_rect = Rect(width - 194, header.y + 8, 78, 28)
+        expand_rect = Rect(width - 272, header.y + 8, 82, 28)
+        rectangles.append((expand_rect, _SURFACE_ALT))
+        self._label(texts, "Dock" if self.expanded else "Expand", expand_rect, size=11)
+        self._add_hit(hits, expand_rect, "EXPAND")
+        help_rect = Rect(width - 184, header.y + 8, 70, 28)
         rectangles.append((help_rect, _SURFACE_ALT))
         self._label(texts, "Help", help_rect, size=12)
         self._add_hit(hits, help_rect, "HELP")
-        close_rect = Rect(width - 106, header.y + 8, 94, 28)
+        close_rect = Rect(width - 108, header.y + 8, 96, 28)
         rectangles.append((close_rect, (0.47, 0.14, 0.16, 1.0)))
         self._label(texts, "Close  Esc", close_rect, size=12)
         self._add_hit(hits, close_rect, "CLOSE")
@@ -731,24 +780,28 @@ class DeskSession:
         if self.cleaned:
             return
         self.layout_token = next_layout_token(self.layout_token)
-        rectangles = [(Rect(0, 0, region.width, region.height), _BACKGROUND)]
+        bounds = self.desk_bounds(region)
+        rectangles = [
+            (bounds, _BACKGROUND),
+            (Rect(bounds.x, max(bounds.y, bounds.top - 2), bounds.width, 2), _ACCENT),
+        ]
         texts = []
         hits = []
-        self._draw_header(region.width, region.height, rectangles, texts, hits)
-        self._draw_tabs(region.width, region.height, rectangles, texts, hits)
+        self._draw_header(bounds.width, bounds.height, rectangles, texts, hits)
+        self._draw_tabs(bounds.width, bounds.height, rectangles, texts, hits)
         if self.tab == "LINK":
-            self._draw_link(region.width, region.height, rectangles, texts, hits)
+            self._draw_link(bounds.width, bounds.height, rectangles, texts, hits)
         elif self.tab == "MIX":
-            self._draw_mix(region.width, region.height, rectangles, texts, hits)
+            self._draw_mix(bounds.width, bounds.height, rectangles, texts, hits)
         elif self.tab == "LOOKS":
-            self._draw_looks(region.width, region.height, rectangles, texts, hits)
+            self._draw_looks(bounds.width, bounds.height, rectangles, texts, hits)
         else:
-            self._draw_studio(region.width, region.height, rectangles, texts, hits)
+            self._draw_studio(bounds.width, bounds.height, rectangles, texts, hits)
         if self.show_help:
-            help_rect = Rect(max(12, region.width - 430), 18, min(410, region.width - 24), 68)
+            help_rect = Rect(max(12, bounds.width - 430), 18, min(410, bounds.width - 24), 68)
             rectangles.append((help_rect, (0.08, 0.10, 0.14, 0.98)))
             self._label(texts, "Click cells to cycle Off / Include / Exclude.  Ctrl/Shift select ranges.", help_rect, size=10)
-            self._label(texts, "Wheel scrolls rows; Shift+Wheel scrolls columns; Esc closes Desk.", Rect(help_rect.x, help_rect.y + 24, help_rect.width, 24), size=10)
+            self._label(texts, "Move above the Desk to navigate the scene.  Esc closes Desk.", Rect(help_rect.x, help_rect.y + 24, help_rect.width, 24), size=10)
         try:
             gpu.state.blend_set('ALPHA')
             _draw_rect_batch(rectangles)
@@ -898,6 +951,10 @@ class DeskSession:
             context.window_manager.light_helper_property.lighting_desk_tab = self.tab
         elif action == "HELP":
             self.show_help = not self.show_help
+        elif action == "EXPAND":
+            self.expanded = not self.expanded
+            self.hit_regions = ()
+            self.hover = None
         elif action == "FALSE_COLOR":
             bpy.ops.scene.light_helper_toggle_false_color(enabled=not self.snapshot.false_color_enabled)
             self.refresh_snapshot()

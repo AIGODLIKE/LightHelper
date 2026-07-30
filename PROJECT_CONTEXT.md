@@ -3,7 +3,7 @@
 ## Purpose
 
 LightHelper is a Blender 4.2+ Extension for non-destructive lighting work. It
-combines native Light/Shadow Linking, a full-area Lighting Desk, light mixing
+combines native Light/Shadow Linking, a dockable GPU Lighting Desk, light mixing
 and placement, portable Lighting Profiles, Cycles Light Groups, World Dome
 linking, and managed studio-shaping objects.
 
@@ -42,9 +42,11 @@ linking, and managed studio-shaping objects.
 1. A source can stay in Simple mode or enter Advanced mode. Advanced edits each
    receiver/blocker entry as Off, Include, or Exclude. Returning to Simple
    requires an explicit Include/Exclude choice and preserves World internals.
-2. Lighting Desk fills only the current `VIEW_3D/WINDOW`; Link virtualizes both
-   matrix axes, Mix edits selected lights, Looks manages Profiles/False Color/
-   Light Groups, and Studio creates owned shaping objects.
+2. Lighting Desk docks to the bottom of the current `VIEW_3D/WINDOW` by default
+   and passes input above its bounds back to the 3D View. It can be explicitly
+   expanded; Link virtualizes both matrix axes, Mix edits selected lights,
+   Looks manages Profiles/False Color/Light Groups, and Studio creates owned
+   shaping objects.
 3. Light Placement creates or adjusts Point, Area, Spot, Sun, Scrim, Flag, or
    Reflector targets. Each gesture restores the original target or deletes only
    its newly created target when cancelled.
@@ -68,6 +70,10 @@ linking, and managed studio-shaping objects.
   consume immutable snapshots and never write RNA.
 - Desk and Placement owners are keyed by window/area pointer, use no idle timer,
   redraw only their owner WINDOW region, and clean up idempotently.
+- Desk liveness and event routing compare Blender RNA `as_pointer()` identities;
+  never use Python container membership or `is` for recreated Area/Region wrappers.
+- The default Desk surface preserves scene space and consumes input only inside
+  its current bounds; expanded full-view mode is an explicit session choice.
 - Keep extension ID `LightHepler` and manifest version `2.1.1` until a separate
   release decision.
 - `AGENTS.md`, `PROJECT_CONTEXT.md`, tests, caches, profiles, QA artifacts, and
@@ -95,11 +101,16 @@ The latest unified background run passed all six smoke scripts on Blender
 4.2.1, 4.5.3, 5.0.1, and 5.2.0. Source validation, Extension build, ZIP
 validation, and ZIP entry audit passed on 4.2.1 and 5.2.0.
 
+Foreground Desk owner longevity now passes on Blender 4.2.1 and 5.2.0. The
+5.2.0 foreground workflow also kept both window owners alive and rendered all
+four Desk tabs with a 100-light x 300-target scene. Docked bounds preserve the
+upper scene viewport; full-view mode is no longer the default.
+
 ## Current Risks
 
-- Foreground mouse/DPI/theme, nested file-browser handoff, dual-window owners,
-  100 x 300 matrix responsiveness, and foreground Undo/Redo remain visual QA;
-  background Blender has no Window/Area context for those checks.
+- Foreground mouse/DPI/theme, nested file-browser handoff, and foreground
+  Undo/Redo remain visual QA; background Blender has no Window/Area context for
+  those checks.
 - Real linked-library and library-override link targets require final Blender
   behavior verification even though mutation guards and skip reports exist.
 

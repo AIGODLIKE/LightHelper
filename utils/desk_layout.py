@@ -44,6 +44,24 @@ class Rect:
         return self.x <= x < self.right and self.y <= y < self.top
 
 
+def compute_desk_bounds(
+    region_width: float,
+    region_height: float,
+    *,
+    expanded: bool = False,
+) -> Rect:
+    """Return the bottom-docked Desk surface while preserving scene space."""
+    width = max(0.0, float(region_width))
+    height = max(0.0, float(region_height))
+    if expanded or height <= 240.0:
+        return Rect(0.0, 0.0, width, height)
+
+    scene_reserve = min(260.0, max(140.0, height * 0.45))
+    desired = min(560.0, max(280.0, height * 0.45))
+    docked_height = max(240.0, min(desired, height - scene_reserve))
+    return Rect(0.0, 0.0, width, min(height, docked_height))
+
+
 @dataclass(frozen=True, slots=True)
 class VisibleSlice:
     start: int
