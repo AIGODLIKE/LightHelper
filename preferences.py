@@ -123,6 +123,21 @@ class LLT_AddonPreferences(AddonPreferences):
         precision=2,
         update=update_linking_tool_hud_scale,
     )
+    lighting_desk_mixer_columns: EnumProperty(
+        name="Lighting Desk Columns",
+        description="Column set used when a new Lighting Desk is opened",
+        items=[
+            ('MINIMAL', "Minimal", "Core light controls"),
+            ('NORMAL', "Normal", "Core controls plus size, links, groups, and visibility"),
+            ('ADVANCED', "Advanced", "All contribution and supported runtime controls"),
+        ],
+        default='NORMAL',
+    )
+    lighting_desk_sync_selection: bpy.props.BoolProperty(
+        name="Sync Lighting Desk Selection",
+        description="Synchronize Desk light-row selection with Blender selection by default",
+        default=True,
+    )
 
     def draw(self, context):
         from bpy.app.translations import pgettext_iface as p_
@@ -141,6 +156,8 @@ class LLT_AddonPreferences(AddonPreferences):
         column.prop(self, "moving_view_type", text_ctxt="light_helper_zh_CN")
         column.prop(self, "auto_fix_shared_linking")
         column.prop(self, "linking_tool_max_outlines")
+        column.prop(self, "lighting_desk_mixer_columns")
+        column.prop(self, "lighting_desk_sync_selection")
         column.separator()
         column.prop(self, "linking_tool_hud_scale")
         row = column.row(align=True)

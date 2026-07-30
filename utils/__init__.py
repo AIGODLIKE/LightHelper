@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import Enum, unique
 from uuid import uuid4
 
@@ -16,10 +17,20 @@ ILLUMINATED_OBJECT_TYPE_LIST = [
 
 
 @unique
-class StateValue(Enum):
-    """the state of the light linking"""
+class ChannelState(str, Enum):
+    """State of one native light- or shadow-linking collection entry."""
+
+    OFF = 'OFF'
     EXCLUDE = 'EXCLUDE'
     INCLUDE = 'INCLUDE'
+
+
+@unique
+class StateValue(Enum):
+    """Legacy two-state alias kept for public API compatibility."""
+
+    EXCLUDE = ChannelState.EXCLUDE.value
+    INCLUDE = ChannelState.INCLUDE.value
 
 
 @unique
@@ -27,6 +38,16 @@ class CollectionType(Enum):
     """the type of the collection, using in dict"""
     RECEIVER = 'receiver'
     BLOCKER = 'blocker'
+
+
+@dataclass(frozen=True)
+class EffectiveChannelState:
+    """Resolved state for a target, including collection inheritance."""
+
+    state: ChannelState
+    direct: bool = False
+    inherited_from: tuple = ()
+    mixed: bool = False
 
 
 def mark_managed_linking_collection(
@@ -324,6 +345,13 @@ def get_linking_mode(light: bpy.types.Object) -> str:
     return StateValue.INCLUDE.value
 
 
+def get_linking_edit_mode(light: bpy.types.Object) -> str:
+    """Return SIMPLE for legacy files which predate the edit-mode property."""
+    if hasattr(light, "light_helper_property"):
+        return getattr(light.light_helper_property, "linking_edit_mode", "SIMPLE")
+    return "SIMPLE"
+
+
 def get_linking_coll(obj: bpy.types.Object, type: CollectionType) -> bpy.types.Collection:
     if type == CollectionType.RECEIVER:
         return obj.light_linking.receiver_collection
@@ -340,14 +368,133 @@ def enum_coll_children_from_coll(coll: bpy.types.Collection) -> dict:
     return {child: coll.collection_children[i] for i, child in enumerate(coll.children)}
 
 
-def _set_item_link_state(coll: bpy.types.Collection, item, mode: str) -> bool:
-    entry = None
+def _coerce_channel_state(state) -> ChannelState:
+    if isinstance(state, ChannelState):
+        return state
+    try:
+        return ChannelState(str(state))
+    except ValueError as exc:
+        raise ValueError(f"Unsupported light linking channel state: {state!r}") from exc
+
+
+def _entry_for_item(coll: bpy.types.Collection | None, item):
+    if coll is None or item is None:
+        return None
     if isinstance(item, bpy.types.Object):
-        coll_objs = enum_coll_objs_from_coll(coll)
-        entry = coll_objs.get(item)
-    elif isinstance(item, bpy.types.Collection):
-        coll_children = enum_coll_children_from_coll(coll)
-        entry = coll_children.get(item)
+        return enum_coll_objs_from_coll(coll).get(item)
+    if isinstance(item, bpy.types.Collection):
+        return enum_coll_children_from_coll(coll).get(item)
+    return None
+
+
+def get_item_channel_state(
+        light: bpy.types.Object,
+        item,
+        coll_type: CollectionType) -> ChannelState:
+    """Return the target's direct native state, or OFF when no direct entry exists."""
+    light = resolve_original_id(light)
+    item = resolve_original_id(item)
+    try:
+        coll = get_linking_coll(light, coll_type)
+        entry = _entry_for_item(coll, item)
+        if entry is None:
+            return ChannelState.OFF
+        return _coerce_channel_state(entry.light_linking.link_state)
+    except (AttributeError, ReferenceError, RuntimeError, TypeError, ValueError):
+        return ChannelState.OFF
+
+
+def _collection_contains_object(
+        coll: bpy.types.Collection,
+        obj: bpy.types.Object,
+        visited: set[int] | None = None) -> bool:
+    if visited is None:
+        visited = set()
+    pointer = coll.as_pointer()
+    if pointer in visited:
+        return False
+    visited.add(pointer)
+    if collection_has_object(coll, obj):
+        return True
+    return any(_collection_contains_object(child, obj, visited) for child in coll.children)
+
+
+def get_effective_item_channel_state(
+        light: bpy.types.Object,
+        item,
+        coll_type: CollectionType) -> EffectiveChannelState:
+    """Resolve a direct state first, then states inherited from linked collections.
+
+    A direct object entry overrides collection inheritance without removing any
+    parent collection link. Conflicting inherited collection entries are
+    reported as ``mixed`` and are never normalized as a side effect of reading.
+    """
+    direct_state = get_item_channel_state(light, item, coll_type)
+    if direct_state != ChannelState.OFF:
+        return EffectiveChannelState(direct_state, direct=True)
+    if not isinstance(item, bpy.types.Object):
+        return EffectiveChannelState(ChannelState.OFF)
+    try:
+        coll = get_linking_coll(light, coll_type)
+    except (AttributeError, ReferenceError, RuntimeError, TypeError):
+        coll = None
+    if coll is None:
+        return EffectiveChannelState(ChannelState.OFF)
+
+    inherited = []
+    states = set()
+    for child in coll.children:
+        try:
+            if not _collection_contains_object(child, item):
+                continue
+            state = get_item_channel_state(light, child, coll_type)
+            if state == ChannelState.OFF:
+                continue
+            inherited.append(child)
+            states.add(state)
+        except (AttributeError, ReferenceError, RuntimeError, TypeError):
+            continue
+    if not states:
+        return EffectiveChannelState(ChannelState.OFF)
+    if len(states) > 1:
+        return EffectiveChannelState(
+            ChannelState.OFF,
+            inherited_from=tuple(inherited),
+            mixed=True,
+        )
+    return EffectiveChannelState(
+        next(iter(states)),
+        inherited_from=tuple(inherited),
+    )
+
+
+def get_effective_linking_mode(light: bpy.types.Object) -> str:
+    """Return INCLUDE, EXCLUDE, or MIXED from the native user-authored entries."""
+    light = resolve_original_id(light)
+    states = set()
+    try:
+        for coll_type in (CollectionType.RECEIVER, CollectionType.BLOCKER):
+            coll = get_linking_coll(light, coll_type)
+            if coll is None:
+                continue
+            for item in tuple(coll.objects) + tuple(coll.children):
+                if (is_safe_helper_object(item)
+                        or is_internal_world_dome_link(light, item, coll_type)):
+                    continue
+                state = get_item_channel_state(light, item, coll_type)
+                if state != ChannelState.OFF:
+                    states.add(state.value)
+    except (AttributeError, ReferenceError, RuntimeError, TypeError):
+        return get_linking_mode(light)
+    if not states:
+        return get_linking_mode(light)
+    if len(states) == 1:
+        return next(iter(states))
+    return "MIXED"
+
+
+def _set_item_link_state(coll: bpy.types.Collection, item, mode: str) -> bool:
+    entry = _entry_for_item(coll, item)
     if entry is None:
         return False
     try:
@@ -357,6 +504,81 @@ def _set_item_link_state(coll: bpy.types.Collection, item, mode: str) -> bool:
         return True
     except (AttributeError, ReferenceError, RuntimeError, TypeError):
         return False
+
+
+def set_item_channel_state(
+        light: bpy.types.Object,
+        item,
+        coll_type: CollectionType,
+        state: ChannelState | str,
+        context: bpy.types.Context | None = None,
+        *,
+        notify: bool = True,
+        sync_helpers: bool = True,
+) -> bool:
+    """Set one direct channel entry without disturbing inherited collection links."""
+    light = resolve_original_id(light)
+    item = resolve_original_id(item)
+    try:
+        state = _coerce_channel_state(state)
+    except ValueError:
+        return False
+    if (not are_light_linking_collections_editable(light)
+            or not is_original_id(item)):
+        return False
+
+    try:
+        coll = get_linking_coll(light, coll_type)
+    except (AttributeError, ReferenceError, RuntimeError, TypeError):
+        coll = None
+    if coll is not None and is_internal_world_dome_link(light, item, coll_type):
+        return False
+    if coll is None:
+        if state == ChannelState.OFF:
+            return False
+        try:
+            coll = ensure_linking_coll(coll_type, light, context)
+        except (AttributeError, ReferenceError, RuntimeError, TypeError):
+            return False
+    if coll is None or not coll.is_editable:
+        return False
+
+    changed = False
+    try:
+        if isinstance(item, bpy.types.Object):
+            linked = collection_has_object(coll, item)
+            if state == ChannelState.OFF:
+                if linked:
+                    coll.objects.unlink(item)
+                    changed = True
+            else:
+                if not linked:
+                    coll.objects.link(item)
+                    changed = True
+                changed = _set_item_link_state(coll, item, state.value) or changed
+        elif isinstance(item, bpy.types.Collection):
+            linked = collection_has_child(coll, item)
+            if state == ChannelState.OFF:
+                if linked:
+                    coll.children.unlink(item)
+                    changed = True
+            else:
+                if not linked:
+                    coll.children.link(item)
+                    changed = True
+                changed = _set_item_link_state(coll, item, state.value) or changed
+        else:
+            return False
+    except (AttributeError, ReferenceError, RuntimeError, TypeError):
+        return False
+    if not changed:
+        return False
+    if sync_helpers and not sync_safe_helpers_for_light(light):
+        return False
+    if notify:
+        from .overlay import notify_linking_changed
+        notify_linking_changed(context)
+    return True
 
 
 def is_internal_world_dome_link(
@@ -412,6 +634,48 @@ def apply_linking_mode_to_light(light: bpy.types.Object, mode: str | None = None
                 ) or changed
                 continue
             changed = _set_item_link_state(coll, item, mode) or changed
+    return changed
+
+
+def set_linking_edit_mode(
+        light: bpy.types.Object,
+        edit_mode: str,
+        simple_mode: str | None = None,
+        context: bpy.types.Context | None = None,
+) -> bool:
+    """Switch editing models without silently flattening advanced native state.
+
+    Entering ADVANCED only changes the stored UI mode. Returning to SIMPLE
+    requires an explicit INCLUDE or EXCLUDE choice and rewrites user entries
+    while preserving World Dome infrastructure exclusions.
+    """
+    light = resolve_original_id(light)
+    if not is_light_linking_source_editable(light) or not hasattr(light, "light_helper_property"):
+        return False
+    if edit_mode not in {"SIMPLE", "ADVANCED"}:
+        return False
+    props = light.light_helper_property
+    if edit_mode == "ADVANCED":
+        changed = getattr(props, "linking_edit_mode", "SIMPLE") != "ADVANCED"
+        props.linking_edit_mode = "ADVANCED"
+    else:
+        if simple_mode not in {ChannelState.INCLUDE.value, ChannelState.EXCLUDE.value}:
+            return False
+        if not are_light_linking_collections_editable(light):
+            return False
+        changed = (
+            getattr(props, "linking_edit_mode", "SIMPLE") != "SIMPLE"
+            or props.linking_mode != simple_mode
+            or get_effective_linking_mode(light) != simple_mode
+        )
+        # While still ADVANCED the linking_mode update callback only updates
+        # the default, so the explicit flattening remains one controlled step.
+        props.linking_mode = simple_mode
+        changed = apply_linking_mode_to_light(light, simple_mode) or changed
+        props.linking_edit_mode = "SIMPLE"
+    if changed:
+        from .overlay import notify_linking_changed
+        notify_linking_changed(context)
     return changed
 
 
@@ -538,42 +802,12 @@ def link_item_to_channel(light: bpy.types.Object, item,
     if (not are_light_linking_collections_editable(light)
             or not is_original_id(item)):
         return False
-    coll = get_linking_coll(light, coll_type)
-    if coll is None:
-        if not enabled:
-            return False
-        try:
-            coll = ensure_linking_coll(coll_type, light, context)
-        except (AttributeError, ReferenceError, RuntimeError, TypeError):
-            return False
-    if coll is None or not coll.is_editable:
-        return False
-    mode = get_linking_mode(light)
-    changed = False
-    try:
-        if isinstance(item, bpy.types.Object):
-            if enabled:
-                if not collection_has_object(coll, item):
-                    coll.objects.link(item)
-                    changed = True
-                changed = _set_item_link_state(coll, item, mode) or changed
-            elif collection_has_object(coll, item):
-                coll.objects.unlink(item)
-                changed = True
-        elif isinstance(item, bpy.types.Collection):
-            if enabled:
-                if not collection_has_child(coll, item):
-                    coll.children.link(item)
-                    changed = True
-                changed = _set_item_link_state(coll, item, mode) or changed
-            elif collection_has_child(coll, item):
-                coll.children.unlink(item)
-                changed = True
-        else:
-            return False
-    except (AttributeError, ReferenceError, RuntimeError, TypeError):
-        return False
-
+    state = get_linking_mode(light) if enabled else ChannelState.OFF
+    changed = set_item_channel_state(
+        light, item, coll_type, state, context,
+        notify=False,
+        sync_helpers=False,
+    )
     if not changed:
         return False
 

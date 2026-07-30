@@ -10,8 +10,11 @@ from gpu_extras.batch import batch_for_shader
 from mathutils import Vector
 
 from . import (
+    ChannelState,
     CollectionType,
+    get_effective_item_channel_state,
     get_all_light_effect_items_state,
+    get_item_channel_state,
     get_linking_mode,
     get_pref,
 )
@@ -67,6 +70,8 @@ class LinkDrawTarget:
         "center",
         "corners",
         "linking_mode",
+        "receiver_state",
+        "blocker_state",
     )
 
     def __init__(self, item, receiver, blocker, is_collection, name, center=None, corners=None):
@@ -80,6 +85,8 @@ class LinkDrawTarget:
         # Resolved once per cache refresh; reading it per draw frame would
         # re-walk material node trees for emissive-mesh subjects.
         self.linking_mode = "INCLUDE"
+        self.receiver_state = ChannelState.OFF.value
+        self.blocker_state = ChannelState.OFF.value
 
 
 class LinkDrawGroup:
@@ -126,6 +133,11 @@ def notify_linking_changed(context: bpy.types.Context | None = None) -> None:
     from . import invalidate_linking_ui_cache
     invalidate_filter_cache()
     invalidate_linking_ui_cache()
+    try:
+        from ..ui.desk import refresh_active_desks
+        refresh_active_desks()
+    except (ImportError, AttributeError, ReferenceError, RuntimeError, TypeError):
+        pass
     ctx = context if context is not None else bpy.context
     if ctx is None or ctx.window_manager is None:
         return
@@ -419,7 +431,7 @@ def _channel_color(receiver: bool, blocker: bool, both_color, light_color, shado
 
 def _assign_target_linking_modes(groups: list[LinkDrawGroup], subject_mode: str,
                                  context: bpy.types.Context | None = None) -> None:
-    """Resolve every target's Include/Exclude mode once per cache refresh.
+    """Resolve every target's real per-channel state once per cache refresh.
 
     Mode changes always run ``notify_linking_changed`` which refreshes this
     cache, so per-frame resolution (with its material-tree walks for
@@ -438,8 +450,36 @@ def _assign_target_linking_modes(groups: list[LinkDrawGroup], subject_mode: str,
                     and isinstance(target.item, bpy.types.Object)
                     and is_tool_light_source(target.item, context, cache=emission_cache)):
                 target.linking_mode = get_linking_mode(target.item)
+                receiver = get_effective_item_channel_state(
+                    target.item, group.subject, CollectionType.RECEIVER,
+                )
+                blocker = get_effective_item_channel_state(
+                    target.item, group.subject, CollectionType.BLOCKER,
+                )
+                target.receiver_state = "MIXED" if receiver.mixed else receiver.state.value
+                target.blocker_state = "MIXED" if blocker.mixed else blocker.state.value
             else:
                 target.linking_mode = subject_fallback
+                target.receiver_state = get_item_channel_state(
+                    group.subject, target.item, CollectionType.RECEIVER,
+                ).value
+                target.blocker_state = get_item_channel_state(
+                    group.subject, target.item, CollectionType.BLOCKER,
+                ).value
+
+
+def _channel_state_color(state: str, shadow: bool, *, outline: bool = False):
+    if state == ChannelState.INCLUDE.value:
+        if shadow:
+            return COLOR_INCLUDE_OUTLINE_SHADOW if outline else COLOR_INCLUDE_LINE_SHADOW
+        return COLOR_INCLUDE_OUTLINE_LIGHT if outline else COLOR_INCLUDE_LINE_LIGHT
+    if state == ChannelState.EXCLUDE.value:
+        if shadow:
+            return COLOR_EXCLUDE_OUTLINE_SHADOW if outline else COLOR_EXCLUDE_LINE_SHADOW
+        return COLOR_EXCLUDE_OUTLINE_LIGHT if outline else COLOR_EXCLUDE_LINE_LIGHT
+    if state == "MIXED":
+        return (1.0, 0.65, 0.15, 0.25 if outline else 0.85)
+    return COLOR_LINE_NONE
 
 
 def _target_line_colors(linking_mode: str):
@@ -779,28 +819,54 @@ def _draw_overlay_3d():
                 center, _corners = _target_world_bbox(target)
                 if center is None:
                     continue
-                color = _channel_color(
-                    target.receiver, target.blocker,
-                    *_target_line_colors(target.linking_mode),
-                )
-                color = _scale_color_alpha(color, alpha_scale)
-                _draw_lines_batch(context, [subject_pos, center], color, width=2.0)
+                # Shadow is the wide underlay; illumination is the narrow
+                # foreground so both native channel states remain legible.
+                if target.blocker:
+                    color = _channel_state_color(target.blocker_state, True)
+                    _draw_lines_batch(
+                        context,
+                        [subject_pos, center],
+                        _scale_color_alpha(color, alpha_scale),
+                        width=4.0 if target.receiver else 2.5,
+                    )
+                if target.receiver:
+                    color = _channel_state_color(target.receiver_state, False)
+                    _draw_lines_batch(
+                        context,
+                        [subject_pos, center],
+                        _scale_color_alpha(color, alpha_scale),
+                        width=2.0,
+                    )
 
             if not _cache.outlines_hidden:
                 for target in group.targets:
                     _center, corners = _target_world_bbox(target)
                     if corners is None:
                         continue
-                    color = _channel_color(
-                        target.receiver, target.blocker,
-                        *_target_outline_colors(target.linking_mode),
-                    )
-                    color = _scale_color_alpha(color, alpha_scale)
                     edge_coords = []
                     for i0, i1 in _bbox_edges:
                         edge_coords.append(corners[i0])
                         edge_coords.append(corners[i1])
-                    _draw_lines_batch(context, edge_coords, color, width=1.5)
+                    if target.blocker:
+                        color = _channel_state_color(
+                            target.blocker_state, True, outline=True,
+                        )
+                        _draw_lines_batch(
+                            context,
+                            edge_coords,
+                            _scale_color_alpha(color, alpha_scale),
+                            width=3.0 if target.receiver else 1.8,
+                        )
+                    if target.receiver:
+                        color = _channel_state_color(
+                            target.receiver_state, False, outline=True,
+                        )
+                        _draw_lines_batch(
+                            context,
+                            edge_coords,
+                            _scale_color_alpha(color, alpha_scale),
+                            width=1.5,
+                        )
     except (AttributeError, ReferenceError, RuntimeError, TypeError):
         invalidate_overlay_cache()
     finally:

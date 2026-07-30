@@ -2,10 +2,15 @@ import bpy
 from bpy.app.translations import pgettext_iface as p_
 
 from ..utils import (
+    ChannelState,
     CollectionType,
     are_light_linking_collections_editable,
     get_all_light_effect_items_state,
     get_item_visibility_restrictions,
+    get_effective_item_channel_state,
+    get_effective_linking_mode,
+    get_item_channel_state,
+    get_linking_edit_mode,
     get_lights_from_effect_obj,
     get_pref,
     is_eevee_engine,
@@ -158,7 +163,10 @@ def draw_toggle_btn(layout,
                     item: bpy.types.Object | bpy.types.Collection,
                     tooltip: str = "",
                     restore_default_when_empty: bool = False):
-    """Draw channel toggle buttons for receiver / blocker membership."""
+    """Draw legacy booleans in Simple mode and native tri-states in Advanced."""
+    if get_linking_edit_mode(light_obj) == 'ADVANCED':
+        draw_advanced_channel_states(layout, light_obj, item)
+        return
     from ..ops import LLP_OT_toggle_light_linking
     from ..utils import is_item_in_channel
     row = layout.row()
@@ -190,6 +198,81 @@ def draw_toggle_btn(layout,
     op.restore_default_when_empty = restore_default_when_empty
     op.tooltip = tooltip
 
+
+def draw_advanced_channel_states(layout, light_obj, item):
+    from ..ops import LLP_OT_set_item_channel_state
+
+    row = layout.row(align=True)
+    row.context_pointer_set("channel_state_light", light_obj)
+    row.context_pointer_set("channel_state_item", item)
+    for coll_type, prefix in (
+            (CollectionType.RECEIVER, "L"),
+            (CollectionType.BLOCKER, "S")):
+        direct = get_item_channel_state(light_obj, item, coll_type)
+        effective = get_effective_item_channel_state(light_obj, item, coll_type)
+        for state, suffix in (
+                (ChannelState.OFF, "."),
+                (ChannelState.INCLUDE, "+"),
+                (ChannelState.EXCLUDE, "-")):
+            op = row.operator(
+                LLP_OT_set_item_channel_state.bl_idname,
+                text=prefix + suffix,
+                depress=direct == state,
+            )
+            op.coll_type = coll_type.value
+            op.state = state.value
+        if effective.inherited_from and direct == ChannelState.OFF:
+            row.label(text="", icon=ui_icon('OUTLINER_COLLECTION'))
+
+
+def draw_linking_edit_mode(layout, light_obj, enabled: bool) -> None:
+    from ..ops import LLP_OT_set_linking_edit_mode
+
+    edit_mode = get_linking_edit_mode(light_obj)
+    row = layout.row(align=True)
+    row.enabled = enabled
+    row.context_pointer_set("linking_edit_mode_light", light_obj)
+    if edit_mode == 'SIMPLE':
+        op = row.operator(
+            LLP_OT_set_linking_edit_mode.bl_idname,
+            text=p_("Simple"),
+            depress=True,
+        )
+        op.edit_mode = 'SIMPLE'
+        op.simple_mode = light_obj.light_helper_property.linking_mode
+    else:
+        for mode, label in (('INCLUDE', "Simple +"), ('EXCLUDE', "Simple -")):
+            op = row.operator(
+                LLP_OT_set_linking_edit_mode.bl_idname,
+                text=p_(label),
+            )
+            op.edit_mode = 'SIMPLE'
+            op.simple_mode = mode
+    op = row.operator(
+        LLP_OT_set_linking_edit_mode.bl_idname,
+        text=p_("Advanced"),
+        depress=edit_mode == 'ADVANCED',
+    )
+    op.edit_mode = 'ADVANCED'
+
+    effective = get_effective_linking_mode(light_obj)
+    if edit_mode == 'SIMPLE' and effective != 'MIXED':
+        mode_row = layout.row(align=True)
+        mode_row.enabled = enabled
+        mode_row.prop(
+            light_obj.light_helper_property,
+            'linking_mode',
+            expand=True,
+            text_ctxt="light_helper_zh_CN",
+        )
+    else:
+        label = p_("Mixed") if effective == 'MIXED' else p_(effective.title())
+        layout.label(text=p_("Native state: %s") % label, icon=ui_icon('INFO'))
+        if edit_mode == 'SIMPLE' and effective == 'MIXED':
+            layout.label(
+                text=p_("Switch to Advanced to preserve and edit mixed states"),
+                icon=ui_icon('ERROR'),
+            )
 
 def draw_remove_button(layout,
                        light_obj: bpy.types.Object,
@@ -223,13 +306,183 @@ def draw_add_box(col, context, light_obj):
     row.operator(LLP_OT_link_selected_objs.bl_idname, icon=ui_icon('ADD'))
 
 
+class VIEW3D_PT_light_helper_workflow(bpy.types.Panel):
+    bl_label = "Lighting Workflow"
+    bl_idname = "VIEW3D_PT_light_helper_workflow"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "LH"
+    bl_order = 0
+
+    def draw(self, context):
+        layout = self.layout
+        row = layout.row(align=True)
+        row.operator(
+            "view3d.light_helper_lighting_desk",
+            text=p_("Lighting Desk"),
+            icon=ui_icon('WINDOW'),
+        )
+        tool = row.operator(
+            "wm.tool_set_by_id",
+            text=p_("Placement"),
+            icon=ui_icon('ORIENTATION_NORMAL'),
+        )
+        tool.name = "light_helper.placement"
+
+        row = layout.row(align=True)
+        from ..ops.light_mixer import is_false_color_enabled
+        false_color_enabled = is_false_color_enabled(context.scene)
+        false_color = row.operator(
+            "scene.light_helper_toggle_false_color",
+            text=p_("Disable False Color") if false_color_enabled else p_("False Color"),
+            icon=ui_icon('SEQ_LUMA_WAVEFORM'),
+        )
+        false_color.enabled = not false_color_enabled
+        row.operator(
+            "object.light_helper_add_track_target",
+            text=p_("Track Target"),
+            icon=ui_icon('CON_TRACKTO'),
+        )
+        row.operator(
+            "object.light_helper_remove_track_target",
+            text="",
+            icon=ui_icon('X'),
+        )
+        row = layout.row(align=True)
+        for action, label in (
+                ('SET_ENERGY', "Batch Energy"),
+                ('SET_RGB', "Batch RGB"),
+                ('SET_KELVIN', "Batch Kelvin")):
+            operator = row.operator(
+                "object.light_helper_mixer_batch",
+                text=p_(label),
+            )
+            operator.action = action
+            operator.target_names_json = "[]"
+        if context.collection is not None:
+            collection_edit = layout.operator(
+                "object.light_helper_mixer_collection_transform",
+                text=p_("Collection EV / Tint"),
+                icon=ui_icon('OUTLINER_COLLECTION'),
+            )
+            collection_edit.collection_name = context.collection.name
+
+        profiles = layout.box()
+        profiles.label(text=p_("Lighting Profiles"), icon=ui_icon('PRESET'))
+        if hasattr(context.scene, "light_helper_profiles"):
+            profiles.template_list(
+                "UI_UL_list",
+                "light_helper_profiles",
+                context.scene,
+                "light_helper_profiles",
+                context.scene,
+                "light_helper_profile_index",
+                rows=3,
+            )
+            row = profiles.row(align=True)
+            row.operator(
+                "scene.light_helper_profile_capture", text=p_("Capture"), icon=ui_icon('ADD'),
+            )
+            row.operator(
+                "scene.light_helper_profile_apply", text=p_("Apply"), icon=ui_icon('CHECKMARK'),
+            )
+            row.operator(
+                "scene.light_helper_profile_remove", text="", icon=ui_icon('REMOVE'),
+            )
+            row = profiles.row(align=True)
+            row.operator(
+                "scene.light_helper_profile_import", text=p_("Import"), icon=ui_icon('IMPORT'),
+            )
+            row.operator(
+                "scene.light_helper_profile_export", text=p_("Export"), icon=ui_icon('EXPORT'),
+            )
+
+        groups = layout.box()
+        groups.label(text=p_("Cycles Light Groups"), icon=ui_icon('RENDERLAYERS'))
+        groups.enabled = context.scene.render.engine == 'CYCLES'
+        row = groups.row(align=True)
+        row.operator(
+            "scene.light_helper_light_groups_sync", text=p_("Sync"), icon=ui_icon('FILE_REFRESH'),
+        )
+        row.operator(
+            "scene.light_helper_light_group_build_compositor",
+            text=p_("Build Mixer"),
+            icon=ui_icon('NODETREE'),
+        )
+        row.operator(
+            "scene.light_helper_light_group_remove_compositor",
+            text="",
+            icon=ui_icon('X'),
+        )
+        for setting in getattr(context.scene, "light_helper_light_group_settings", ()):
+            row = groups.row(align=True)
+            row.prop(setting, "name", text="")
+            row.prop(setting, "ev", text="EV")
+            row.prop(setting, "tint", text="")
+            assign = row.operator(
+                "object.light_helper_assign_light_group",
+                text="",
+                icon=ui_icon('LINKED'),
+            )
+            assign.group_name = setting.name
+            world = row.operator(
+                "world.light_helper_assign_light_group",
+                text="W",
+                icon=ui_icon('WORLD'),
+            )
+            world.group_name = setting.name
+            remove = row.operator(
+                "scene.light_helper_light_group_remove",
+                text="",
+                icon=ui_icon('REMOVE'),
+            )
+            remove.group_name = setting.name
+
+        studio = layout.box()
+        studio.label(text=p_("Studio Shaping"), icon=ui_icon('MESH_PLANE'))
+        row = studio.row(align=True)
+        cycles = context.scene.render.engine == 'CYCLES'
+        scrim = row.row(align=True)
+        scrim.enabled = cycles
+        scrim.operator(
+            "object.light_helper_create_scrim", text=p_("Scrim"), icon=ui_icon('LIGHT_AREA'),
+        )
+        row.operator(
+            "object.light_helper_create_flag", text=p_("Flag"), icon=ui_icon('MESH_PLANE'),
+        )
+        reflector = row.row(align=True)
+        reflector.enabled = cycles
+        reflector.operator(
+            "object.light_helper_create_reflector",
+            text=p_("Reflector"),
+            icon=ui_icon('SHADING_RENDERED'),
+        )
+        try:
+            from ..utils.studio import is_studio_object
+            is_studio = is_studio_object(context.active_object)
+        except (ImportError, AttributeError, ReferenceError, TypeError):
+            is_studio = False
+        if is_studio:
+            row = studio.row(align=True)
+            row.operator(
+                "object.light_helper_make_studio_single_user",
+                text=p_("Make Single User"),
+                icon=ui_icon('DUPLICATE'),
+            )
+            row.operator(
+                "object.light_helper_remove_studio_object",
+                text=p_("Remove"),
+                icon=ui_icon('TRASH'),
+            )
+
+
 class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
     bl_label = ""
     bl_idname = "VIEW3D_PT_light_helper_light_control"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "LH"
-    bl_order = 0
+    bl_order = 1
     bl_options = {'HEADER_LAYOUT_EXPAND'}
 
     def draw_header(self, context):
@@ -342,14 +595,7 @@ class VIEW3D_PT_light_helper_light_control(bpy.types.Panel):
             return
 
         col.separator()
-        mode_row = col.row(align=True)
-        mode_row.enabled = collections_editable
-        mode_row.prop(
-            light_obj.light_helper_property,
-            'linking_mode',
-            expand=True,
-            text_ctxt="light_helper_zh_CN",
-        )
+        draw_linking_edit_mode(col, light_obj, collections_editable)
 
         obj_state_dict = get_all_light_effect_items_state(light_obj)
 
@@ -414,7 +660,7 @@ class VIEW3D_PT_light_helper_object_control(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "LH"
-    bl_order = 1
+    bl_order = 2
     bl_options = {'HEADER_LAYOUT_EXPAND'}
 
     @classmethod
@@ -496,12 +742,19 @@ class VIEW3D_PT_light_helper_object_control(bpy.types.Panel):
             sub.label(text='', icon=get_light_icon(light_obj))
             mode = sub.row(align=True)
             mode.enabled = are_light_linking_collections_editable(light_obj)
-            mode.prop(
-                light_obj.light_helper_property,
-                'linking_mode',
-                text='',
-                text_ctxt="light_helper_zh_CN",
-            )
+            if get_linking_edit_mode(light_obj) == 'SIMPLE':
+                mode.prop(
+                    light_obj.light_helper_property,
+                    'linking_mode',
+                    text='',
+                    text_ctxt="light_helper_zh_CN",
+                )
+            else:
+                effective = get_effective_linking_mode(light_obj)
+                mode.label(
+                    text=p_("Mixed") if effective == 'MIXED' else p_(effective.title()),
+                    icon=ui_icon('MODIFIER'),
+                )
             draw_select_btn(row, light_obj, tooltip)
             draw_toggle_btn(
                 row, light_obj, item, tooltip,
@@ -523,7 +776,7 @@ class VIEW3D_PT_light_helper_world_environment(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "LH"
-    bl_order = 2
+    bl_order = 3
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
@@ -648,7 +901,7 @@ class VIEW3D_PT_light_helper_light_properties(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "LH"
-    bl_order = 3
+    bl_order = 4
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
@@ -782,6 +1035,7 @@ class VIEW3D_PT_light_helper_eevee_light_influence(bpy.types.Panel):
 
 
 panel_list = [
+    VIEW3D_PT_light_helper_workflow,
     VIEW3D_PT_light_helper_light_control,
     VIEW3D_PT_light_helper_object_control,
     VIEW3D_PT_light_helper_world_environment,

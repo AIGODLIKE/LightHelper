@@ -19,6 +19,11 @@ LightHelper is a Blender extension that turns Light Linking and Shadow Linking i
 - Separate shared linking data manually, or opt in to automatic duplicate handling.
 - Restore Blender's default full-lighting behavior with one action.
 - Convert a nested or packed World HDRI—or a solid World Background—into one linkable environment dome and restore the original World safely.
+- Open a full-area GPU **Lighting Desk** with virtualized Link, Mix, Looks, and Studio workspaces.
+- Use per-item **Off / Include / Exclude** states in Advanced mode while retaining the original Simple workflow.
+- Place or adjust Point, Area, Spot, and Sun lights with **Reflect, Direct, and Orbit** interactions.
+- Capture portable `.lhprofile` Lighting Profiles and build a non-destructive Cycles Light Group compositor mixer.
+- Create managed **Scrim, Flag, and Reflector** studio-shaping objects with conservative ownership cleanup.
 
 ## Compatibility
 
@@ -27,11 +32,24 @@ LightHelper is a Blender extension that turns Light Linking and Shadow Linking i
 | Native Light / Shadow Linking (Blender 4.2+) | Yes | Blender 4.3+ |
 | Emissive-material Light Linking | Yes | No |
 | World HDRI / solid-color environment dome | Yes | Hidden |
+| Lighting Desk and native-light mixer | Yes | Yes |
+| Scrim / Reflector | Yes | Existing objects preserved; creation disabled |
+| Flag | Yes | Yes, subject to Eevee shadow behavior |
+| Cycles Light Groups and compositor mixer | Yes | No |
 
 - Minimum supported Blender version: **4.2**.
 - The Light Linking controls are disabled for unsupported render engines.
 - LightHelper follows Blender's own Light Linking capabilities and renderer limitations.
 - **World Environment Linking and emissive-material light sources require Cycles.** Native Blender Light objects remain available in Eevee where Blender supports Light Linking.
+
+## Complete lighting workflow
+
+- **Lighting Desk:** open it from the LH sidebar. Link virtualizes both axes of the light/target matrix; each cell has illumination and shadow states. Ctrl/Shift select ranges, then use the toolbar to apply a state to the selected cells. Mix provides Minimal, Normal, and Advanced columns, synchronized multi-selection, EV wheel edits, Kelvin presets, mute/solo/render controls, and safe common/full copy-paste.
+- **Simple and Advanced linking:** Simple keeps the familiar one-mode workflow. Advanced exposes each native entry as Off, Include, or Exclude. Returning to Simple requires choosing Include or Exclude explicitly; managed World Dome exclusions are not rewritten.
+- **Placement Tool:** choose Light Placement in the left toolbar. Reflect follows the specular reflection direction, Direct places on the surface normal, and Orbit keeps distance around the hit point or selection center. Wheel adjusts EV; Shift+wheel size; Alt+wheel distance; Ctrl+wheel Spot spread; Z+wheel roll. Esc restores an adjusted light or removes the light created by the current gesture.
+- **Looks:** False Color is temporary and restores the exact previous View Transform. Profiles capture matching native lights, links, World, managed Studio objects, Kelvin metadata, Light Groups, and managed mixer state. “Create Missing” only creates native lights and managed Studio shapes.
+- **Cycles Light Groups:** synchronize View Layer passes, set per-group EV/tint, and build the managed residual-plus-adjusted-group compositor. Existing user output chains are preserved.
+- **Studio:** Scrim is a Cycles emissive source, Flag is a physical blocker for Cycles/Eevee, and Reflector is a Cycles diffuse bounce card. Managed Track Targets use Track To `-Z / Y` and can be shared safely.
 
 ## Installation
 

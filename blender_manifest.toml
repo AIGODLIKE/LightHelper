@@ -11,6 +11,9 @@ license = ["SPDX:GPL-3.0-or-later"]
 support = "https://github.com/AIGODLIKE/LightHelper/issues"
 website = "https://github.com/AIGODLIKE/LightHelper"
 
+[permissions]
+files = "Import and export user-selected .lhprofile profile files"
+
 [build]
 paths_exclude_pattern = [
     "__pycache__/",
@@ -19,6 +22,10 @@ paths_exclude_pattern = [
     "/.idea/",
     "/.ruff_cache/",
     "/.pytest_cache/",
+    "/tests/",
+    "/.tmp/",
+    "/qa/",
+    "/artifacts/",
     "/dist/",
     "/AGENTS.md",
     "/PROJECT_CONTEXT.md",
@@ -29,4 +36,7 @@ paths_exclude_pattern = [
     "**/*.pyc",
     "**/*.pyo",
     "**/*.log",
+    "**/*.lhprofile",
+    "**/*_qa.png",
+    "**/*_qa.jpg",
 ]

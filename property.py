@@ -1,14 +1,31 @@
 import bpy
 from bpy.types import PropertyGroup
 
+_linking_mode_update_suspended = False
+
 
 def update_linking_mode(self, context):
     from .utils import apply_linking_mode_to_light, are_light_linking_collections_editable
+    # In Advanced mode this remains the default state for newly added legacy
+    # links; changing it must not flatten independently authored native items.
+    if (_linking_mode_update_suspended
+            or getattr(self, "linking_edit_mode", "SIMPLE") != "SIMPLE"):
+        return
     if not are_light_linking_collections_editable(self.id_data):
         return
     apply_linking_mode_to_light(self.id_data, self.linking_mode)
     from .utils.overlay import notify_linking_changed
     notify_linking_changed(context)
+
+
+def set_linking_mode_silent(props, mode: str) -> None:
+    """Restore linking-mode metadata without rewriting native collection entries."""
+    global _linking_mode_update_suspended
+    _linking_mode_update_suspended = True
+    try:
+        props.linking_mode = mode
+    finally:
+        _linking_mode_update_suspended = False
 
 
 def check_light_object(obj: bpy.types.Object) -> bool:
@@ -25,6 +42,15 @@ def update_world_dome_settings(self, context):
 
 
 class ObjectProperty(PropertyGroup):
+    linking_edit_mode: bpy.props.EnumProperty(
+        name="Link Editing",
+        description="Simple applies one state to all user entries; Advanced preserves each native entry",
+        items=[
+            ("SIMPLE", "Simple", "Use one Include or Exclude state for all user entries"),
+            ("ADVANCED", "Advanced", "Edit every illumination and shadow entry independently"),
+        ],
+        default="SIMPLE",
+    )
     linking_mode: bpy.props.EnumProperty(
         name="Linking Mode",
         description="Include: only listed objects receive this light. Exclude: listed objects are excluded from this light",
@@ -35,6 +61,18 @@ class ObjectProperty(PropertyGroup):
         ],
         default="INCLUDE",
         update=update_linking_mode,
+    )
+    kelvin_mode: bpy.props.BoolProperty(
+        name="Kelvin Mode",
+        description="Use a managed blackbody temperature for this light color",
+        default=False,
+    )
+    kelvin_temperature: bpy.props.FloatProperty(
+        name="Temperature",
+        description="Managed light color temperature in Kelvin",
+        default=5600.0,
+        min=1000.0,
+        max=40000.0,
     )
 
     def get_show_viewport(self):
@@ -428,6 +466,27 @@ class WindowManagerProperty(PropertyGroup):
     )
     solo_visibility: bpy.props.CollectionProperty(
         type=SoloVisibilityItem,
+        options={'SKIP_SAVE'},
+    )
+    lighting_desk_active: bpy.props.BoolProperty(
+        name="Lighting Desk Active",
+        default=False,
+        options={'SKIP_SAVE'},
+    )
+    lighting_desk_tab: bpy.props.EnumProperty(
+        name="Lighting Desk Tab",
+        items=[
+            ('LINK', "Link", ""),
+            ('MIX', "Mix", ""),
+            ('LOOKS', "Looks", ""),
+            ('STUDIO', "Studio", ""),
+        ],
+        default='LINK',
+        options={'SKIP_SAVE'},
+    )
+    lighting_desk_sync_selection: bpy.props.BoolProperty(
+        name="Sync Desk Selection",
+        default=True,
         options={'SKIP_SAVE'},
     )
 

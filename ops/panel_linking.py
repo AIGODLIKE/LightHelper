@@ -2,6 +2,7 @@ import bpy
 from bpy.app.translations import pgettext_iface as p_
 
 from ..utils import (
+    ChannelState,
     CollectionType,
     are_light_linking_collections_editable,
     init_light_linking,
@@ -11,8 +12,87 @@ from ..utils import (
     link_item_both_channels,
     link_item_to_channel,
     restore_light_linking,
+    set_item_channel_state,
+    set_linking_edit_mode,
 )
 from .common import COLL_TYPE_ITEMS, LightHelperOperator, get_light_obj, operator_tooltip_description
+
+
+class LLP_OT_set_linking_edit_mode(LightHelperOperator, bpy.types.Operator):
+    bl_idname = 'object.light_helper_set_linking_edit_mode'
+    bl_label = "Set Linking Edit Mode"
+    bl_description = "Switch between Simple and Advanced editing without silently changing native states"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    edit_mode: bpy.props.EnumProperty(
+        items=[('SIMPLE', "Simple", ""), ('ADVANCED', "Advanced", "")],
+        options={'HIDDEN', 'SKIP_SAVE'},
+    )
+    simple_mode: bpy.props.EnumProperty(
+        items=[('INCLUDE', "Include", ""), ('EXCLUDE', "Exclude", "")],
+        default='INCLUDE',
+        options={'HIDDEN', 'SKIP_SAVE'},
+    )
+
+    @classmethod
+    def poll(cls, context):
+        light = getattr(context, "linking_edit_mode_light", None)
+        if light is None:
+            cls.poll_message_set(p_("No light selected"))
+            return False
+        if not is_light_linking_source_editable(light):
+            cls.poll_message_set(p_("Light linking data is read-only"))
+            return False
+        return True
+
+    def execute(self, context):
+        light = getattr(context, "linking_edit_mode_light", None)
+        if light is None:
+            return {'CANCELLED'}
+        simple_mode = self.simple_mode if self.edit_mode == 'SIMPLE' else None
+        if not set_linking_edit_mode(light, self.edit_mode, simple_mode, context):
+            return {'CANCELLED'}
+        return {'FINISHED'}
+
+
+class LLP_OT_set_item_channel_state(LightHelperOperator, bpy.types.Operator):
+    bl_idname = 'object.light_helper_set_item_channel_state'
+    bl_label = "Set Link State"
+    bl_description = "Set this target to Off, Include, or Exclude in one native channel"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    coll_type: bpy.props.EnumProperty(items=COLL_TYPE_ITEMS, options={'HIDDEN', 'SKIP_SAVE'})
+    state: bpy.props.EnumProperty(
+        items=[
+            ('OFF', "Off", "Remove the direct entry and preserve inherited collection links"),
+            ('INCLUDE', "Include", "Add or set a direct Include entry"),
+            ('EXCLUDE', "Exclude", "Add or set a direct Exclude entry"),
+        ],
+        options={'HIDDEN', 'SKIP_SAVE'},
+    )
+
+    @classmethod
+    def poll(cls, context):
+        light = getattr(context, "channel_state_light", None)
+        item = getattr(context, "channel_state_item", None)
+        if light is None or item is None:
+            cls.poll_message_set(p_("No light or target selected"))
+            return False
+        if not are_light_linking_collections_editable(light):
+            cls.poll_message_set(p_("Light linking data is read-only"))
+            return False
+        return True
+
+    def execute(self, context):
+        light = getattr(context, "channel_state_light", None)
+        item = getattr(context, "channel_state_item", None)
+        if light is None or item is None:
+            return {'CANCELLED'}
+        coll_type = CollectionType(self.coll_type)
+        if not set_item_channel_state(
+                light, item, coll_type, ChannelState(self.state), context):
+            return {'CANCELLED'}
+        return {'FINISHED'}
 
 
 class LLP_OT_remove_light_linking(LightHelperOperator, bpy.types.Operator):

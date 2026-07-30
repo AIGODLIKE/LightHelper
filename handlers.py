@@ -12,6 +12,8 @@ _auto_fix_known_object_pointers: set[int] = set()
 _auto_fix_suspended = False
 _FILTER_CACHE_HANDLER_IDLE_SECONDS = 1.0
 _filter_cache_last_used = 0.0
+_studio_known_object_pointers: set[int] = set()
+_studio_sync_suspended = False
 
 
 def _auto_fix_enabled() -> bool:
@@ -50,6 +52,14 @@ def _snapshot_auto_fix_objects() -> None:
         }
     except AttributeError:
         _auto_fix_known_object_pointers = set()
+
+
+def _snapshot_studio_objects() -> None:
+    global _studio_known_object_pointers
+    try:
+        _studio_known_object_pointers = {obj.as_pointer() for obj in bpy.data.objects}
+    except AttributeError:
+        _studio_known_object_pointers = set()
 
 
 def _finish_auto_fix_transition() -> None:
@@ -96,6 +106,64 @@ def depsgraph_update_post_handler(_scene, depsgraph: bpy.types.Depsgraph):
             process_duplicated_object(obj, context)
     finally:
         _processing = False
+
+
+@bpy.app.handlers.persistent
+def kelvin_metadata_sync_handler(_scene, depsgraph: bpy.types.Depsgraph):
+    """Exit managed Kelvin mode after a native RGB edit changes the color."""
+    from .ops.light_mixer import get_kelvin_state
+
+    candidates = set()
+    for update in depsgraph.updates:
+        id_ref = update.id
+        if isinstance(id_ref, bpy.types.Light):
+            candidates.update(
+                obj for obj in bpy.data.objects
+                if obj.type == 'LIGHT' and obj.data == id_ref
+            )
+        elif isinstance(id_ref, bpy.types.Object) and id_ref.type == 'LIGHT':
+            candidates.add(id_ref.original if id_ref.is_evaluated else id_ref)
+    changed = False
+    for light in candidates:
+        props = getattr(light, "light_helper_property", None)
+        if props is None or not getattr(props, "kelvin_mode", False):
+            continue
+        enabled, _temperature = get_kelvin_state(light)
+        if not enabled:
+            props.kelvin_mode = False
+            changed = True
+    if changed:
+        try:
+            from .ui.desk import refresh_active_desks
+            refresh_active_desks()
+        except (ImportError, AttributeError, ReferenceError, RuntimeError, TypeError):
+            pass
+
+
+@bpy.app.handlers.persistent
+def studio_duplicate_isolation_handler(_scene, depsgraph: bpy.types.Depsgraph):
+    """Isolate mutable data only for newly duplicated managed Studio objects."""
+    global _studio_known_object_pointers
+    if _studio_sync_suspended:
+        return
+    from .utils.studio import ensure_unique_studio_data, is_studio_object
+
+    current = {obj.as_pointer() for obj in bpy.data.objects}
+    candidates = []
+    for update in depsgraph.updates:
+        obj = update.id
+        if isinstance(obj, bpy.types.Object) and obj.is_evaluated:
+            obj = obj.original
+        if (
+            isinstance(obj, bpy.types.Object)
+            and obj.as_pointer() not in _studio_known_object_pointers
+            and is_studio_object(obj)
+            and obj not in candidates
+        ):
+            candidates.append(obj)
+    _studio_known_object_pointers = current
+    for obj in candidates:
+        ensure_unique_studio_data(obj)
 
 
 def sync_auto_fix_depsgraph_handler(enabled: bool | None = None) -> None:
@@ -235,6 +303,28 @@ def light_helper_load_post_handler(_filepath) -> None:
     invalidate_linking_ui_cache()
     _finish_auto_fix_transition()
     sync_world_environment_sun_handler()
+    global _studio_sync_suspended
+    _snapshot_studio_objects()
+    _studio_sync_suspended = False
+
+
+@bpy.app.handlers.persistent
+def light_helper_runtime_load_pre_handler(_filepath) -> None:
+    """Tear down area-owned transient UI before Blender replaces file data."""
+    from .ui.desk import cleanup_all_desks
+    from .ops.placement import cancel_all_placements
+    global _studio_sync_suspended
+    _studio_sync_suspended = True
+    cleanup_all_desks()
+    cancel_all_placements()
+
+
+@bpy.app.handlers.persistent
+def light_helper_runtime_transition_post_handler(*_args) -> None:
+    """Refresh open Desk snapshots after Undo/Redo without an idle timer."""
+    from .ui.desk import refresh_active_desks
+    _snapshot_studio_objects()
+    refresh_active_desks()
 
 
 def register():
@@ -242,6 +332,16 @@ def register():
     clear_world_environment_sync_state()
     if light_helper_load_post_handler not in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.append(light_helper_load_post_handler)
+    if light_helper_runtime_load_pre_handler not in bpy.app.handlers.load_pre:
+        bpy.app.handlers.load_pre.append(light_helper_runtime_load_pre_handler)
+    for handler_list in (bpy.app.handlers.undo_post, bpy.app.handlers.redo_post):
+        if light_helper_runtime_transition_post_handler not in handler_list:
+            handler_list.append(light_helper_runtime_transition_post_handler)
+    if kelvin_metadata_sync_handler not in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.append(kelvin_metadata_sync_handler)
+    _snapshot_studio_objects()
+    if studio_duplicate_isolation_handler not in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.append(studio_duplicate_isolation_handler)
     # Auto-fix is opt-in and never mutates data during registration or file load.
     sync_auto_fix_depsgraph_handler()
     # Manual enable can happen after a file containing a managed dome is open.
@@ -249,13 +349,22 @@ def register():
 
 
 def unregister():
-    global _filter_cache_last_used, _auto_fix_suspended
+    global _filter_cache_last_used, _auto_fix_suspended, _studio_sync_suspended
     from .filter import invalidate_filter_cache
     from .utils import invalidate_linking_ui_cache
     from .utils.world_environment import clear_world_environment_sync_state
     sync_auto_fix_depsgraph_handler(False)
     if light_helper_load_post_handler in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.remove(light_helper_load_post_handler)
+    if light_helper_runtime_load_pre_handler in bpy.app.handlers.load_pre:
+        bpy.app.handlers.load_pre.remove(light_helper_runtime_load_pre_handler)
+    for handler_list in (bpy.app.handlers.undo_post, bpy.app.handlers.redo_post):
+        if light_helper_runtime_transition_post_handler in handler_list:
+            handler_list.remove(light_helper_runtime_transition_post_handler)
+    if kelvin_metadata_sync_handler in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.remove(kelvin_metadata_sync_handler)
+    if studio_duplicate_isolation_handler in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.remove(studio_duplicate_isolation_handler)
     if invalidate_filter_cache_handler in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.remove(invalidate_filter_cache_handler)
     _filter_cache_last_used = 0.0
@@ -264,3 +373,5 @@ def unregister():
     invalidate_linking_ui_cache()
     clear_world_environment_sync_state()
     _auto_fix_suspended = False
+    _studio_sync_suspended = False
+    _snapshot_studio_objects()

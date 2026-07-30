@@ -7,6 +7,8 @@ from ..utils import (
     are_light_linking_collections_editable,
     cycle_tool_light,
     cycle_tool_object,
+    get_effective_linking_mode,
+    get_linking_edit_mode,
     get_linking_mode,
     is_item_in_channel,
     is_linkable_object,
@@ -356,6 +358,10 @@ class LLP_OT_light_linking_toggle_mode(_LLP_LightLinkingToolInvoke, LightHelperO
             return {'CANCELLED'}
         if not are_light_linking_collections_editable(light):
             self.report({'WARNING'}, p_("Light linking data is read-only"))
+            return {'CANCELLED'}
+        if (get_linking_edit_mode(light) == 'ADVANCED'
+                or get_effective_linking_mode(light) == 'MIXED'):
+            self.report({'WARNING'}, p_("Switch to Simple mode to change the global linking mode"))
             return {'CANCELLED'}
 
         mode = get_linking_mode(light)
